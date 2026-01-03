@@ -17,7 +17,7 @@ mod package;
 use crate::io;
 
 /// Number of applets
-pub const APPLET_COUNT: usize = 283;
+pub const APPLET_COUNT: usize = 293;
 
 /// Get argument as byte slice
 #[inline]
@@ -371,9 +371,11 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     if name == b"partprobe" { return Some(system::partprobe); }
     if name == b"readelf" { return Some(misc::readelf); }
     if name == b"setfattr" { return Some(file::setfattr); }
-    if name == b"toybox" { return Some(misc::toybox); }
+if name == b"toybox" { return Some(misc::toybox); }
     if name == b"unicode" { return Some(misc::unicode); }
-
+    if name == b"screen" { return Some(misc::screen); }
+    if name == b"tmux" { return Some(misc::screen); }  // tmux alias for screen
+    
     None
 }
 
@@ -408,10 +410,10 @@ pub fn list_applets() {
         b"readahead", b"readelf", b"readlink", b"realpath", b"reboot", b"renice", b"reset", b"rev", b"rfkill", b"rm", b"rmdir",
         b"rmmod", b"route", b"rtcwake", b"runlevel",
         b"sed", b"seq", b"setfattr", b"setsid", b"sh", b"sha1sum", b"sha224sum", b"sha256sum", b"sha384sum", b"sha3sum", b"sha512sum",
-        b"shred", b"shuf", b"sleep", b"slattach", b"sntp", b"sort", b"split", b"ss", b"stat", b"strings", b"su", b"sulogin",
+        b"screen", b"shred", b"shuf", b"sleep", b"slattach", b"sntp", b"sort", b"split", b"ss", b"stat", b"strings", b"su", b"sulogin",
         b"swapoff", b"swapon", b"switch_root", b"sync", b"sysctl",
         b"tac", b"tail", b"tar", b"taskset", b"tee", b"telinit", b"telnet", b"test", b"tftp", b"time", b"timeout",
-        b"top", b"touch", b"toybox", b"tr", b"traceroute", b"traceroute6", b"true", b"truncate", b"ts", b"tsort", b"tty", b"tunctl",
+        b"tmux", b"top", b"touch", b"toybox", b"tr", b"traceroute", b"traceroute6", b"true", b"truncate", b"ts", b"tsort", b"tty", b"tunctl",
         b"uclampset", b"ulimit", b"umount", b"uname", b"uncompress", b"unexpand", b"unicode", b"uniq", b"unix2dos", b"unlink",
         b"unshare", b"unxz", b"unzip", b"uptime", b"users", b"usleep", b"uudecode", b"uuencode", b"uuidgen",
         b"vconfig", b"vi", b"view", b"vmstat",

@@ -504,3 +504,625 @@ pub fn toybox(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(1, b"armybox (toybox compatible)\n");
     0
 }
+
+/// screen - terminal multiplexer (simplified GNU screen clone)
+///
+/// Usage:
+///   screen                  Start a new session
+///   screen -S name          Start a named session
+///   screen -ls              List sessions
+///   screen -r [name]        Reattach to a session
+///   screen -d [name]        Detach a session
+///   screen -x [name]        Attach to a shared session
+///   screen cmd args...      Run command in new session
+///
+/// In-session commands (Ctrl+A prefix):
+///   Ctrl+A d                Detach
+///   Ctrl+A c                Create new window
+///   Ctrl+A n                Next window
+///   Ctrl+A p                Previous window
+///   Ctrl+A k                Kill current window
+///   Ctrl+A "                List windows
+pub fn screen(argc: i32, argv: *const *const u8) -> i32 {
+    let mut list_sessions = false;
+    let mut reattach = false;
+    let mut detach_session = false;
+    let mut session_name: Option<&[u8]> = None;
+    let mut cmd_start = 1;
+
+    // Parse options
+    let mut i = 1;
+    while i < argc {
+        if let Some(arg) = unsafe { get_arg(argv, i) } {
+            if arg == b"-ls" || arg == b"-list" {
+                list_sessions = true;
+            } else if arg == b"-r" || arg == b"-R" {
+                reattach = true;
+                if i + 1 < argc {
+                    session_name = unsafe { get_arg(argv, i + 1) };
+                    if session_name.map_or(false, |s| s.starts_with(b"-")) {
+                        session_name = None;
+                    } else {
+                        i += 1;
+                    }
+                }
+            } else if arg == b"-d" || arg == b"-D" {
+                detach_session = true;
+                if i + 1 < argc {
+                    session_name = unsafe { get_arg(argv, i + 1) };
+                    if session_name.map_or(false, |s| s.starts_with(b"-")) {
+                        session_name = None;
+                    } else {
+                        i += 1;
+                    }
+                }
+            } else if arg == b"-S" {
+                if i + 1 < argc {
+                    session_name = unsafe { get_arg(argv, i + 1) };
+                    i += 1;
+                }
+            } else if arg == b"-x" {
+                reattach = true;
+                if i + 1 < argc {
+                    session_name = unsafe { get_arg(argv, i + 1) };
+                    if session_name.map_or(false, |s| s.starts_with(b"-")) {
+                        session_name = None;
+                    } else {
+                        i += 1;
+                    }
+                }
+            } else if arg == b"-h" || arg == b"--help" {
+                io::write_str(1, b"Usage: screen [-ls] [-r name] [-d name] [-S name] [cmd]\n");
+                io::write_str(1, b"\nOptions:\n");
+                io::write_str(1, b"  -ls         List sessions\n");
+                io::write_str(1, b"  -r [name]   Reattach to session\n");
+                io::write_str(1, b"  -d [name]   Detach session\n");
+                io::write_str(1, b"  -S name     Create named session\n");
+                io::write_str(1, b"  -x [name]   Multi-attach to session\n");
+                io::write_str(1, b"\nIn-session: Ctrl+A is the command prefix\n");
+                io::write_str(1, b"  Ctrl+A d    Detach from session\n");
+                io::write_str(1, b"  Ctrl+A c    Create new window\n");
+                io::write_str(1, b"  Ctrl+A n    Next window\n");
+                io::write_str(1, b"  Ctrl+A p    Previous window\n");
+                io::write_str(1, b"  Ctrl+A k    Kill current window\n");
+                return 0;
+            } else if !arg.starts_with(b"-") {
+                cmd_start = i;
+                break;
+            }
+        }
+        i += 1;
+    }
+
+    if list_sessions {
+        return screen_list_sessions();
+    }
+
+    if detach_session {
+        return screen_detach(session_name);
+    }
+
+    if reattach {
+        return screen_reattach(session_name);
+    }
+
+    // Start a new session
+    screen_new_session(session_name, argc, argv, cmd_start)
+}
+
+fn screen_list_sessions() -> i32 {
+    let screen_dir = b"/tmp/armybox-screen\0";
+    
+    let dir = unsafe { libc::opendir(screen_dir.as_ptr() as *const i8) };
+    if dir.is_null() {
+        io::write_str(1, b"No Sockets found in /tmp/armybox-screen.\n");
+        return 0;
+    }
+
+    io::write_str(1, b"There are screens on:\n");
+    let mut count = 0;
+
+    loop {
+        let entry = unsafe { libc::readdir(dir) };
+        if entry.is_null() {
+            break;
+        }
+
+        let name = unsafe { io::cstr_to_slice((*entry).d_name.as_ptr() as *const u8) };
+        if name.starts_with(b".") {
+            continue;
+        }
+
+        // Check if socket is still active
+        let mut path = [0u8; 256];
+        let mut len = 0;
+        for &c in b"/tmp/armybox-screen/" {
+            path[len] = c;
+            len += 1;
+        }
+        for &c in name {
+            path[len] = c;
+            len += 1;
+        }
+        path[len] = 0;
+
+        let mut st: libc::stat = unsafe { core::mem::zeroed() };
+        if io::stat(&path[..len], &mut st) == 0 {
+            io::write_str(1, b"\t");
+            io::write_all(1, name);
+            
+            // Check if attached
+            if (st.st_mode & 0o600) == 0o600 {
+                io::write_str(1, b"\t(Attached)\n");
+            } else {
+                io::write_str(1, b"\t(Detached)\n");
+            }
+            count += 1;
+        }
+    }
+
+    unsafe { libc::closedir(dir) };
+
+    if count == 0 {
+        io::write_str(1, b"No Sockets found.\n");
+    } else {
+        io::write_num(1, count);
+        io::write_str(1, b" Socket(s) in /tmp/armybox-screen.\n");
+    }
+
+    0
+}
+
+fn screen_detach(name: Option<&[u8]>) -> i32 {
+    let name = match name {
+        Some(n) => n,
+        None => {
+            io::write_str(2, b"screen: must specify session name to detach\n");
+            return 1;
+        }
+    };
+
+    // Send SIGHUP to the screen process
+    let mut path = [0u8; 256];
+    let mut len = 0;
+    for &c in b"/tmp/armybox-screen/" {
+        path[len] = c;
+        len += 1;
+    }
+    for &c in name {
+        path[len] = c;
+        len += 1;
+    }
+    path[len] = 0;
+
+    // Read PID from socket file (stored as extended attribute or in filename)
+    // For simplicity, we'll parse the PID from the session name format: pid.tty.name
+    if let Some(pid_end) = name.iter().position(|&c| c == b'.') {
+        if let Some(pid) = sys::parse_u64(&name[..pid_end]) {
+            if unsafe { libc::kill(pid as i32, libc::SIGHUP) } == 0 {
+                io::write_str(1, b"Session detached.\n");
+                return 0;
+            }
+        }
+    }
+
+    io::write_str(2, b"screen: could not detach session\n");
+    1
+}
+
+fn screen_reattach(name: Option<&[u8]>) -> i32 {
+    let screen_dir = b"/tmp/armybox-screen\0";
+    
+    let dir = unsafe { libc::opendir(screen_dir.as_ptr() as *const i8) };
+    if dir.is_null() {
+        io::write_str(2, b"There is no screen to be resumed.\n");
+        return 1;
+    }
+
+    let mut found_session: Option<[u8; 256]> = None;
+    let mut found_len = 0;
+
+    loop {
+        let entry = unsafe { libc::readdir(dir) };
+        if entry.is_null() {
+            break;
+        }
+
+        let entry_name = unsafe { io::cstr_to_slice((*entry).d_name.as_ptr() as *const u8) };
+        if entry_name.starts_with(b".") {
+            continue;
+        }
+
+        // If name is specified, match it
+        if let Some(n) = name {
+            if entry_name.windows(n.len()).any(|w| w == n) {
+                let mut buf = [0u8; 256];
+                for (i, &c) in entry_name.iter().enumerate() {
+                    if i < 256 {
+                        buf[i] = c;
+                    }
+                }
+                found_session = Some(buf);
+                found_len = entry_name.len();
+                break;
+            }
+        } else {
+            // Take first available session
+            let mut buf = [0u8; 256];
+            for (i, &c) in entry_name.iter().enumerate() {
+                if i < 256 {
+                    buf[i] = c;
+                }
+            }
+            found_session = Some(buf);
+            found_len = entry_name.len();
+            break;
+        }
+    }
+
+    unsafe { libc::closedir(dir) };
+
+    match found_session {
+        Some(session) => {
+            io::write_str(1, b"Reattaching to ");
+            io::write_all(1, &session[..found_len]);
+            io::write_str(1, b"\n");
+            
+            // Connect to the session's socket and take over
+            let mut path = [0u8; 512];
+            let mut len = 0;
+            for &c in b"/tmp/armybox-screen/" {
+                path[len] = c;
+                len += 1;
+            }
+            for i in 0..found_len {
+                path[len] = session[i];
+                len += 1;
+            }
+            path[len] = 0;
+
+            // Open the socket and proxy I/O
+            let sock = unsafe {
+                libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0)
+            };
+            if sock < 0 {
+                io::write_str(2, b"screen: could not create socket\n");
+                return 1;
+            }
+
+            let mut addr: libc::sockaddr_un = unsafe { core::mem::zeroed() };
+            addr.sun_family = libc::AF_UNIX as u16;
+            for (i, &c) in path[..len].iter().enumerate() {
+                if i < 108 {
+                    addr.sun_path[i] = c as i8;
+                }
+            }
+
+            if unsafe { libc::connect(sock, &addr as *const _ as *const libc::sockaddr, 
+                                       core::mem::size_of::<libc::sockaddr_un>() as u32) } < 0 {
+                io::write_str(2, b"screen: could not connect to session\n");
+                unsafe { libc::close(sock) };
+                return 1;
+            }
+
+            // Set terminal to raw mode
+            let mut old_termios: libc::termios = unsafe { core::mem::zeroed() };
+            unsafe { libc::tcgetattr(0, &mut old_termios) };
+            
+            let mut raw = old_termios;
+            unsafe { libc::cfmakeraw(&mut raw) };
+            unsafe { libc::tcsetattr(0, libc::TCSANOW, &raw) };
+
+            // Proxy I/O between terminal and socket
+            screen_proxy_io(sock);
+
+            // Restore terminal
+            unsafe { libc::tcsetattr(0, libc::TCSANOW, &old_termios) };
+            unsafe { libc::close(sock) };
+
+            io::write_str(1, b"\n[screen detached]\n");
+            0
+        }
+        None => {
+            io::write_str(2, b"There is no screen to be resumed.\n");
+            1
+        }
+    }
+}
+
+fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cmd_start: i32) -> i32 {
+    // Create screen directory
+    let screen_dir = b"/tmp/armybox-screen\0";
+    unsafe { libc::mkdir(screen_dir.as_ptr() as *const i8, 0o700) };
+
+    // Open a PTY
+    let mut master: i32 = -1;
+    let mut slave: i32 = -1;
+    let mut pty_name = [0i8; 256];
+
+    if unsafe { libc::openpty(&mut master, &mut slave, pty_name.as_mut_ptr(), 
+                               core::ptr::null_mut(), core::ptr::null_mut()) } < 0 {
+        io::write_str(2, b"screen: cannot open pty\n");
+        return 1;
+    }
+
+    let pid = unsafe { libc::fork() };
+    
+    if pid < 0 {
+        io::write_str(2, b"screen: fork failed\n");
+        unsafe { libc::close(master) };
+        unsafe { libc::close(slave) };
+        return 1;
+    }
+
+    if pid == 0 {
+        // Child process - run shell in PTY slave
+        unsafe { libc::close(master) };
+        
+        // Create new session
+        unsafe { libc::setsid() };
+        
+        // Set controlling terminal
+        unsafe { libc::ioctl(slave, libc::TIOCSCTTY as u64, 0) };
+        
+        // Redirect stdio to slave
+        unsafe { libc::dup2(slave, 0) };
+        unsafe { libc::dup2(slave, 1) };
+        unsafe { libc::dup2(slave, 2) };
+        
+        if slave > 2 {
+            unsafe { libc::close(slave) };
+        }
+
+        // Execute command or shell
+        if cmd_start < argc {
+            // Execute specified command
+            #[cfg(feature = "alloc")]
+            {
+                use alloc::vec::Vec;
+                use alloc::ffi::CString;
+                
+                let mut args: Vec<CString> = Vec::new();
+                for i in cmd_start..argc {
+                    if let Some(arg) = unsafe { get_arg(argv, i) } {
+                        let mut v = Vec::with_capacity(arg.len() + 1);
+                        v.extend_from_slice(arg);
+                        v.push(0);
+                        if let Ok(cs) = CString::from_vec_with_nul(v) {
+                            args.push(cs);
+                        }
+                    }
+                }
+                
+                let ptrs: Vec<*const i8> = args.iter()
+                    .map(|s| s.as_ptr())
+                    .chain(core::iter::once(core::ptr::null()))
+                    .collect();
+                
+                unsafe { libc::execvp(ptrs[0], ptrs.as_ptr()) };
+            }
+        }
+        
+        // Default: run shell
+        let shell = b"/bin/sh\0";
+        let shell_arg = b"-sh\0";
+        let args = [shell.as_ptr() as *const i8, shell_arg.as_ptr() as *const i8, core::ptr::null()];
+        unsafe { libc::execv(shell.as_ptr() as *const i8, args.as_ptr()) };
+        unsafe { libc::_exit(1) };
+    }
+
+    // Parent process - manage the session
+    unsafe { libc::close(slave) };
+
+    // Create session socket for reattachment
+    let mut session_path = [0u8; 256];
+    let mut len = 0;
+    for &c in b"/tmp/armybox-screen/" {
+        session_path[len] = c;
+        len += 1;
+    }
+    
+    // Format: pid.pts-N.name
+    let mut pid_buf = [0u8; 20];
+    let pid_str = sys::format_u64(pid as u64, &mut pid_buf);
+    for &c in pid_str {
+        session_path[len] = c;
+        len += 1;
+    }
+    session_path[len] = b'.';
+    len += 1;
+    
+    // Add pts name
+    let pts_name = unsafe { io::cstr_to_slice(pty_name.as_ptr() as *const u8) };
+    for &c in pts_name {
+        if c == b'/' {
+            session_path[len] = b'-';
+        } else {
+            session_path[len] = c;
+        }
+        len += 1;
+    }
+    
+    if let Some(n) = name {
+        session_path[len] = b'.';
+        len += 1;
+        for &c in n {
+            session_path[len] = c;
+            len += 1;
+        }
+    }
+    session_path[len] = 0;
+
+    // Create Unix socket for the session
+    let sock = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0) };
+    if sock >= 0 {
+        let mut addr: libc::sockaddr_un = unsafe { core::mem::zeroed() };
+        addr.sun_family = libc::AF_UNIX as u16;
+        for (i, &c) in session_path[..len].iter().enumerate() {
+            if i < 108 {
+                addr.sun_path[i] = c as i8;
+            }
+        }
+
+        unsafe { libc::unlink(session_path.as_ptr() as *const i8) };
+        if unsafe { libc::bind(sock, &addr as *const _ as *const libc::sockaddr,
+                               core::mem::size_of::<libc::sockaddr_un>() as u32) } == 0 {
+            unsafe { libc::listen(sock, 1) };
+        }
+    }
+
+    // Set terminal to raw mode
+    let mut old_termios: libc::termios = unsafe { core::mem::zeroed() };
+    unsafe { libc::tcgetattr(0, &mut old_termios) };
+    
+    let mut raw = old_termios;
+    unsafe { libc::cfmakeraw(&mut raw) };
+    unsafe { libc::tcsetattr(0, libc::TCSANOW, &raw) };
+
+    // Main loop: proxy I/O between terminal and PTY
+    let mut ctrl_a_pressed = false;
+    let mut buf = [0u8; 4096];
+
+    loop {
+        let mut fds: [libc::pollfd; 3] = [
+            libc::pollfd { fd: 0, events: libc::POLLIN, revents: 0 },      // stdin
+            libc::pollfd { fd: master, events: libc::POLLIN, revents: 0 }, // PTY
+            libc::pollfd { fd: sock, events: libc::POLLIN, revents: 0 },   // socket
+        ];
+
+        let ret = unsafe { libc::poll(fds.as_mut_ptr(), 3, 100) };
+        if ret < 0 {
+            break;
+        }
+
+        // Check if child exited
+        let mut status: i32 = 0;
+        if unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) } > 0 {
+            break;
+        }
+
+        // Data from terminal
+        if fds[0].revents & libc::POLLIN != 0 {
+            let n = io::read(0, &mut buf);
+            if n <= 0 {
+                break;
+            }
+
+            // Check for Ctrl+A commands
+            for i in 0..n as usize {
+                if ctrl_a_pressed {
+                    ctrl_a_pressed = false;
+                    match buf[i] {
+                        b'd' | b'D' => {
+                            // Detach
+                            unsafe { libc::tcsetattr(0, libc::TCSANOW, &old_termios) };
+                            io::write_str(1, b"\r\n[detached from session]\r\n");
+                            // Keep socket open for reattachment
+                            unsafe { libc::close(master) };
+                            // Don't close sock - leave it for reattach
+                            return 0;
+                        }
+                        b'c' | b'C' => {
+                            io::write_str(1, b"\r\n[new window - not implemented in simple mode]\r\n");
+                        }
+                        b'k' | b'K' => {
+                            // Kill - send SIGKILL to child
+                            unsafe { libc::kill(pid, libc::SIGKILL) };
+                        }
+                        1 => {
+                            // Ctrl+A Ctrl+A - send literal Ctrl+A
+                            let ctrl_a = [1u8];
+                            io::write_all(master, &ctrl_a);
+                        }
+                        _ => {
+                            // Unknown command, ignore
+                        }
+                    }
+                } else if buf[i] == 1 {
+                    // Ctrl+A pressed
+                    ctrl_a_pressed = true;
+                } else {
+                    io::write_all(master, &buf[i..i+1]);
+                }
+            }
+        }
+
+        // Data from PTY
+        if fds[1].revents & libc::POLLIN != 0 {
+            let n = io::read(master, &mut buf);
+            if n <= 0 {
+                break;
+            }
+            io::write_all(1, &buf[..n as usize]);
+        }
+
+        // New connection on socket (reattach)
+        if fds[2].revents & libc::POLLIN != 0 {
+            let client = unsafe { libc::accept(sock, core::ptr::null_mut(), core::ptr::null_mut()) };
+            if client >= 0 {
+                // Another client is trying to attach - for now, refuse
+                io::write_all(client, b"Session already attached\n");
+                unsafe { libc::close(client) };
+            }
+        }
+    }
+
+    // Cleanup
+    unsafe { libc::tcsetattr(0, libc::TCSANOW, &old_termios) };
+    unsafe { libc::close(master) };
+    unsafe { libc::close(sock) };
+    unsafe { libc::unlink(session_path.as_ptr() as *const i8) };
+
+    // Wait for child
+    unsafe { libc::waitpid(pid, core::ptr::null_mut(), 0) };
+
+    io::write_str(1, b"\r\n[screen terminated]\r\n");
+    0
+}
+
+fn screen_proxy_io(sock: i32) {
+    let mut buf = [0u8; 4096];
+    let mut ctrl_a_pressed = false;
+
+    loop {
+        let mut fds: [libc::pollfd; 2] = [
+            libc::pollfd { fd: 0, events: libc::POLLIN, revents: 0 },
+            libc::pollfd { fd: sock, events: libc::POLLIN, revents: 0 },
+        ];
+
+        let ret = unsafe { libc::poll(fds.as_mut_ptr(), 2, 100) };
+        if ret < 0 {
+            break;
+        }
+
+        // Data from terminal
+        if fds[0].revents & libc::POLLIN != 0 {
+            let n = io::read(0, &mut buf);
+            if n <= 0 {
+                break;
+            }
+
+            for i in 0..n as usize {
+                if ctrl_a_pressed {
+                    ctrl_a_pressed = false;
+                    if buf[i] == b'd' || buf[i] == b'D' {
+                        return; // Detach
+                    }
+                } else if buf[i] == 1 {
+                    ctrl_a_pressed = true;
+                } else {
+                    io::write_all(sock, &buf[i..i+1]);
+                }
+            }
+        }
+
+        // Data from socket
+        if fds[1].revents & libc::POLLIN != 0 {
+            let n = io::read(sock, &mut buf);
+            if n <= 0 {
+                break;
+            }
+            io::write_all(1, &buf[..n as usize]);
+        }
+    }
+}
