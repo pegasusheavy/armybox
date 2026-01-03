@@ -1,86 +1,97 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
-    <linearGradient id="ogBg" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#1a1f14"/>
-      <stop offset="100%" style="stop-color:#2d3a1f"/>
+      <stop offset="50%" style="stop-color:#2d3422"/>
+      <stop offset="100%" style="stop-color:#1a1f14"/>
     </linearGradient>
-    <linearGradient id="ogSoldier" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#f5f0e6"/>
-      <stop offset="100%" style="stop-color:#c4b599"/>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4a5d23"/>
+      <stop offset="100%" style="stop-color:#6b8e23"/>
     </linearGradient>
-    <pattern id="ogCamo" patternUnits="userSpaceOnUse" width="60" height="60">
-      <rect width="60" height="60" fill="#2d3a1f"/>
-      <circle cx="15" cy="15" r="12" fill="#3d4a2f" opacity="0.4"/>
-      <circle cx="45" cy="35" r="10" fill="#4a5d23" opacity="0.3"/>
-    </pattern>
   </defs>
-
+  
   <!-- Background -->
-  <rect width="1200" height="630" fill="url(#ogBg)"/>
-  <rect width="1200" height="630" fill="url(#ogCamo)" opacity="0.2"/>
-
-  <!-- Border -->
-  <rect x="20" y="20" width="1160" height="590" rx="16" fill="none" stroke="#4a5d23" stroke-width="4"/>
-
-  <!-- Soldier icon on left -->
-  <g transform="translate(80, 115) scale(0.0445, -0.0445) translate(0, -6000)" fill="url(#ogSoldier)">
-    <path d="M4544 5991 c-52 -13 -133 -63 -186 -115 -87 -85 -125 -194 -135 -389
-l-6 -107 40 -39 c57 -54 67 -75 53 -115 -14 -42 -45 -70 -95 -86 -22 -7 -60
--25 -85 -40 -25 -16 -89 -44 -143 -64 -53 -19 -118 -47 -144 -62 -100 -58
--181 -166 -315 -419 -41 -77 -124 -225 -184 -330 -159 -275 -174 -317 -138
--388 53 -104 213 -237 345 -286 l27 -10 -5 -108 c-4 -97 -2 -115 21 -182 l26
--74 -64 -171 c-214 -568 -295 -745 -446 -971 -96 -143 -147 -239 -221 -412
--26 -62 -58 -126 -71 -142 -12 -17 -31 -41 -40 -54 -9 -13 -84 -78 -165 -143
--81 -65 -184 -150 -228 -190 -48 -43 -107 -84 -147 -103 -96 -46 -140 -108
--163 -235 -6 -31 -3 -43 16 -69 71 -98 218 -127 454 -88 433 72 991 22 1333
--121 86 -36 163 -102 257 -223 81 -102 98 -118 165 -149 159 -73 465 -85 755
--30 250 48 413 132 446 232 26 77 -24 204 -115 295 -97 97 -262 187 -341 187
--24 0 -45 9 -67 29 -32 29 -33 31 -32 108 2 115 62 289 132 381 23 30 26 44
-27 120 1 77 6 97 40 172 78 177 145 414 145 517 0 118 -85 342 -260 688 -69
-138 -131 273 -137 300 -6 28 -27 113 -48 190 -29 109 -36 150 -31 189 3 27 8
-51 10 54 3 2 26 -14 51 -36 110 -96 427 -294 510 -317 28 -8 80 -17 116 -20
-l65 -7 50 -65 c27 -35 70 -94 96 -131 53 -75 80 -90 171 -91 49 -1 62 3 82 23
-13 14 33 27 45 31 11 3 23 17 26 31 3 13 10 24 15 24 6 0 24 22 41 50 17 27
-39 52 50 56 10 3 30 23 45 45 14 21 31 40 37 40 6 1 47 3 91 4 44 1 96 6 116
-10 23 4 84 -1 166 -14 151 -25 308 -28 316 -8 3 8 8 39 12 70 7 51 5 56 -16
-71 -63 40 -305 102 -514 131 -128 17 -899 168 -1050 205 -49 12 -102 29 -117
-36 -46 24 -47 37 -12 349 12 110 15 203 11 350 -6 257 -13 279 -105 344 -37
-25 -78 58 -92 72 -14 14 -40 34 -58 43 -39 20 -112 84 -112 98 0 5 5 6 10 3
-22 -13 51 8 84 63 19 31 46 68 60 81 14 14 26 31 26 38 0 8 16 23 35 34 40 24
-42 34 19 125 -10 37 -13 69 -8 73 5 4 40 16 77 26 l68 18 -7 31 c-13 60 -95
-288 -123 345 -55 108 -176 197 -301 221 -60 11 -209 12 -256 1z"/>
-  </g>
-
-  <!-- Text content on right -->
-  <g transform="translate(520, 180)">
-    <text font-family="'Courier New', Courier, monospace" font-size="96" font-weight="bold" fill="#f5f0e6" letter-spacing="4">
-      armybox
-    </text>
-    <text y="70" font-family="'Courier New', Courier, monospace" font-size="28" fill="#8b9a6d" letter-spacing="2">
-      UNIX UTILITIES IN RUST
-    </text>
-
-    <!-- Feature badges -->
-    <g transform="translate(0, 120)">
-      <rect width="140" height="36" rx="6" fill="#4a5d23"/>
-      <text x="70" y="24" font-family="monospace" font-size="14" fill="#f5f0e6" text-anchor="middle">#[no_std]</text>
-
-      <rect x="160" width="160" height="36" rx="6" fill="#4a5d23"/>
-      <text x="240" y="24" font-family="monospace" font-size="14" fill="#f5f0e6" text-anchor="middle">163 applets</text>
-
-      <rect x="340" width="140" height="36" rx="6" fill="#4a5d23"/>
-      <text x="410" y="24" font-family="monospace" font-size="14" fill="#f5f0e6" text-anchor="middle">220KB</text>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  
+  <!-- Subtle grid pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#4a5d23" stroke-width="0.5" opacity="0.1"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  
+  <!-- Toy Soldier Icon (centered) -->
+  <g transform="translate(100, 165) scale(0.18)">
+    <g fill="#d4c5a9">
+      <!-- Helmet -->
+      <ellipse cx="400" cy="100" rx="200" ry="80"/>
+      <rect x="200" y="80" width="400" height="120" rx="20"/>
+      <!-- Face -->
+      <circle cx="400" cy="280" r="120" fill="#e8dcc8"/>
+      <circle cx="360" cy="260" r="15" fill="#2d3422"/>
+      <circle cx="440" cy="260" r="15" fill="#2d3422"/>
+      <ellipse cx="400" cy="310" rx="30" ry="15" fill="#2d3422"/>
+      <!-- Body -->
+      <rect x="280" y="400" width="240" height="300" rx="20" fill="#4a5d23"/>
+      <!-- Belt -->
+      <rect x="260" y="520" width="280" height="40" fill="#5c4033"/>
+      <rect x="370" y="510" width="60" height="60" rx="5" fill="#d4af37"/>
+      <!-- Arms -->
+      <rect x="180" y="420" width="60" height="200" rx="20" fill="#4a5d23"/>
+      <rect x="560" y="420" width="60" height="200" rx="20" fill="#4a5d23"/>
+      <!-- Legs -->
+      <rect x="300" y="700" width="80" height="180" rx="10" fill="#4a5d23"/>
+      <rect x="420" y="700" width="80" height="180" rx="10" fill="#4a5d23"/>
+      <!-- Boots -->
+      <rect x="290" y="860" width="100" height="60" rx="10" fill="#2d2b1f"/>
+      <rect x="410" y="860" width="100" height="60" rx="10" fill="#2d2b1f"/>
     </g>
-
-    <!-- Tagline -->
-    <text y="210" font-family="Georgia, serif" font-size="24" fill="#c4b599" font-style="italic">
-      Memory-safe BusyBox/Toybox clone
-    </text>
   </g>
-
-  <!-- GitHub badge -->
-  <g transform="translate(1020, 540)">
-    <rect width="140" height="50" rx="8" fill="#4a5d23"/>
-    <text x="70" y="32" font-family="monospace" font-size="14" fill="#f5f0e6" text-anchor="middle">GitHub →</text>
+  
+  <!-- Main Title -->
+  <text x="400" y="200" font-family="'Courier New', monospace" font-size="72" font-weight="bold" fill="#d4c5a9">armybox</text>
+  
+  <!-- Subtitle -->
+  <text x="400" y="270" font-family="Arial, sans-serif" font-size="32" fill="#9ca88c">293 Unix Utilities in Rust</text>
+  
+  <!-- Key Stats -->
+  <g transform="translate(400, 320)">
+    <rect x="0" y="0" width="700" height="180" rx="10" fill="#2d3422" stroke="#4a5d23" stroke-width="2"/>
+    
+    <text x="350" y="50" font-family="Arial, sans-serif" font-size="28" fill="#9ca88c" text-anchor="middle">100% Toybox Compatible • Memory Safe • #[no_std]</text>
+    
+    <!-- Stats row -->
+    <g transform="translate(50, 90)">
+      <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">108KB</text>
+      <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">Binary Size</text>
+    </g>
+    
+    <g transform="translate(230, 90)">
+      <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">293</text>
+      <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">Applets</text>
+    </g>
+    
+    <g transform="translate(380, 90)">
+      <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">~380B</text>
+      <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">Per Applet</text>
+    </g>
+    
+    <g transform="translate(550, 90)">
+      <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">24x</text>
+      <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">More Efficient</text>
+    </g>
   </g>
+  
+  <!-- Bottom features -->
+  <text x="600" y="560" font-family="Arial, sans-serif" font-size="22" fill="#9ca88c" text-anchor="middle">
+    Shell • Vi Editor • Screen • Init System • Networking • Archives • Android Ready
+  </text>
+  
+  <!-- GitHub URL -->
+  <text x="600" y="600" font-family="'Courier New', monospace" font-size="20" fill="#4a5d23" text-anchor="middle">
+    github.com/pegasusheavy/armybox
+  </text>
+  
+  <!-- Border -->
+  <rect x="10" y="10" width="1180" height="610" fill="none" stroke="#4a5d23" stroke-width="4" rx="10"/>
 </svg>

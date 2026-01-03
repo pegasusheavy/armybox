@@ -29,7 +29,9 @@
                 "output": "assets"
               },
               "src/favicon.svg",
-              "src/manifest.webmanifest"
+              "src/manifest.webmanifest",
+              "src/sitemap.xml",
+              "src/robots.txt"
             ],
             "styles": [
               "src/styles.css"

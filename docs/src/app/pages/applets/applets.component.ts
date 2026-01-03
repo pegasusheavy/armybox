@@ -112,6 +112,7 @@ export class AppletsComponent {
     'Init System',
     'Hardware',
     'Package Management',
+    'Terminal Multiplexer',
     'Misc'
   ];
 
@@ -427,6 +428,10 @@ export class AppletsComponent {
     { name: 'uuidgen', description: 'Generate UUID', category: 'Misc' },
     { name: 'watchdog', description: 'Watchdog daemon', category: 'Misc' },
     { name: 'which', description: 'Locate command', category: 'Misc' },
+
+    // Terminal Multiplexer (2)
+    { name: 'screen', description: 'Terminal multiplexer', category: 'Terminal Multiplexer' },
+    { name: 'tmux', description: 'Terminal multiplexer (alias)', category: 'Terminal Multiplexer' },
   ];
 
   filteredApplets = [...this.applets];

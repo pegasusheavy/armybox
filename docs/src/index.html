@@ -2,39 +2,267 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>armybox - Unix utilities reimagined in Rust</title>
+  <title>armybox - 293 Unix Utilities in Rust | BusyBox/Toybox Alternative</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A #[no_std] BusyBox/Toybox clone in Rust - 163 memory-safe Unix utilities in a 220KB binary. Perfect for containers, embedded systems, and initramfs.">
-  <meta name="keywords" content="busybox, toybox, rust, linux, unix, coreutils, embedded, containers, no_std, memory-safe">
+  
+  <!-- Primary SEO Meta Tags -->
+  <meta name="description" content="armybox is a memory-safe BusyBox/Toybox clone with 293 Unix utilities in a 108KB binary. 100% Toybox compatible, #[no_std] Rust implementation. Perfect for containers, embedded systems, Android, and initramfs.">
+  <meta name="keywords" content="busybox alternative, toybox alternative, rust unix utilities, embedded linux tools, container utilities, no_std rust, memory-safe coreutils, posix shell rust, terminal multiplexer, gnu screen alternative, tmux alternative, vi editor rust, init system rust, android command line tools, alpine linux tools">
   <meta name="author" content="Pegasus Heavy Industries">
-
-  <!-- Open Graph / Social Media -->
-  <meta property="og:title" content="armybox - Unix utilities reimagined in Rust">
-  <meta property="og:description" content="163 memory-safe Unix utilities in a 220KB binary. A #[no_std] BusyBox/Toybox clone with POSIX compliance.">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <link rel="canonical" href="https://pegasusheavy.github.io/armybox/">
+  
+  <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
-  <meta property="og:image" content="assets/og-image.svg">
+  <meta property="og:url" content="https://pegasusheavy.github.io/armybox/">
+  <meta property="og:title" content="armybox - 293 Memory-Safe Unix Utilities in 108KB">
+  <meta property="og:description" content="A #[no_std] BusyBox/Toybox clone in Rust. 100% Toybox compatible with full networking, shell, vi editor, init system, and screen terminal multiplexer. 24x more efficient than BusyBox.">
+  <meta property="og:image" content="https://pegasusheavy.github.io/armybox/assets/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="armybox - Unix utilities reimagined in Rust">
+  <meta property="og:site_name" content="armybox">
+  <meta property="og:locale" content="en_US">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="armybox - Unix utilities in Rust">
-  <meta name="twitter:description" content="163 memory-safe Unix utilities in 220KB. #[no_std] compatible.">
-  <meta name="twitter:image" content="assets/og-image.svg">
+  <meta name="twitter:url" content="https://pegasusheavy.github.io/armybox/">
+  <meta name="twitter:title" content="armybox - 293 Unix Utilities in Rust">
+  <meta name="twitter:description" content="Memory-safe BusyBox/Toybox alternative. 108KB binary, 100% Toybox compatible, #[no_std] Rust. Includes shell, vi, screen, init system.">
+  <meta name="twitter:image" content="https://pegasusheavy.github.io/armybox/assets/og-image.png">
+  <meta name="twitter:creator" content="@pegasusheavy">
 
-  <!-- Favicon - Toy Soldier Icon -->
+  <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="alternate icon" type="image/x-icon" href="favicon.ico">
-  <link rel="apple-touch-icon" href="assets/soldier-icon.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#4a5d23">
+  <meta name="msapplication-TileColor" content="#4a5d23">
 
-  <!-- Preconnect to fonts -->
+  <!-- Preconnect -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  
+  <!-- DNS Prefetch for GitHub -->
+  <link rel="dns-prefetch" href="https://github.com">
+  <link rel="dns-prefetch" href="https://raw.githubusercontent.com">
+
+  <!-- Structured Data for SEO & AEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "armybox",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, Android",
+    "description": "A memory-safe BusyBox/Toybox clone written in Rust with #[no_std] support. Provides 293 Unix command-line utilities in a single 108KB binary, making it 24x more efficient per applet than BusyBox and 5.5x more efficient than Toybox.",
+    "url": "https://pegasusheavy.github.io/armybox/",
+    "downloadUrl": "https://github.com/pegasusheavy/armybox/releases",
+    "softwareVersion": "0.3.0",
+    "datePublished": "2026-01-03",
+    "author": {
+      "@type": "Organization",
+      "name": "Pegasus Heavy Industries",
+      "url": "https://github.com/pegasusheavy"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Pegasus Heavy Industries"
+    },
+    "license": "https://opensource.org/licenses/MIT",
+    "programmingLanguage": "Rust",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "293 Unix command-line utilities",
+      "108KB binary size (54KB compressed)",
+      "100% Toybox compatible",
+      "Memory-safe Rust implementation",
+      "#[no_std] compatible for embedded systems",
+      "POSIX-compliant shell (sh, ash, dash)",
+      "Vi text editor with modal editing",
+      "GNU screen terminal multiplexer",
+      "Init system (init, getty, runlevel)",
+      "Full networking stack (wget, ping, nc, ifconfig)",
+      "Archive utilities (tar, gzip, bzip2, xz)",
+      "Android/Bionic libc support",
+      "APK package manager (optional)"
+    ],
+    "screenshot": "https://pegasusheavy.github.io/armybox/assets/screenshot.png",
+    "softwareHelp": {
+      "@type": "WebPage",
+      "url": "https://pegasusheavy.github.io/armybox/"
+    },
+    "codeRepository": "https://github.com/pegasusheavy/armybox",
+    "keywords": "busybox, toybox, rust, unix, linux, embedded, containers, coreutils, no_std, memory-safe, posix, shell, vi, screen, tmux, init"
+  }
+  </script>
+
+  <!-- FAQ Schema for AEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is armybox?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "armybox is a memory-safe BusyBox/Toybox clone written in Rust. It provides 293 Unix command-line utilities in a single 108KB binary, making it ideal for containers, embedded systems, and Android devices. It's 100% compatible with Toybox and includes a POSIX shell, vi editor, screen terminal multiplexer, and init system."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does armybox compare to BusyBox?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "armybox is 24x more efficient per applet than BusyBox. While BusyBox has a 2.4MB binary with 274 applets (~9KB per applet), armybox has 293 applets in just 108KB (~380 bytes per applet). armybox is also memory-safe due to Rust's ownership system, eliminating buffer overflows and use-after-free vulnerabilities common in C codebases."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does armybox compare to Toybox?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "armybox is 100% Toybox compatible, implementing all 238 Toybox commands plus 55 additional utilities. It's 5.5x more efficient (380 bytes/applet vs 2.1KB/applet) and provides memory safety guarantees through Rust's compile-time checks. armybox can be used as a drop-in replacement for Toybox on Android and embedded Linux systems."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can armybox be used in Docker containers?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! armybox is perfect for 'FROM scratch' Docker containers. Its tiny 108KB size (54KB compressed) and statically-linked binary means you can create minimal containers with full Unix utilities. It includes shell support (sh, ash, dash), making it ideal for container entrypoints and scripts."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does armybox work on Android?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, armybox has native Android support with Bionic libc compatibility. It can be cross-compiled for ARM64, ARMv7, and x86_64 Android devices. Since Toybox is the default toolkit on Android 6.0+, armybox can serve as a drop-in replacement with additional memory safety guarantees."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What utilities does armybox include?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "armybox includes 293 utilities: core file operations (ls, cp, mv, rm), text processing (grep, sed, awk, vi), system tools (ps, top, mount, df), networking (wget, ping, nc, ifconfig, ip), archive tools (tar, gzip, bzip2, xz), a POSIX shell (sh/ash/dash), GNU screen terminal multiplexer (screen/tmux), init system (init, getty), and APK package manager (optional)."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is armybox POSIX compliant?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, armybox core utilities are POSIX.1-2017 compliant. The shell (sh, ash, dash) implements POSIX shell features including command execution, builtins, variables, quoting, control flow, pipes, redirections, and functions. File test operators, text utilities, and system commands follow POSIX specifications."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is #[no_std] and why does it matter?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "#[no_std] means armybox doesn't depend on Rust's standard library, only using libc and alloc. This makes it suitable for embedded systems without full OS support, bare-metal environments, and systems with limited resources. The binary can be statically linked with no external dependencies beyond libc."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <!-- Organization Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Pegasus Heavy Industries",
+    "url": "https://github.com/pegasusheavy",
+    "logo": "https://pegasusheavy.github.io/armybox/assets/logo.svg",
+    "sameAs": [
+      "https://github.com/pegasusheavy"
+    ]
+  }
+  </script>
+
+  <!-- BreadcrumbList for navigation -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://pegasusheavy.github.io/armybox/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Applets",
+        "item": "https://pegasusheavy.github.io/armybox/applets"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Building",
+        "item": "https://pegasusheavy.github.io/armybox/building"
+      },
+      {
+        "@type": "ListItem",
+        "position": 4,
+        "name": "Comparison",
+        "item": "https://pegasusheavy.github.io/armybox/comparison"
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <app-root></app-root>
+  
+  <!-- Noscript fallback for SEO -->
+  <noscript>
+    <div style="padding: 2rem; font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto;">
+      <h1>armybox - 293 Unix Utilities in Rust</h1>
+      <p>armybox is a memory-safe BusyBox/Toybox clone written in Rust with #[no_std] support.</p>
+      <h2>Key Features</h2>
+      <ul>
+        <li>293 Unix command-line utilities in a 108KB binary</li>
+        <li>100% Toybox compatible (238 Toybox commands + 55 extras)</li>
+        <li>Memory-safe: No buffer overflows or use-after-free bugs</li>
+        <li>#[no_std] compatible for embedded systems</li>
+        <li>POSIX-compliant shell (sh, ash, dash)</li>
+        <li>Vi text editor with modal editing</li>
+        <li>GNU screen terminal multiplexer</li>
+        <li>Full init system (init, getty, runlevel)</li>
+        <li>Complete networking stack (wget, ping, nc, ifconfig, ip)</li>
+        <li>Archive utilities (tar, gzip, bzip2, xz, cpio)</li>
+        <li>Android/Bionic libc native support</li>
+      </ul>
+      <h2>Size Comparison</h2>
+      <table border="1" cellpadding="8">
+        <tr><th>Binary</th><th>Size</th><th>Applets</th><th>Per Applet</th></tr>
+        <tr><td>armybox</td><td>108 KB</td><td>293</td><td>~380 bytes</td></tr>
+        <tr><td>Toybox</td><td>~500 KB</td><td>238</td><td>~2.1 KB</td></tr>
+        <tr><td>BusyBox</td><td>2.4 MB</td><td>274</td><td>~9 KB</td></tr>
+      </table>
+      <h2>Installation</h2>
+      <pre>
+git clone https://github.com/pegasusheavy/armybox
+cd armybox
+cargo build --release
+./target/release/armybox --install /usr/local/bin
+      </pre>
+      <p><a href="https://github.com/pegasusheavy/armybox">View on GitHub</a></p>
+    </div>
+  </noscript>
 </body>
 </html>

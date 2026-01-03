@@ -1,29 +1,42 @@
 {
-  "name": "Armybox Documentation",
-  "short_name": "Armybox",
-  "description": "A #[no_std] BusyBox/Toybox clone written in Rust - 163 Unix command-line utilities in 220KB",
+  "name": "armybox - 293 Unix Utilities in Rust",
+  "short_name": "armybox",
+  "description": "A memory-safe BusyBox/Toybox clone in Rust. 293 Unix utilities in a 108KB binary. 100% Toybox compatible with #[no_std] support for embedded systems, containers, and Android.",
   "start_url": "/",
+  "id": "/",
   "display": "standalone",
   "background_color": "#1a1f14",
   "theme_color": "#4A5D23",
+  "orientation": "any",
+  "categories": ["developer tools", "utilities", "productivity"],
+  "lang": "en",
+  "dir": "ltr",
   "icons": [
     {
       "src": "favicon.svg",
-      "sizes": "32x32",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
       "src": "assets/soldier-icon.svg",
-      "sizes": "64x64",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     },
     {
       "src": "assets/hero-soldier.svg",
-      "sizes": "400x300",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     }
-  ]
+  ],
+  "screenshots": [],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://pegasusheavy.github.io/armybox/"
+    }
+  ],
+  "prefer_related_applications": false
 }

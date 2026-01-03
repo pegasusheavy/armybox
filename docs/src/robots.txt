@@ -1,0 +1,14 @@
+# robots.txt for armybox documentation
+# https://pegasusheavy.github.io/armybox/
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://pegasusheavy.github.io/armybox/sitemap.xml
+
+# Crawl-delay for polite crawlers
+Crawl-delay: 1
+
+# Block common non-content paths
+Disallow: /assets/

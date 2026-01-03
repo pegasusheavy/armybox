@@ -375,7 +375,7 @@ if name == b"toybox" { return Some(misc::toybox); }
     if name == b"unicode" { return Some(misc::unicode); }
     if name == b"screen" { return Some(misc::screen); }
     if name == b"tmux" { return Some(misc::screen); }  // tmux alias for screen
-    
+
     None
 }
 

@@ -30,12 +30,12 @@ import { Component } from '@angular/core';
               <tbody class="divide-y divide-army-100">
                 <tr>
                   <td class="py-3 pr-4 text-army-700">Release</td>
-                  <td class="py-3 pr-4 font-mono text-camo-olive font-bold">74 KB</td>
+                  <td class="py-3 pr-4 font-mono text-camo-olive font-bold">108 KB</td>
                   <td class="py-3"><code class="text-xs bg-army-100 px-1 py-0.5 rounded">cargo build --release</code></td>
                 </tr>
                 <tr class="bg-army-50">
                   <td class="py-3 pr-4 text-army-900 font-medium">UPX Compressed</td>
-                  <td class="py-3 pr-4 font-mono text-green-700 font-bold">36 KB</td>
+                  <td class="py-3 pr-4 font-mono text-green-700 font-bold">~54 KB</td>
                   <td class="py-3"><code class="text-xs bg-army-100 px-1 py-0.5 rounded">upx --best armybox</code></td>
                 </tr>
               </tbody>
@@ -43,7 +43,7 @@ import { Component } from '@angular/core';
           </div>
 
           <p class="text-sm text-army-600">
-            All builds include <strong>57 applets</strong>. That's approximately <strong>1.3 KB per applet</strong>.
+            All builds include <strong>293 applets</strong>. That's approximately <strong>~380 bytes per applet</strong> — 24x more efficient than BusyBox!
           </p>
         </section>
 
@@ -78,7 +78,7 @@ import { Component } from '@angular/core';
               <h3 class="text-lg font-medium text-army-900 mb-3">Clone and build</h3>
               <div class="bg-army-900 rounded-xl p-5 font-mono text-sm overflow-x-auto">
                 <div class="text-army-100">
-                  <div><span class="text-army-500">$</span> git clone https://github.com/PegasusHeavyIndustries/armybox</div>
+                  <div><span class="text-army-500">$</span> git clone https://github.com/pegasusheavy/armybox</div>
                   <div><span class="text-army-500">$</span> cd armybox</div>
                   <div><span class="text-army-500">$</span> cargo build --release</div>
                 </div>
@@ -90,7 +90,7 @@ import { Component } from '@angular/core';
               <div class="bg-army-900 rounded-xl p-5 font-mono text-sm overflow-x-auto">
                 <div class="text-army-100">
                   <div><span class="text-army-500">$</span> upx --best target/release/armybox</div>
-                  <div class="text-army-400 mt-2"># 74KB → 36KB</div>
+                  <div class="text-army-400 mt-2"># 108KB → ~54KB</div>
                 </div>
               </div>
             </div>
@@ -101,7 +101,7 @@ import { Component } from '@angular/core';
                 <div class="text-army-100">
                   <div><span class="text-army-500">$</span> sudo install -m 755 target/release/armybox /usr/local/bin/</div>
                   <div><span class="text-army-500">$</span> armybox --install /usr/local/bin</div>
-                  <div class="text-army-400 mt-2"># Creates symlinks for all 57 applets</div>
+                  <div class="text-army-400 mt-2"># Creates symlinks for all 293 applets</div>
                 </div>
               </div>
             </div>
@@ -158,7 +158,7 @@ import { Component } from '@angular/core';
             <p class="text-sm text-army-700">
               <strong class="text-army-900">UPX Compression:</strong> Using
               <code class="text-xs bg-army-200 px-1 py-0.5 rounded">upx --best</code>
-              compresses the binary from 74KB to ~36KB (48% of original size) while remaining fully functional.
+              compresses the binary from 108KB to ~54KB (50% of original size) while remaining fully functional.
             </p>
           </div>
         </section>

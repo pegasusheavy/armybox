@@ -58,7 +58,7 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-center gap-2">
                   <span class="text-camo-olive">✓</span>
-                  <span class="text-army-700"><strong class="text-camo-olive">291</strong> applets (100% Toybox + 53 extras)</span>
+                  <span class="text-army-700"><strong class="text-camo-olive">293</strong> applets (100% Toybox + 55 extras)</span>
                 </li>
                 <li class="flex items-center gap-2">
                   <span class="text-camo-olive">✓</span>
@@ -224,7 +224,7 @@ interface ComparisonItem {
                 <span class="text-xl">🧸</span> 100% Toybox Compatible
               </h3>
               <p class="text-sm text-army-700 mb-4">
-                Armybox includes <strong>all 238 Toybox commands</strong> plus 53 additional utilities.
+                Armybox includes <strong>all 238 Toybox commands</strong> plus 55 additional utilities.
                 This makes armybox a drop-in replacement for any Toybox deployment while providing
                 the memory safety guarantees of Rust.
               </p>
@@ -253,7 +253,7 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-camo-olive mt-0.5">✓</span>
-                  <span><strong>More Applets:</strong> 291 vs 238 — includes init system, full networking, APK</span>
+                  <span><strong>More Applets:</strong> 293 vs 238 — includes init system, full networking, APK, GNU screen</span>
                 </li>
               </ul>
             </div>
@@ -423,7 +423,7 @@ export class ComparisonComponent {
     { feature: 'Memory Safety', armybox: '✓ Compile-time', busybox: '— Manual', toybox: '— Manual', armyboxBest: true },
     { feature: 'Binary Size', armybox: '108 KB', busybox: '2.4 MB', toybox: '~500 KB', armyboxBest: true },
     { feature: 'UPX Compressed', armybox: '~54 KB', busybox: '~1 MB', toybox: '~200 KB', armyboxBest: true },
-    { feature: 'Applet Count', armybox: '291', busybox: '274+', toybox: '238', armyboxBest: true },
+    { feature: 'Applet Count', armybox: '293', busybox: '274+', toybox: '238', armyboxBest: true },
     { feature: 'Toybox Compatible', armybox: '✓ 100%', busybox: 'Partial', toybox: 'N/A', armyboxBest: true },
     { feature: 'Size per Applet', armybox: '~380 bytes', busybox: '~9 KB', toybox: '~2.1 KB', armyboxBest: true },
     { feature: 'License', armybox: 'MIT/Apache-2.0', busybox: 'GPL v2', toybox: '0BSD' },
@@ -453,5 +453,6 @@ export class ComparisonComponent {
     { category: 'Module Management (insmod, rmmod)', armybox: 'full', busybox: 'full', toybox: 'partial' },
     { category: 'Package Management (apk)', armybox: 'full', busybox: 'none', toybox: 'none' },
     { category: 'Hardware (i2c, gpio, lspci, lsusb)', armybox: 'full', busybox: 'partial', toybox: 'full' },
+    { category: 'Terminal Multiplexer (screen)', armybox: 'full', busybox: 'none', toybox: 'none' },
   ];
 }

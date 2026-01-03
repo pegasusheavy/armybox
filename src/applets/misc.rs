@@ -612,7 +612,7 @@ pub fn screen(argc: i32, argv: *const *const u8) -> i32 {
 
 fn screen_list_sessions() -> i32 {
     let screen_dir = b"/tmp/armybox-screen\0";
-    
+
     let dir = unsafe { libc::opendir(screen_dir.as_ptr() as *const i8) };
     if dir.is_null() {
         io::write_str(1, b"No Sockets found in /tmp/armybox-screen.\n");
@@ -650,7 +650,7 @@ fn screen_list_sessions() -> i32 {
         if io::stat(&path[..len], &mut st) == 0 {
             io::write_str(1, b"\t");
             io::write_all(1, name);
-            
+
             // Check if attached
             if (st.st_mode & 0o600) == 0o600 {
                 io::write_str(1, b"\t(Attached)\n");
@@ -712,7 +712,7 @@ fn screen_detach(name: Option<&[u8]>) -> i32 {
 
 fn screen_reattach(name: Option<&[u8]>) -> i32 {
     let screen_dir = b"/tmp/armybox-screen\0";
-    
+
     let dir = unsafe { libc::opendir(screen_dir.as_ptr() as *const i8) };
     if dir.is_null() {
         io::write_str(2, b"There is no screen to be resumed.\n");
@@ -767,7 +767,7 @@ fn screen_reattach(name: Option<&[u8]>) -> i32 {
             io::write_str(1, b"Reattaching to ");
             io::write_all(1, &session[..found_len]);
             io::write_str(1, b"\n");
-            
+
             // Connect to the session's socket and take over
             let mut path = [0u8; 512];
             let mut len = 0;
@@ -798,7 +798,7 @@ fn screen_reattach(name: Option<&[u8]>) -> i32 {
                 }
             }
 
-            if unsafe { libc::connect(sock, &addr as *const _ as *const libc::sockaddr, 
+            if unsafe { libc::connect(sock, &addr as *const _ as *const libc::sockaddr,
                                        core::mem::size_of::<libc::sockaddr_un>() as u32) } < 0 {
                 io::write_str(2, b"screen: could not connect to session\n");
                 unsafe { libc::close(sock) };
@@ -808,7 +808,7 @@ fn screen_reattach(name: Option<&[u8]>) -> i32 {
             // Set terminal to raw mode
             let mut old_termios: libc::termios = unsafe { core::mem::zeroed() };
             unsafe { libc::tcgetattr(0, &mut old_termios) };
-            
+
             let mut raw = old_termios;
             unsafe { libc::cfmakeraw(&mut raw) };
             unsafe { libc::tcsetattr(0, libc::TCSANOW, &raw) };
@@ -840,14 +840,14 @@ fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cm
     let mut slave: i32 = -1;
     let mut pty_name = [0i8; 256];
 
-    if unsafe { libc::openpty(&mut master, &mut slave, pty_name.as_mut_ptr(), 
+    if unsafe { libc::openpty(&mut master, &mut slave, pty_name.as_mut_ptr(),
                                core::ptr::null_mut(), core::ptr::null_mut()) } < 0 {
         io::write_str(2, b"screen: cannot open pty\n");
         return 1;
     }
 
     let pid = unsafe { libc::fork() };
-    
+
     if pid < 0 {
         io::write_str(2, b"screen: fork failed\n");
         unsafe { libc::close(master) };
@@ -858,18 +858,18 @@ fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cm
     if pid == 0 {
         // Child process - run shell in PTY slave
         unsafe { libc::close(master) };
-        
+
         // Create new session
         unsafe { libc::setsid() };
-        
+
         // Set controlling terminal
         unsafe { libc::ioctl(slave, libc::TIOCSCTTY as u64, 0) };
-        
+
         // Redirect stdio to slave
         unsafe { libc::dup2(slave, 0) };
         unsafe { libc::dup2(slave, 1) };
         unsafe { libc::dup2(slave, 2) };
-        
+
         if slave > 2 {
             unsafe { libc::close(slave) };
         }
@@ -881,7 +881,7 @@ fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cm
             {
                 use alloc::vec::Vec;
                 use alloc::ffi::CString;
-                
+
                 let mut args: Vec<CString> = Vec::new();
                 for i in cmd_start..argc {
                     if let Some(arg) = unsafe { get_arg(argv, i) } {
@@ -893,16 +893,16 @@ fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cm
                         }
                     }
                 }
-                
+
                 let ptrs: Vec<*const i8> = args.iter()
                     .map(|s| s.as_ptr())
                     .chain(core::iter::once(core::ptr::null()))
                     .collect();
-                
+
                 unsafe { libc::execvp(ptrs[0], ptrs.as_ptr()) };
             }
         }
-        
+
         // Default: run shell
         let shell = b"/bin/sh\0";
         let shell_arg = b"-sh\0";
@@ -921,7 +921,7 @@ fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cm
         session_path[len] = c;
         len += 1;
     }
-    
+
     // Format: pid.pts-N.name
     let mut pid_buf = [0u8; 20];
     let pid_str = sys::format_u64(pid as u64, &mut pid_buf);
@@ -931,7 +931,7 @@ fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cm
     }
     session_path[len] = b'.';
     len += 1;
-    
+
     // Add pts name
     let pts_name = unsafe { io::cstr_to_slice(pty_name.as_ptr() as *const u8) };
     for &c in pts_name {
@@ -942,7 +942,7 @@ fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cm
         }
         len += 1;
     }
-    
+
     if let Some(n) = name {
         session_path[len] = b'.';
         len += 1;
@@ -974,7 +974,7 @@ fn screen_new_session(name: Option<&[u8]>, argc: i32, argv: *const *const u8, cm
     // Set terminal to raw mode
     let mut old_termios: libc::termios = unsafe { core::mem::zeroed() };
     unsafe { libc::tcgetattr(0, &mut old_termios) };
-    
+
     let mut raw = old_termios;
     unsafe { libc::cfmakeraw(&mut raw) };
     unsafe { libc::tcsetattr(0, libc::TCSANOW, &raw) };

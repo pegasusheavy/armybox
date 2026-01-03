@@ -19,7 +19,7 @@ import { RouterLink } from '@angular/router';
         <!-- Military badge -->
         <div class="inline-flex items-center gap-3 px-4 py-2 rounded mb-8 border-2 border-camo-olive" style="background: linear-gradient(135deg, rgba(74, 93, 35, 0.9) 0%, rgba(45, 64, 34, 0.9) 100%);">
           <span class="w-3 h-3 bg-camo-tan rounded-full animate-pulse"></span>
-          <span class="text-camo-sand font-bold uppercase tracking-wider text-sm">v0.3.0 — 291 APPLETS — 108KB / 54KB UPX — 100% TOYBOX COMPATIBLE</span>
+          <span class="text-camo-sand font-bold uppercase tracking-wider text-sm">v0.3.0 — 293 APPLETS — 108KB / 54KB UPX — 100% TOYBOX COMPATIBLE</span>
         </div>
 
         <h1 class="text-5xl md:text-7xl font-stencil text-army-900 mb-6 tracking-widest">
@@ -71,7 +71,7 @@ import { RouterLink } from '@angular/router';
               <span class="text-camo-tan">$</span> ./target/release/armybox --install /usr/local/bin
             </div>
             <div class="text-camo-olive mt-4 text-xs">
-              # 291 utilities deployed. 108KB mission-ready. 54KB with UPX.
+              # 293 utilities deployed. 108KB mission-ready. 54KB with UPX.
             </div>
           </div>
         </div>
@@ -137,7 +137,7 @@ import { RouterLink } from '@angular/router';
             </div>
             <h3 class="font-bold text-army-900 mb-2 uppercase tracking-wider">100% Toybox Compatible</h3>
             <p class="text-sm text-army-700">
-              All 238 Toybox commands plus 53 additional utilities.
+              All 238 Toybox commands plus 55 additional utilities.
               Drop-in replacement for any Toybox deployment.
             </p>
           </div>
@@ -150,7 +150,7 @@ import { RouterLink } from '@angular/router';
             </div>
             <h3 class="font-bold text-army-900 mb-2 uppercase tracking-wider">Single Payload</h3>
             <p class="text-sm text-army-700">
-              All 291 utilities in one tiny binary.
+              All 293 utilities in one tiny binary.
               Perfect for containers (FROM scratch), initramfs, rescue.
             </p>
           </div>
@@ -202,7 +202,7 @@ import { RouterLink } from '@angular/router';
               </li>
               <li class="flex justify-between py-2 border-b border-camo-sand">
                 <span class="text-army-800 font-medium">Applets</span>
-                <strong class="text-army-900">291 (100% Toybox + extras)</strong>
+                <strong class="text-army-900">293 (100% Toybox + extras)</strong>
               </li>
               <li class="flex justify-between py-2">
                 <span class="text-army-800 font-medium">Size per Applet</span>
@@ -319,7 +319,7 @@ import { RouterLink } from '@angular/router';
               </tr>
               <tr>
                 <td class="py-3 px-4 text-army-800 font-medium">Applets</td>
-                <td class="py-3 px-4 text-center font-bold text-army-900">291</td>
+                <td class="py-3 px-4 text-center font-bold text-army-900">293</td>
                 <td class="py-3 px-4 text-center text-army-500">274+</td>
                 <td class="py-3 px-4 text-center text-army-500">238</td>
               </tr>
