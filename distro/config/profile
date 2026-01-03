@@ -1,0 +1,63 @@
+# /etc/profile - ArmyLinux shell profile
+#
+# System-wide environment settings for login shells
+
+# Set PATH
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Default editor
+export EDITOR=vi
+export VISUAL=vi
+
+# Pager
+export PAGER=less
+export LESS="-R"
+
+# Terminal
+export TERM="${TERM:-linux}"
+
+# Locale (C.UTF-8 for minimal systems)
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
+# History
+export HISTSIZE=1000
+export HISTFILE="$HOME/.ash_history"
+
+# Prompt
+if [ "$(id -u)" -eq 0 ]; then
+    PS1='\[\033[01;31m\]\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]# '
+else
+    PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$ '
+fi
+
+# Aliases
+alias ll='ls -la'
+alias la='ls -A'
+alias l='ls -CF'
+alias ..='cd ..'
+alias ...='cd ../..'
+
+# Load local profile
+if [ -f "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+fi
+
+# Load bashrc for interactive shells
+if [ -n "$BASH_VERSION" ] && [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+
+# Welcome message
+if [ -t 0 ]; then
+    echo ""
+    echo "  ___                      _     _"
+    echo " / _ \                    | |   (_)"
+    echo "/ /_\ \_ __ _ __ ___  _   | |    _ _ __  _   ___  __"
+    echo "|  _  | '__| '_ \` _ \| | | | |   | | '_ \| | | \ \/ /"
+    echo "| | | | |  | | | | | | |_| | |___| | | | | |_| |>  <"
+    echo "\_| |_/_|  |_| |_| |_|\__, \_____/_|_| |_|\__,_/_/\_\\"
+    echo "                       __/ |"
+    echo "                      |___/   Powered by armybox"
+    echo ""
+fi

@@ -1,0 +1,109 @@
+# Cross.toml - Configuration for the `cross` tool
+# https://github.com/cross-rs/cross
+#
+# Install: cargo install cross
+# Usage: cross build --release --target <target>
+
+[build.env]
+passthrough = [
+    "RUST_BACKTRACE",
+    "RUST_LOG",
+    "CARGO_INCREMENTAL",
+]
+
+# ============================================================================
+# x86_64 Linux (musl)
+# ============================================================================
+[target.x86_64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:main"
+# pre-build = ["apt-get update && apt-get install -y musl-tools"]
+
+# ============================================================================
+# i686 Linux (musl)
+# ============================================================================
+[target.i686-unknown-linux-musl]
+image = "ghcr.io/cross-rs/i686-unknown-linux-musl:main"
+
+# ============================================================================
+# ARM64 / AArch64 Linux (musl)
+# ============================================================================
+[target.aarch64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:main"
+
+# ============================================================================
+# ARM32 Linux (musl, hard float)
+# ============================================================================
+[target.armv7-unknown-linux-musleabihf]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-musleabihf:main"
+
+# ============================================================================
+# ARM32 Linux (musl, soft float)
+# ============================================================================
+[target.arm-unknown-linux-musleabi]
+image = "ghcr.io/cross-rs/arm-unknown-linux-musleabi:main"
+
+# ============================================================================
+# MIPS32 Big Endian (musl)
+# ============================================================================
+[target.mips-unknown-linux-musl]
+image = "ghcr.io/cross-rs/mips-unknown-linux-musl:main"
+
+# ============================================================================
+# MIPS32 Little Endian (musl)
+# ============================================================================
+[target.mipsel-unknown-linux-musl]
+image = "ghcr.io/cross-rs/mipsel-unknown-linux-musl:main"
+
+# ============================================================================
+# MIPS64 (musl)
+# ============================================================================
+[target.mips64-unknown-linux-muslabi64]
+image = "ghcr.io/cross-rs/mips64-unknown-linux-muslabi64:main"
+
+# ============================================================================
+# RISC-V 64-bit
+# ============================================================================
+[target.riscv64gc-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/riscv64gc-unknown-linux-gnu:main"
+
+# ============================================================================
+# PowerPC 32-bit
+# ============================================================================
+[target.powerpc-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/powerpc-unknown-linux-gnu:main"
+
+# ============================================================================
+# PowerPC 64-bit
+# ============================================================================
+[target.powerpc64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/powerpc64-unknown-linux-gnu:main"
+
+# ============================================================================
+# PowerPC 64-bit Little Endian
+# ============================================================================
+[target.powerpc64le-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/powerpc64le-unknown-linux-gnu:main"
+
+# ============================================================================
+# Android ARM64
+# ============================================================================
+[target.aarch64-linux-android]
+image = "ghcr.io/cross-rs/aarch64-linux-android:main"
+
+# ============================================================================
+# Android ARM32
+# ============================================================================
+[target.armv7-linux-androideabi]
+image = "ghcr.io/cross-rs/armv7-linux-androideabi:main"
+
+# ============================================================================
+# Android x86_64
+# ============================================================================
+[target.x86_64-linux-android]
+image = "ghcr.io/cross-rs/x86_64-linux-android:main"
+
+# ============================================================================
+# Android x86
+# ============================================================================
+[target.i686-linux-android]
+image = "ghcr.io/cross-rs/i686-linux-android:main"

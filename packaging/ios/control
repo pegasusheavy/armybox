@@ -1,0 +1,13 @@
+Package: com.pegasusheavy.armybox
+Name: Armybox
+Version: 0.1.0
+Architecture: iphoneos-arm64
+Description: BusyBox/Toybox clone in Rust - 163+ Unix utilities in a single binary
+Homepage: https://github.com/PegasusHeavyIndustries/armybox
+Maintainer: Pegasus Heavy Industries <contact@pegasusheavy.industries>
+Author: Pegasus Heavy Industries <contact@pegasusheavy.industries>
+Section: Utilities
+Depends: firmware (>= 11.0)
+Conflicts: com.busybox
+Provides: busybox
+Priority: optional

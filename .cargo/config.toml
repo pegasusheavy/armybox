@@ -1,0 +1,138 @@
+# Cargo configuration for armybox
+# Optimized for smallest possible binary size
+
+[build]
+# Use native CPU features for best performance on local machine
+# Remove for cross-compilation
+# rustflags = ["-C", "target-cpu=native"]
+
+[target.'cfg(all())']
+rustflags = [
+    # Link against libc for no_std
+    "-C", "link-arg=-lc",
+]
+
+# ============================================================================
+# x86_64 Linux (glibc)
+# ============================================================================
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-O2",
+    "-C", "link-arg=-Wl,--hash-style=gnu",
+]
+
+# ============================================================================
+# x86_64 Linux (musl) - Static linking
+# ============================================================================
+[target.x86_64-unknown-linux-musl]
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "link-self-contained=yes",
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-O2",
+    "-C", "link-arg=-Wl,-s",
+]
+
+# ============================================================================
+# i686 Linux (32-bit musl)
+# ============================================================================
+[target.i686-unknown-linux-musl]
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "link-self-contained=yes",
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-s",
+]
+
+# ============================================================================
+# ARM64 Linux (musl)
+# ============================================================================
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "link-self-contained=yes",
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-s",
+]
+
+# ============================================================================
+# ARMv7 Linux (musl)
+# ============================================================================
+[target.armv7-unknown-linux-musleabihf]
+linker = "arm-linux-musleabihf-gcc"
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "link-self-contained=yes",
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-s",
+]
+
+# ============================================================================
+# Android ARM64 (aarch64) - Most modern Android devices
+# ============================================================================
+[target.aarch64-linux-android]
+linker = "aarch64-linux-android21-clang"
+rustflags = [
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-O2",
+    "-C", "link-arg=-Wl,-s",
+]
+
+# ============================================================================
+# Android ARMv7 (armv7) - Older 32-bit Android devices
+# ============================================================================
+[target.armv7-linux-androideabi]
+linker = "armv7a-linux-androideabi21-clang"
+rustflags = [
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-O2",
+    "-C", "link-arg=-Wl,-s",
+]
+
+# ============================================================================
+# Android x86_64 - Emulator and some Chromebooks
+# ============================================================================
+[target.x86_64-linux-android]
+linker = "x86_64-linux-android21-clang"
+rustflags = [
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-O2",
+    "-C", "link-arg=-Wl,-s",
+]
+
+# ============================================================================
+# Android i686 - Older emulators
+# ============================================================================
+[target.i686-linux-android]
+linker = "i686-linux-android21-clang"
+rustflags = [
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,--as-needed",
+    "-C", "link-arg=-Wl,-O2",
+    "-C", "link-arg=-Wl,-s",
+]
+
+# ============================================================================
+# Build aliases
+# ============================================================================
+[alias]
+# Build smallest possible binary
+build-small = "build --release --profile release-small"
+# Build fast binary (larger but faster)
+build-fast = "build --release --profile release-fast"
+# Build static musl binary
+build-static = "build --release --target x86_64-unknown-linux-musl"
+# Build for Android ARM64
+build-android = "build --release --target aarch64-linux-android"
+# Build for Android ARMv7
+build-android-arm = "build --release --target armv7-linux-androideabi"

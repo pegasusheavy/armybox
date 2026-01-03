@@ -1,0 +1,9 @@
+armybox (0.1.0-1) unstable; urgency=medium
+
+  * Initial release
+  * 163+ applets including coreutils, compression, networking
+  * ash-compatible shell
+  * PID 1 init system
+  * Cross-compilation support for musl targets
+
+ -- Pegasus Heavy Industries <contact@pegasusheavy.industries>  Thu, 02 Jan 2026 12:00:00 +0000

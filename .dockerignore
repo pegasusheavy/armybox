@@ -1,0 +1,36 @@
+# Build artifacts
+target/
+dist/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation build
+docs/node_modules/
+docs/dist/
+docs/.angular/
+
+# Benchmark results
+benchmark-results/
+*.csv
+
+# Fuzz corpus
+fuzz/corpus/
+fuzz/artifacts/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+*.bak

@@ -1,0 +1,24 @@
+Source: armybox
+Section: utils
+Priority: optional
+Maintainer: Pegasus Heavy Industries <contact@pegasusheavy.industries>
+Build-Depends: debhelper (>= 11), cargo, rustc (>= 1.70)
+Standards-Version: 4.6.0
+Homepage: https://github.com/PegasusHeavyIndustries/armybox
+Vcs-Git: https://github.com/PegasusHeavyIndustries/armybox.git
+Vcs-Browser: https://github.com/PegasusHeavyIndustries/armybox
+
+Package: armybox
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Provides: busybox
+Description: BusyBox/Toybox clone written in Rust
+ armybox is a modern implementation of common Unix utilities
+ in a single multi-call binary, similar to BusyBox and Toybox.
+ .
+ Features include:
+  - 163+ applets (coreutils, compression, networking, shell, init)
+  - Memory-safe Rust implementation
+  - ash-compatible shell
+  - PID 1 init system
+  - Static linking support

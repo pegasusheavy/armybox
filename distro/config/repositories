@@ -1,0 +1,14 @@
+# /etc/apk/repositories - ArmyLinux APK repositories
+#
+# Alpine Linux package repositories
+
+# Main repository (core packages)
+https://dl-cdn.alpinelinux.org/alpine/v3.19/main
+
+# Community repository (additional packages)
+https://dl-cdn.alpinelinux.org/alpine/v3.19/community
+
+# Edge repositories (bleeding edge, optional)
+#https://dl-cdn.alpinelinux.org/alpine/edge/main
+#https://dl-cdn.alpinelinux.org/alpine/edge/community
+#https://dl-cdn.alpinelinux.org/alpine/edge/testing

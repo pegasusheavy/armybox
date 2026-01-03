@@ -1,0 +1,43 @@
+# Maintainer: Pegasus Heavy Industries <contact@pegasusheavy.industries>
+pkgname=armybox
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="BusyBox/Toybox clone written in Rust"
+arch=('x86_64' 'aarch64')
+url="https://github.com/PegasusHeavyIndustries/armybox"
+license=('MIT' 'Apache-2.0')
+depends=()
+makedepends=('cargo' 'rust')
+provides=('busybox')
+optdepends=()
+source=("$pkgname-$pkgver.tar.gz::https://github.com/PegasusHeavyIndustries/$pkgname/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$pkgname-$pkgver"
+    cargo build --release --locked
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    cargo test --release --locked
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+
+    # Install binary
+    install -Dm755 "target/release/armybox" "$pkgdir/usr/bin/armybox"
+
+    # Install symlink helper
+    install -Dm755 "packaging/debian/armybox-install-symlinks" "$pkgdir/usr/bin/armybox-install-symlinks"
+
+    # Install license files
+    install -Dm644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+    install -Dm644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+
+    # Install documentation
+    install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 "BENCHMARK.md" "$pkgdir/usr/share/doc/$pkgname/BENCHMARK.md"
+    install -Dm644 "DOCKER.md" "$pkgdir/usr/share/doc/$pkgname/DOCKER.md"
+}

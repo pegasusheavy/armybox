@@ -1,0 +1,56 @@
+[package]
+name = "armybox"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
+description = "A #[no_std] BusyBox/Toybox clone in Rust - tiny Unix utilities"
+documentation = "https://docs.rs/armybox"
+readme = "README.md"
+homepage = "https://github.com/PegasusHeavyIndustries/armybox"
+repository = "https://github.com/PegasusHeavyIndustries/armybox"
+license = "MIT OR Apache-2.0"
+keywords = ["busybox", "toybox", "no_std", "embedded", "unix"]
+categories = ["command-line-utilities", "no-std", "embedded"]
+exclude = ["docs/", "dist/", "fuzz/", "packaging/", "scripts/", ".github/"]
+
+[features]
+default = ["alloc"]
+alloc = []          # Enable heap allocation (Vec, String, Box)
+std = ["alloc"]     # Enable std (for easier testing, not required)
+android = ["alloc"] # Android/Bionic-specific compatibility
+apk = ["alloc"]     # Alpine Package Keeper (APK) package manager
+
+[dependencies]
+# Core dependency - provides syscall interface
+# Note: default-features disabled for no_std, but tests need linking
+libc = "0.2"
+
+[dev-dependencies]
+# For testing only - benchmarks are in crates/benchmarks
+tempfile = "3"
+
+# Benchmark profile
+[profile.bench]
+opt-level = 3
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+overflow-checks = false
+
+# Don't use panic=abort for dev profile to allow tests
+[profile.dev]
+panic = "unwind"
+
+# Test profile needs unwind for test harness
+[profile.test]
+panic = "unwind"
+
+[[bin]]
+name = "armybox"
+path = "src/main.rs"

@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # Development build environment
+  dev:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/build
+      - cargo-cache:/usr/local/cargo/registry
+    working_dir: /build
+    command: cargo build --release
+
+  # Minimal scratch-based image
+  armybox:
+    build:
+      context: .
+      target: runtime
+    stdin_open: true
+    tty: true
+
+  # Alpine-based image with symlinks
+  armybox-alpine:
+    build:
+      context: .
+      target: alpine
+    stdin_open: true
+    tty: true
+
+  # Test runner
+  test:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/build
+      - cargo-cache:/usr/local/cargo/registry
+    working_dir: /build
+    command: cargo test
+
+  # Benchmark runner
+  bench:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/build
+      - cargo-cache:/usr/local/cargo/registry
+    working_dir: /build
+    command: cargo bench
+
+volumes:
+  cargo-cache:

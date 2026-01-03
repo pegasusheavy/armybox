@@ -1,0 +1,17 @@
+#!/bin/bash
+# Pre-removal script for armybox
+
+# Remove symlinks
+if [ -x /usr/bin/armybox ]; then
+    # Get list of applets and remove symlinks
+    for applet in $(/usr/bin/armybox --list 2>/dev/null); do
+        if [ -L "/usr/local/bin/$applet" ]; then
+            target=$(readlink "/usr/local/bin/$applet" 2>/dev/null)
+            if [ "$target" = "/usr/bin/armybox" ] || [ "$target" = "armybox" ]; then
+                rm -f "/usr/local/bin/$applet"
+            fi
+        fi
+    done
+fi
+
+exit 0

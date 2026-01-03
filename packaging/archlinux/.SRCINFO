@@ -1,0 +1,16 @@
+pkgbase = armybox
+	pkgdesc = BusyBox/Toybox clone written in Rust
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/PegasusHeavyIndustries/armybox
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	license = Apache-2.0
+	makedepends = cargo
+	makedepends = rust
+	provides = busybox
+	source = armybox-0.1.0.tar.gz::https://github.com/PegasusHeavyIndustries/armybox/archive/v0.1.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = armybox

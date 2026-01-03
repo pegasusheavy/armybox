@@ -1,0 +1,91 @@
+#!/bin/sh
+# armybox-install-symlinks - Install symlinks for armybox applets
+#
+# Usage: armybox-install-symlinks [--remove] [directory]
+#
+# Default directory: /usr/local/bin
+
+set -e
+
+ARMYBOX="/usr/bin/armybox"
+DEFAULT_DIR="/usr/local/bin"
+REMOVE=0
+
+usage() {
+    echo "Usage: armybox-install-symlinks [OPTIONS] [DIRECTORY]"
+    echo ""
+    echo "Install or remove symlinks for armybox applets."
+    echo ""
+    echo "Options:"
+    echo "  --remove    Remove symlinks instead of creating them"
+    echo "  --help      Show this help message"
+    echo ""
+    echo "Default directory: $DEFAULT_DIR"
+    exit 0
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --remove)
+            REMOVE=1
+            shift
+            ;;
+        --help|-h)
+            usage
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            TARGET_DIR="$1"
+            shift
+            ;;
+    esac
+done
+
+TARGET_DIR="${TARGET_DIR:-$DEFAULT_DIR}"
+
+# Check if armybox exists
+if [ ! -x "$ARMYBOX" ]; then
+    echo "Error: armybox not found at $ARMYBOX" >&2
+    exit 1
+fi
+
+# Create target directory if needed
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "Creating directory: $TARGET_DIR"
+    mkdir -p "$TARGET_DIR"
+fi
+
+# Get list of applets
+APPLETS=$("$ARMYBOX" --list)
+
+if [ "$REMOVE" = "1" ]; then
+    echo "Removing armybox symlinks from $TARGET_DIR..."
+    for applet in $APPLETS; do
+        link="$TARGET_DIR/$applet"
+        if [ -L "$link" ] && [ "$(readlink -f "$link")" = "$ARMYBOX" ]; then
+            rm -f "$link"
+            echo "  Removed: $applet"
+        fi
+    done
+    echo "Done."
+else
+    echo "Installing armybox symlinks to $TARGET_DIR..."
+    for applet in $APPLETS; do
+        link="$TARGET_DIR/$applet"
+        if [ -e "$link" ] || [ -L "$link" ]; then
+            # Skip if exists and not pointing to armybox
+            if [ -L "$link" ] && [ "$(readlink -f "$link")" = "$ARMYBOX" ]; then
+                continue
+            fi
+            echo "  Skipping (exists): $applet"
+            continue
+        fi
+        ln -s "$ARMYBOX" "$link"
+        echo "  Installed: $applet"
+    done
+    echo "Done. $TARGET_DIR applets installed."
+fi

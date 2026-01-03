@@ -1,0 +1,192 @@
+@import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply font-sans text-army-900 antialiased;
+    background:
+      /* Noise texture overlay */
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E"),
+      /* Camouflage blobs */
+      radial-gradient(ellipse 800px 600px at 10% 20%, rgba(74, 93, 35, 0.12) 0%, transparent 70%),
+      radial-gradient(ellipse 600px 500px at 90% 10%, rgba(45, 64, 34, 0.1) 0%, transparent 70%),
+      radial-gradient(ellipse 700px 550px at 30% 80%, rgba(92, 64, 51, 0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 500px 400px at 75% 65%, rgba(85, 107, 47, 0.1) 0%, transparent 70%),
+      radial-gradient(ellipse 650px 500px at 50% 40%, rgba(61, 43, 31, 0.06) 0%, transparent 70%),
+      /* Base gradient */
+      linear-gradient(135deg, #f5f5e8 0%, #e8e6d5 50%, #d4d0b8 100%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-camo-olive text-camo-sand;
+  }
+
+  /* Stencil-style headings */
+  h1, h2 {
+    letter-spacing: 0.05em;
+  }
+}
+
+@layer components {
+  /* Navigation */
+  .nav-link {
+    @apply text-army-700 hover:text-camo-olive transition-colors duration-150 text-sm font-semibold uppercase tracking-wider;
+  }
+
+  .nav-link.active {
+    @apply text-camo-olive;
+  }
+
+  /* Buttons with military feel */
+  .btn {
+    @apply inline-flex items-center justify-center px-5 py-2.5 text-sm font-bold uppercase tracking-wider rounded transition-all duration-150;
+  }
+
+  .btn-primary {
+    @apply bg-camo-olive text-camo-sand hover:bg-camo-forest border-2 border-camo-forest;
+    box-shadow: 3px 3px 0 rgba(45, 64, 34, 0.5);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 1px 1px 0 rgba(45, 64, 34, 0.5);
+    transform: translate(2px, 2px);
+  }
+
+  .btn-secondary {
+    @apply bg-camo-tan text-army-900 hover:bg-camo-khaki border-2 border-camo-brown;
+    box-shadow: 3px 3px 0 rgba(92, 64, 51, 0.4);
+  }
+
+  .btn-secondary:hover {
+    box-shadow: 1px 1px 0 rgba(92, 64, 51, 0.4);
+    transform: translate(2px, 2px);
+  }
+
+  /* Code blocks with tactical look */
+  .code-block {
+    @apply font-mono text-sm rounded-lg p-4 overflow-x-auto border-2;
+    background: linear-gradient(135deg, #2d2b1f 0%, #1a1910 100%);
+    color: #c4d4a9;
+    border-color: #4a5d23;
+  }
+
+  /* Cards with dog-tag style border */
+  .card {
+    @apply rounded-lg p-6 border-2;
+    background: rgba(245, 245, 232, 0.85);
+    border-color: #8b7355;
+    box-shadow: 4px 4px 0 rgba(92, 64, 51, 0.2);
+  }
+
+  .card:hover {
+    border-color: #4a5d23;
+  }
+
+  /* Prose styling */
+  .prose-army {
+    @apply prose prose-neutral max-w-none;
+    @apply prose-headings:font-semibold prose-headings:text-army-900 prose-headings:tracking-wide;
+    @apply prose-p:text-army-800;
+    @apply prose-a:text-camo-olive prose-a:no-underline hover:prose-a:text-camo-forest prose-a:font-semibold;
+    @apply prose-code:text-camo-forest prose-code:bg-camo-sand prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:font-medium prose-code:border prose-code:border-camo-khaki;
+    @apply prose-pre:bg-army-900 prose-pre:text-camo-sand prose-pre:border-2 prose-pre:border-camo-olive;
+  }
+
+  /* Stencil text effect */
+  .stencil {
+    @apply font-stencil uppercase tracking-widest;
+    text-shadow: 2px 2px 0 rgba(45, 64, 34, 0.3);
+  }
+
+  /* Camo badge */
+  .badge-camo {
+    @apply inline-flex items-center gap-2 px-3 py-1 rounded text-sm font-bold uppercase tracking-wider;
+    background: linear-gradient(135deg, #4a5d23 0%, #2d4022 100%);
+    color: #d4c5a9;
+    border: 1px solid #556b2f;
+  }
+
+  /* Military-style divider */
+  .divider-camo {
+    @apply relative h-1 my-8;
+    background: repeating-linear-gradient(
+      90deg,
+      #4a5d23 0px,
+      #4a5d23 20px,
+      #2d4022 20px,
+      #2d4022 40px,
+      #5c4033 40px,
+      #5c4033 60px,
+      #556b2f 60px,
+      #556b2f 80px
+    );
+  }
+
+  /* Feature grid icon container */
+  .icon-camo {
+    @apply w-12 h-12 rounded-lg flex items-center justify-center;
+    background: linear-gradient(135deg, #4a5d23 0%, #556b2f 100%);
+    border: 2px solid #2d4022;
+  }
+
+  .icon-camo svg {
+    @apply w-6 h-6 text-camo-sand;
+  }
+
+  /* Table styling */
+  table {
+    @apply w-full text-sm;
+  }
+
+  table thead {
+    background: linear-gradient(135deg, #4a5d23 0%, #2d4022 100%);
+  }
+
+  table th {
+    @apply py-3 px-4 text-left font-bold uppercase tracking-wider text-camo-sand border-b-2 border-camo-forest;
+  }
+
+  table td {
+    @apply py-3 px-4 border-b border-camo-khaki;
+  }
+
+  table tr:hover td {
+    @apply bg-camo-sand bg-opacity-30;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Camo text gradient */
+  .text-camo-gradient {
+    background: linear-gradient(135deg, #4a5d23 0%, #556b2f 50%, #5c4033 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Dog tag notch effect */
+  .dog-tag {
+    clip-path: polygon(
+      0% 10%,
+      5% 0%,
+      95% 0%,
+      100% 10%,
+      100% 90%,
+      95% 100%,
+      5% 100%,
+      0% 90%
+    );
+  }
+}

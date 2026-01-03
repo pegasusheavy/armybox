@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Index - Criterion.rs</title>
+    <style type="text/css">
+        body {
+            font: 14px Helvetica Neue;
+            text-rendering: optimizelegibility;
+        }
+
+        .body {
+            width: 960px;
+            margin: auto;
+        }
+
+        a:link {
+            color: #1F78B4;
+            text-decoration: none;
+        }
+
+        h2 {
+            font-size: 36px;
+            font-weight: 300;
+        }
+
+        h3 {
+            font-size: 24px;
+            font-weight: 300;
+        }
+
+        #footer {
+            height: 40px;
+            background: #888;
+            color: white;
+            font-size: larger;
+            font-weight: 300;
+        }
+
+        #footer a {
+            color: white;
+            text-decoration: underline;
+        }
+
+        #footer p {
+            text-align: center
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #888;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="body">
+        <h2>Criterion.rs Benchmark Index</h2>
+        See individual benchmark pages below for more details.
+        <ul>
+            <li><a href="../awk/report/index.html">awk</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th><a href="../awk/pattern_match/report/index.html">pattern_match</a></th>
+                            <th><a href="../awk/print_columns/report/index.html">print_columns</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../awk/1000/report/index.html">1000</a></th>
+                            <td><a href="../awk/pattern_match/1000/report/index.html">awk/pattern_match/1000</a></td>
+                            <td><a href="../awk/print_columns/1000/report/index.html">awk/print_columns/1000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../awk/10000/report/index.html">10000</a></th>
+                            <td><a href="../awk/pattern_match/10000/report/index.html">awk/pattern_match/10000</a></td>
+                            <td><a href="../awk/print_columns/10000/report/index.html">awk/print_columns/10000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../awk/100000/report/index.html">100000</a></th>
+                            <td><a href="../awk/pattern_match/100000/report/index.html">awk/pattern_match/100000</a></td>
+                            <td><a href="../awk/print_columns/100000/report/index.html">awk/print_columns/100000</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../bzip2_compress/report/index.html">bzip2_compress</a></li>
+            
+            <ul>
+                <li><a href="../bzip2_compress/10240/report/index.html">10240</a></li>
+                <li><a href="../bzip2_compress/102400/report/index.html">102400</a></li>
+            </ul>
+            <li><a href="../cat_throughput/report/index.html">cat_throughput</a></li>
+            
+            <ul>
+                <li><a href="../cat_throughput/1024/report/index.html">1024</a></li>
+                <li><a href="../cat_throughput/10240/report/index.html">10240</a></li>
+                <li><a href="../cat_throughput/102400/report/index.html">102400</a></li>
+                <li><a href="../cat_throughput/1024000/report/index.html">1024000</a></li>
+            </ul>
+            <li><a href="../checksums/report/index.html">checksums</a></li>
+            
+            <ul>
+                <li><a href="../checksums/md5sum/report/index.html">md5sum</a></li>
+                <li><a href="../checksums/sha256sum/report/index.html">sha256sum</a></li>
+            </ul>
+            <li><a href="../compression_comparison/report/index.html">compression_comparison</a></li>
+            
+            <ul>
+                <li><a href="../compression_comparison/bzip2/report/index.html">bzip2</a></li>
+                <li><a href="../compression_comparison/gzip/report/index.html">gzip</a></li>
+                <li><a href="../compression_comparison/xz/report/index.html">xz</a></li>
+            </ul>
+            <li><a href="../cut/report/index.html">cut</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th><a href="../cut/characters/report/index.html">characters</a></th>
+                            <th><a href="../cut/delimiter/report/index.html">delimiter</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../cut/1000/report/index.html">1000</a></th>
+                            <td><a href="../cut/characters/1000/report/index.html">cut/characters/1000</a></td>
+                            <td><a href="../cut/delimiter/1000/report/index.html">cut/delimiter/1000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../cut/10000/report/index.html">10000</a></th>
+                            <td><a href="../cut/characters/10000/report/index.html">cut/characters/10000</a></td>
+                            <td><a href="../cut/delimiter/10000/report/index.html">cut/delimiter/10000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../cut/100000/report/index.html">100000</a></th>
+                            <td><a href="../cut/characters/100000/report/index.html">cut/characters/100000</a></td>
+                            <td><a href="../cut/delimiter/100000/report/index.html">cut/delimiter/100000</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../dispatch_overhead/report/index.html">dispatch_overhead</a></li>
+            
+            <ul>
+                <li><a href="../dispatch_overhead/echo_small/report/index.html">echo_small</a></li>
+                <li><a href="../dispatch_overhead/false/report/index.html">false</a></li>
+                <li><a href="../dispatch_overhead/true/report/index.html">true</a></li>
+            </ul>
+            <li><a href="../echo_throughput/report/index.html">echo_throughput</a></li>
+            
+            <ul>
+                <li><a href="../echo_throughput/10/report/index.html">10</a></li>
+                <li><a href="../echo_throughput/100/report/index.html">100</a></li>
+                <li><a href="../echo_throughput/1000/report/index.html">1000</a></li>
+                <li><a href="../echo_throughput/10000/report/index.html">10000</a></li>
+            </ul>
+            <li><a href="../find/report/index.html">find</a></li>
+            
+            <ul>
+                <li><a href="../find/find_src/report/index.html">find_src</a></li>
+                <li><a href="../find/find_type_f/report/index.html">find_type_f</a></li>
+            </ul>
+            <li><a href="../grep/report/index.html">grep</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th><a href="../grep/case_insensitive/report/index.html">case_insensitive</a></th>
+                            <th><a href="../grep/inverted/report/index.html">inverted</a></th>
+                            <th><a href="../grep/literal/report/index.html">literal</a></th>
+                            <th><a href="../grep/regex/report/index.html">regex</a></th>
+                            <th><a href="../grep/with_line_numbers/report/index.html">with_line_numbers</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../grep/1000/report/index.html">1000</a></th>
+                            <td><a href="../grep/case_insensitive/1000/report/index.html">grep/case_insensitive/1000</a></td>
+                            <td><a href="../grep/inverted/1000/report/index.html">grep/inverted/1000</a></td>
+                            <td><a href="../grep/literal/1000/report/index.html">grep/literal/1000</a></td>
+                            <td><a href="../grep/regex/1000/report/index.html">grep/regex/1000</a></td>
+                            <td><a href="../grep/with_line_numbers/1000/report/index.html">grep/with_line_numbers/1000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../grep/10000/report/index.html">10000</a></th>
+                            <td><a href="../grep/case_insensitive/10000/report/index.html">grep/case_insensitive/10000</a></td>
+                            <td><a href="../grep/inverted/10000/report/index.html">grep/inverted/10000</a></td>
+                            <td><a href="../grep/literal/10000/report/index.html">grep/literal/10000</a></td>
+                            <td><a href="../grep/regex/10000/report/index.html">grep/regex/10000</a></td>
+                            <td><a href="../grep/with_line_numbers/10000/report/index.html">grep/with_line_numbers/10000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../grep/100000/report/index.html">100000</a></th>
+                            <td><a href="../grep/case_insensitive/100000/report/index.html">grep/case_insensitive/100000</a></td>
+                            <td><a href="../grep/inverted/100000/report/index.html">grep/inverted/100000</a></td>
+                            <td><a href="../grep/literal/100000/report/index.html">grep/literal/100000</a></td>
+                            <td><a href="../grep/regex/100000/report/index.html">grep/regex/100000</a></td>
+                            <td><a href="../grep/with_line_numbers/100000/report/index.html">grep/with_line_numbers/100000</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../gzip_compress/report/index.html">gzip_compress</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th>high</th>
+                            <th>low</th>
+                            <th><a href="../gzip_compress/medium/report/index.html">medium</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../gzip_compress/10240/report/index.html">10240</a></th>
+                            <td><a href="../gzip_compress/high/10240/report/index.html">gzip_compress/high/10240</a></td>
+                            <td><a href="../gzip_compress/low/10240/report/index.html">gzip_compress/low/10240</a></td>
+                            <td><a href="../gzip_compress/medium/10240/report/index.html">gzip_compress/medium/10240</a></td>
+                        </tr>
+                        <tr>
+                            <th>102400</th>
+                            <td><a href="../gzip_compress/medium/102400/report/index.html">gzip_compress/medium/102400</a></td>
+                        </tr>
+                        <tr>
+                            <th>1024000</th>
+                            <td><a href="../gzip_compress/medium/1024000/report/index.html">gzip_compress/medium/1024000</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../gzip_decompress/report/index.html">gzip_decompress</a></li>
+            
+            <ul>
+                <li><a href="../gzip_decompress/10240/report/index.html">10240</a></li>
+                <li><a href="../gzip_decompress/102400/report/index.html">102400</a></li>
+                <li><a href="../gzip_decompress/1024000/report/index.html">1024000</a></li>
+            </ul>
+            <li><a href="../head_tail/report/index.html">head_tail</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th><a href="../head_tail/head/report/index.html">head</a></th>
+                            <th><a href="../head_tail/tail/report/index.html">tail</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../head_tail/10/report/index.html">10</a></th>
+                            <td><a href="../head_tail/head/10/report/index.html">head_tail/head/10</a></td>
+                            <td><a href="../head_tail/tail/10/report/index.html">head_tail/tail/10</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../head_tail/100/report/index.html">100</a></th>
+                            <td><a href="../head_tail/head/100/report/index.html">head_tail/head/100</a></td>
+                            <td><a href="../head_tail/tail/100/report/index.html">head_tail/tail/100</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../head_tail/1000/report/index.html">1000</a></th>
+                            <td><a href="../head_tail/head/1000/report/index.html">head_tail/head/1000</a></td>
+                            <td><a href="../head_tail/tail/1000/report/index.html">head_tail/tail/1000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../head_tail/10000/report/index.html">10000</a></th>
+                            <td><a href="../head_tail/head/10000/report/index.html">head_tail/head/10000</a></td>
+                            <td><a href="../head_tail/tail/10000/report/index.html">head_tail/tail/10000</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../ls/report/index.html">ls</a></li>
+            
+            <ul>
+                <li><a href="../ls/ls_la/report/index.html">ls_la</a></li>
+                <li><a href="../ls/ls_recursive/report/index.html">ls_recursive</a></li>
+                <li><a href="../ls/ls_simple/report/index.html">ls_simple</a></li>
+            </ul>
+            <li><a href="../sed/report/index.html">sed</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th><a href="../sed/delete/report/index.html">delete</a></th>
+                            <th><a href="../sed/substitute/report/index.html">substitute</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../sed/1000/report/index.html">1000</a></th>
+                            <td><a href="../sed/delete/1000/report/index.html">sed/delete/1000</a></td>
+                            <td><a href="../sed/substitute/1000/report/index.html">sed/substitute/1000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../sed/10000/report/index.html">10000</a></th>
+                            <td><a href="../sed/delete/10000/report/index.html">sed/delete/10000</a></td>
+                            <td><a href="../sed/substitute/10000/report/index.html">sed/substitute/10000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../sed/100000/report/index.html">100000</a></th>
+                            <td><a href="../sed/delete/100000/report/index.html">sed/delete/100000</a></td>
+                            <td><a href="../sed/substitute/100000/report/index.html">sed/substitute/100000</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../sort/report/index.html">sort</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th><a href="../sort/numeric/report/index.html">numeric</a></th>
+                            <th><a href="../sort/reverse/report/index.html">reverse</a></th>
+                            <th><a href="../sort/string/report/index.html">string</a></th>
+                            <th><a href="../sort/unique/report/index.html">unique</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../sort/1000/report/index.html">1000</a></th>
+                            <td><a href="../sort/numeric/1000/report/index.html">sort/numeric/1000</a></td>
+                            <td><a href="../sort/reverse/1000/report/index.html">sort/reverse/1000</a></td>
+                            <td><a href="../sort/string/1000/report/index.html">sort/string/1000</a></td>
+                            <td><a href="../sort/unique/1000/report/index.html">sort/unique/1000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../sort/10000/report/index.html">10000</a></th>
+                            <td><a href="../sort/numeric/10000/report/index.html">sort/numeric/10000</a></td>
+                            <td><a href="../sort/reverse/10000/report/index.html">sort/reverse/10000</a></td>
+                            <td><a href="../sort/string/10000/report/index.html">sort/string/10000</a></td>
+                            <td><a href="../sort/unique/10000/report/index.html">sort/unique/10000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../sort/100000/report/index.html">100000</a></th>
+                            <td><a href="../sort/numeric/100000/report/index.html">sort/numeric/100000</a></td>
+                            <td><a href="../sort/reverse/100000/report/index.html">sort/reverse/100000</a></td>
+                            <td><a href="../sort/string/100000/report/index.html">sort/string/100000</a></td>
+                            <td><a href="../sort/unique/100000/report/index.html">sort/unique/100000</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../tar_create/report/index.html">tar_create</a></li>
+            
+            <ul>
+                <li><a href="../tar_create/tar_100_files/report/index.html">tar_100_files</a></li>
+                <li><a href="../tar_create/tar_gz_100_files/report/index.html">tar_gz_100_files</a></li>
+            </ul>
+            <li><a href="../tr/report/index.html">tr</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th><a href="../tr/case_conversion/report/index.html">case_conversion</a></th>
+                            <th><a href="../tr/delete/report/index.html">delete</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../tr/1024/report/index.html">1024</a></th>
+                            <td><a href="../tr/case_conversion/1024/report/index.html">tr/case_conversion/1024</a></td>
+                            <td><a href="../tr/delete/1024/report/index.html">tr/delete/1024</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../tr/10240/report/index.html">10240</a></th>
+                            <td><a href="../tr/case_conversion/10240/report/index.html">tr/case_conversion/10240</a></td>
+                            <td><a href="../tr/delete/10240/report/index.html">tr/delete/10240</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../tr/102400/report/index.html">102400</a></th>
+                            <td><a href="../tr/case_conversion/102400/report/index.html">tr/case_conversion/102400</a></td>
+                            <td><a href="../tr/delete/102400/report/index.html">tr/delete/102400</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../uniq/report/index.html">uniq</a></li>
+            
+            <ul>
+                <li>
+                    <table>
+                        <tr>
+                            <th></th>
+                            <th><a href="../uniq/basic/report/index.html">basic</a></th>
+                            <th><a href="../uniq/count/report/index.html">count</a></th>
+                        </tr>
+                        <tr>
+                            <th><a href="../uniq/1000/report/index.html">1000</a></th>
+                            <td><a href="../uniq/basic/1000/report/index.html">uniq/basic/1000</a></td>
+                            <td><a href="../uniq/count/1000/report/index.html">uniq/count/1000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../uniq/10000/report/index.html">10000</a></th>
+                            <td><a href="../uniq/basic/10000/report/index.html">uniq/basic/10000</a></td>
+                            <td><a href="../uniq/count/10000/report/index.html">uniq/count/10000</a></td>
+                        </tr>
+                        <tr>
+                            <th><a href="../uniq/100000/report/index.html">100000</a></th>
+                            <td><a href="../uniq/basic/100000/report/index.html">uniq/basic/100000</a></td>
+                            <td><a href="../uniq/count/100000/report/index.html">uniq/count/100000</a></td>
+                        </tr>
+                    </table>
+                </li>
+            </ul>
+            <li><a href="../wc_throughput/report/index.html">wc_throughput</a></li>
+            
+            <ul>
+                <li><a href="../wc_throughput/1024/report/index.html">1024</a></li>
+                <li><a href="../wc_throughput/10240/report/index.html">10240</a></li>
+                <li><a href="../wc_throughput/102400/report/index.html">102400</a></li>
+                <li><a href="../wc_throughput/1024000/report/index.html">1024000</a></li>
+            </ul>
+            <li><a href="../xz_compress/report/index.html">xz_compress</a></li>
+            
+            <ul>
+                <li><a href="../xz_compress/10240/report/index.html">10240</a></li>
+                <li><a href="../xz_compress/102400/report/index.html">102400</a></li>
+            </ul>
+        </ul>
+    </div>
+    <div id="footer">
+        <p>This report was generated by
+            <a href="https://github.com/bheisler/criterion.rs">Criterion.rs</a>, a statistics-driven benchmarking
+            library in Rust.</p>
+    </div>
+</body>
+</html>

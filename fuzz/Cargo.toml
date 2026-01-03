@@ -1,0 +1,65 @@
+[package]
+name = "armybox-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+[dependencies.armybox]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "fuzz_grep_pattern"
+path = "fuzz_targets/fuzz_grep_pattern.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_awk_program"
+path = "fuzz_targets/fuzz_awk_program.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_sed_script"
+path = "fuzz_targets/fuzz_sed_script.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_dd_args"
+path = "fuzz_targets/fuzz_dd_args.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_compression"
+path = "fuzz_targets/fuzz_compression.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tar"
+path = "fuzz_targets/fuzz_tar.rs"
+test = false
+doc = false
+bench = false

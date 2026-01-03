@@ -1,0 +1,36 @@
+# Maintainer: Pegasus Heavy Industries <contact@pegasusheavy.industries>
+pkgname=armybox
+pkgver=0.1.0
+pkgrel=0
+pkgdesc="BusyBox/Toybox clone written in Rust"
+url="https://github.com/PegasusHeavyIndustries/armybox"
+arch="x86_64 aarch64"
+license="MIT AND Apache-2.0"
+makedepends="cargo rust"
+subpackages="$pkgname-doc"
+source="$pkgname-$pkgver.tar.gz::https://github.com/PegasusHeavyIndustries/$pkgname/archive/v$pkgver.tar.gz"
+
+build() {
+	cargo build --release --locked
+}
+
+check() {
+	cargo test --release --locked
+}
+
+package() {
+	# Install binary
+	install -Dm755 "target/release/armybox" "$pkgdir/usr/bin/armybox"
+
+	# Install symlink helper
+	install -Dm755 "packaging/debian/armybox-install-symlinks" "$pkgdir/usr/bin/armybox-install-symlinks"
+
+	# Install documentation
+	install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+	install -Dm644 BENCHMARK.md "$pkgdir/usr/share/doc/$pkgname/BENCHMARK.md"
+	install -Dm644 DOCKER.md "$pkgdir/usr/share/doc/$pkgname/DOCKER.md"
+}
+
+sha512sums="
+SKIP
+"

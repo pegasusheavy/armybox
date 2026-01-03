@@ -1,0 +1,35 @@
+# Build artifacts
+/target
+/dist
+
+# Documentation build
+/docs/node_modules
+/docs/dist
+/docs/.angular
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Benchmark results
+/benchmark-results
+*.csv
+
+# Fuzz artifacts
+/fuzz/corpus
+/fuzz/artifacts
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# Property test regressions
+*.proptest-regressions

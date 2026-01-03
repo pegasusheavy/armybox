@@ -1,0 +1,22 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build --release
+
+override_dh_auto_install:
+	install -D -m 755 target/release/armybox debian/armybox/usr/bin/armybox
+
+	# Create symlinks directory
+	mkdir -p debian/armybox/usr/lib/armybox
+
+	# Install symlink creation script
+	install -D -m 755 packaging/debian/armybox-install-symlinks debian/armybox/usr/bin/armybox-install-symlinks
+
+override_dh_auto_clean:
+	cargo clean
+
+override_dh_auto_test:
+	cargo test --release

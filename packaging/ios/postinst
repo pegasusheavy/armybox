@@ -1,0 +1,12 @@
+#!/bin/bash
+# Post-installation script for armybox
+
+# Sign the binary if ldid is available
+if command -v ldid &>/dev/null; then
+    ldid -S /usr/bin/armybox 2>/dev/null || true
+fi
+
+# Create symlinks
+/usr/bin/armybox --install /usr/local/bin 2>/dev/null || true
+
+exit 0

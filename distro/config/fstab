@@ -1,0 +1,19 @@
+# /etc/fstab - ArmyLinux filesystem table
+#
+# <device>      <mount point>   <type>      <options>           <dump>  <pass>
+
+# Virtual filesystems
+proc            /proc           proc        defaults            0       0
+sysfs           /sys            sysfs       defaults            0       0
+devtmpfs        /dev            devtmpfs    defaults            0       0
+devpts          /dev/pts        devpts      defaults            0       0
+tmpfs           /dev/shm        tmpfs       defaults            0       0
+tmpfs           /run            tmpfs       defaults,mode=755   0       0
+tmpfs           /tmp            tmpfs       defaults            0       0
+
+# Root filesystem (adjust for your setup)
+# /dev/sda1     /               ext4        defaults,noatime    0       1
+# /dev/sda2     /boot           vfat        defaults            0       2
+
+# Swap (optional)
+# /dev/sda3     none            swap        sw                  0       0
