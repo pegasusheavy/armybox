@@ -1,6 +1,7 @@
 //! Benchmarks for core applet dispatch and argument parsing
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use std::hint::black_box;
 use std::process::{Command, Stdio};
 use std::io::Write;
 use tempfile::NamedTempFile;
