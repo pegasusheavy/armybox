@@ -10,16 +10,16 @@
       <stop offset="100%" style="stop-color:#6b8e23"/>
     </linearGradient>
   </defs>
-  
+
   <!-- Background -->
   <rect width="1200" height="630" fill="url(#bg)"/>
-  
+
   <!-- Subtle grid pattern -->
   <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
     <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#4a5d23" stroke-width="0.5" opacity="0.1"/>
   </pattern>
   <rect width="1200" height="630" fill="url(#grid)"/>
-  
+
   <!-- Toy Soldier Icon (centered) -->
   <g transform="translate(100, 165) scale(0.18)">
     <g fill="#d4c5a9">
@@ -47,51 +47,51 @@
       <rect x="410" y="860" width="100" height="60" rx="10" fill="#2d2b1f"/>
     </g>
   </g>
-  
+
   <!-- Main Title -->
   <text x="400" y="200" font-family="'Courier New', monospace" font-size="72" font-weight="bold" fill="#d4c5a9">armybox</text>
-  
+
   <!-- Subtitle -->
   <text x="400" y="270" font-family="Arial, sans-serif" font-size="32" fill="#9ca88c">293 Unix Utilities in Rust</text>
-  
+
   <!-- Key Stats -->
   <g transform="translate(400, 320)">
     <rect x="0" y="0" width="700" height="180" rx="10" fill="#2d3422" stroke="#4a5d23" stroke-width="2"/>
-    
+
     <text x="350" y="50" font-family="Arial, sans-serif" font-size="28" fill="#9ca88c" text-anchor="middle">100% Toybox Compatible • Memory Safe • #[no_std]</text>
-    
+
     <!-- Stats row -->
     <g transform="translate(50, 90)">
       <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">108KB</text>
       <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">Binary Size</text>
     </g>
-    
+
     <g transform="translate(230, 90)">
       <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">293</text>
       <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">Applets</text>
     </g>
-    
+
     <g transform="translate(380, 90)">
       <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">~380B</text>
       <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">Per Applet</text>
     </g>
-    
+
     <g transform="translate(550, 90)">
       <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">24x</text>
       <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">More Efficient</text>
     </g>
   </g>
-  
+
   <!-- Bottom features -->
   <text x="600" y="560" font-family="Arial, sans-serif" font-size="22" fill="#9ca88c" text-anchor="middle">
     Shell • Vi Editor • Screen • Init System • Networking • Archives • Android Ready
   </text>
-  
+
   <!-- GitHub URL -->
   <text x="600" y="600" font-family="'Courier New', monospace" font-size="20" fill="#4a5d23" text-anchor="middle">
     github.com/pegasusheavy/armybox
   </text>
-  
+
   <!-- Border -->
   <rect x="10" y="10" width="1180" height="610" fill="none" stroke="#4a5d23" stroke-width="4" rx="10"/>
 </svg>

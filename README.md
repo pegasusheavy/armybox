@@ -1,30 +1,52 @@
-# Armybox
+# 🪖 Armybox
 
-A `#[no_std]` BusyBox/Toybox clone written in Rust.
+[![Crates.io](https://img.shields.io/crates/v/armybox)](https://crates.io/crates/armybox)
+[![docs.rs](https://img.shields.io/docsrs/armybox)](https://docs.rs/armybox)
+[![License](https://img.shields.io/crates/l/armybox)](LICENSE-MIT)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/pegasusheavy/armybox/release.yml)](https://github.com/pegasusheavy/armybox/actions)
 
-## Features
+A memory-safe `#[no_std]` BusyBox/Toybox clone written in Rust.
 
-- **291 applets** - 100% Toybox compatible + 53 additional utilities
-- **Multi-call binary** - single executable providing all utilities
-- **Pure Rust 2024** - memory-safe implementation using the latest Rust edition
-- **Incredibly tiny** - **108 KB** stripped, **~54 KB** with UPX compression
-- **True `#[no_std]`** - no standard library dependency, only `libc` and `alloc`
-- **Android-native** - first-class Android/Bionic support, works on Android 5.0+
-- **Embedded-ready** - works on systems without full std support
-- **Cross-platform** - builds for Linux (glibc/musl), Android, x86_64, ARM64, ARM32
-- **POSIX.1-2017 compliant** - core utilities follow the POSIX standard
+**[📖 Documentation](https://pegasusheavy.github.io/armybox)** · **[📦 Crates.io](https://crates.io/crates/armybox)** · **[🔧 API Docs](https://docs.rs/armybox)**
 
-## Binary Size Comparison
+## ✨ Features
+
+- **293 applets** — 100% Toybox compatible + 55 additional utilities
+- **Multi-call binary** — single executable providing all utilities
+- **Pure Rust 2024** — memory-safe implementation using the latest Rust edition
+- **Incredibly tiny** — **108 KB** stripped, **~54 KB** with UPX compression
+- **True `#[no_std]`** — no standard library dependency, only `libc` and `alloc`
+- **Android-native** — first-class Android/Bionic support, works on Android 5.0+
+- **Embedded-ready** — works on systems without full std support
+- **Cross-platform** — builds for Linux (glibc/musl), Android, x86_64, ARM64, ARM32
+- **POSIX.1-2017 compliant** — core utilities follow the POSIX standard
+
+## 📊 Binary Size Comparison
 
 | Binary | Size | UPX Size | Applets | Size/Applet |
 |--------|------|----------|---------|-------------|
-| **Armybox** | 108 KB | ~54 KB | 291 | **~380 bytes** |
+| **Armybox** | 108 KB | ~54 KB | 293 | **~380 bytes** |
 | Toybox | ~500 KB | ~200 KB | 238 | ~2.1 KB |
 | BusyBox | 2.4 MB | ~1 MB | 274 | ~9 KB |
 
-Armybox is **24x more efficient per applet** than BusyBox and **5.5x more efficient** than Toybox!
+**Armybox is 24x more efficient per applet than BusyBox and 5.5x more efficient than Toybox!**
 
-## Applet Categories (291 total)
+## 🚀 Quick Start
+
+```bash
+# Clone and build
+git clone https://github.com/pegasusheavy/armybox
+cd armybox
+cargo build --release
+
+# Install symlinks
+sudo ./target/release/armybox --install /usr/local/bin
+
+# Compress with UPX (optional)
+upx --best target/release/armybox
+```
+
+## 📚 Applet Categories (293 total)
 
 ### File Operations (45+)
 `basename`, `cat`, `cd`, `chattr`, `chgrp`, `chmod`, `chown`, `cp`, `dd`, `dirname`, `fallocate`, `file`, `find`, `fstype`, `install`, `link`, `ln`, `ls`, `lsattr`, `makedevs`, `mkdir`, `mkfifo`, `mknod`, `mktemp`, `mv`, `patch`, `pwd`, `readlink`, `realpath`, `rm`, `rmdir`, `setfattr`, `shred`, `split`, `stat`, `sync`, `touch`, `truncate`, `unlink`, `xargs`
@@ -39,10 +61,13 @@ Armybox is **24x more efficient per applet** than BusyBox and **5.5x more effici
 `kill`, `killall`, `killall5`, `pgrep`, `pidof`, `pkill`, `pmap`, `prlimit`, `ps`, `pwdx`, `renice`, `setsid`, `time`
 
 ### Shell (3)
-`sh`, `ash`, `dash` - full POSIX-compliant shell
+`sh`, `ash`, `dash` — full POSIX-compliant shell
 
 ### Vi Editor (2)
-`vi`, `view` - modal editor with normal, insert, and command-line modes
+`vi`, `view` — modal editor with normal, insert, and command-line modes
+
+### Terminal Multiplexer (2)
+`screen`, `tmux` — terminal session management
 
 ### Init System (6)
 `init`, `getty`, `linuxrc`, `runlevel`, `sulogin`, `telinit`
@@ -62,36 +87,7 @@ Armybox is **24x more efficient per applet** than BusyBox and **5.5x more effici
 ### Miscellaneous (25+)
 `[`, `ascii`, `clear`, `cmp`, `count`, `diff`, `expr`, `factor`, `false`, `help`, `hexdump`, `hexedit`, `mcookie`, `memeater`, `mesg`, `microcom`, `mix`, `mkpasswd`, `mkswap`, `nologin`, `nsenter`, `oneit`, `pwgen`, `readelf`, `reset`, `shuf`, `sleep`, `switch_root`, `test`, `toybox`, `true`, `ts`, `uclampset`, `ulimit`, `unicode`, `unshare`, `usleep`, `uudecode`, `uuencode`, `uuidgen`, `watchdog`
 
-## Installation
-
-### From Source
-
-```bash
-# Clone the repository
-git clone https://github.com/pegasusheavy/armybox
-cd armybox
-
-# Build release binary
-cargo build --release
-
-# Binary is at target/release/armybox
-```
-
-### Install Symlinks
-
-```bash
-# Install symbolic links to /usr/local/bin
-sudo ./target/release/armybox --install /usr/local/bin
-```
-
-### Compress with UPX
-
-```bash
-# Compress to ~54KB
-upx --best target/release/armybox
-```
-
-### Build for Android
+## 📱 Android Support
 
 Armybox has native Android support with Bionic libc compatibility.
 
@@ -108,21 +104,13 @@ export PATH=$PATH:$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 # Build for Android ARM64
 cargo build --release --target aarch64-linux-android
 
-# Binary is at target/aarch64-linux-android/release/armybox
-```
-
-#### Android Deployment
-
-```bash
-# Push to Android device via ADB
+# Deploy via ADB
 adb push target/aarch64-linux-android/release/armybox /data/local/tmp/
-
-# Make executable and test
 adb shell chmod +x /data/local/tmp/armybox
 adb shell /data/local/tmp/armybox --list
 ```
 
-## Usage
+## 📦 Usage
 
 ### Direct Invocation
 ```bash
@@ -131,6 +119,7 @@ adb shell /data/local/tmp/armybox --list
 ./armybox echo "Hello, World!"
 ./armybox sh  # Start POSIX shell
 ./armybox vi file.txt  # Edit with vi
+./armybox screen  # Terminal multiplexer
 ```
 
 ### List Available Applets
@@ -146,7 +135,7 @@ cat file.txt
 echo "Hello!"
 ```
 
-## Library Usage
+## 📚 Library Usage
 
 Armybox is a `#[no_std]` library that can be used in embedded environments.
 
@@ -180,7 +169,7 @@ if let Some(func) = applets::find_applet(b"echo") {
 }
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 src/
@@ -189,7 +178,7 @@ src/
 ├── io.rs           # Raw I/O via libc
 ├── sys.rs          # System utilities
 └── applets/
-    ├── mod.rs      # Applet registry (291 applets)
+    ├── mod.rs      # Applet registry (293 applets)
     ├── file.rs     # File operations
     ├── text.rs     # Text processing
     ├── system.rs   # System utilities
@@ -198,31 +187,32 @@ src/
     ├── archive.rs  # Archive/compression
     ├── init.rs     # Init system
     ├── shell.rs    # POSIX shell
-    └── vi.rs       # Vi editor
+    ├── vi.rs       # Vi editor
+    └── screen.rs   # Terminal multiplexer
 ```
 
-## Building
+## 🐳 Docker
 
-```bash
-# Debug build
-cargo build
+Use armybox as a minimal base for containers. Perfect for FROM scratch images.
 
-# Release build (optimized for size)
-cargo build --release
-
-# Check binary size
-ls -lh target/release/armybox
+```dockerfile
+FROM scratch
+COPY target/release/armybox /bin/armybox
+RUN ["/bin/armybox", "--install", "/bin"]
+ENTRYPOINT ["/bin/sh"]
 ```
 
-## How It Works
+Build: `docker build -t myapp .` → ~100KB image!
+
+## 🔍 How It Works
 
 Armybox is built entirely with `#[no_std]`:
 
-1. **No Rust Standard Library** - Only uses `core` and `alloc`
-2. **Direct libc Calls** - All I/O goes through raw `libc::*` functions
-3. **Custom Allocator** - Uses `libc::malloc/free` for heap allocation
-4. **Custom Panic Handler** - Minimal panic handling without unwinding
-5. **No Main Runtime** - Uses `#[no_main]` with raw C entry point
+1. **No Rust Standard Library** — Only uses `core` and `alloc`
+2. **Direct libc Calls** — All I/O goes through raw `libc::*` functions
+3. **Custom Allocator** — Uses `libc::malloc/free` for heap allocation
+4. **Custom Panic Handler** — Minimal panic handling without unwinding
+5. **No Main Runtime** — Uses `#[no_main]` with raw C entry point
 
 This results in an incredibly small binary that's perfect for:
 - Embedded systems
@@ -231,31 +221,7 @@ This results in an incredibly small binary that's perfect for:
 - Space-constrained systems
 - Android devices
 
-## Milestones
-
-All major milestones complete:
-
-- ✅ Core infrastructure (multi-call binary, applet dispatch)
-- ✅ Basic coreutils (cat, ls, cp, mv, etc.)
-- ✅ Text processing (echo, head, tail, wc, grep, sed, awk)
-- ✅ System utilities (ps, id, hostname, mount, etc.)
-- ✅ `#[no_std]` compatibility
-- ✅ Compression utilities (gzip, bzip2, xz, tar)
-- ✅ Network utilities (ping, wget, nc, ifconfig, ip)
-- ✅ POSIX shell (sh, ash, dash)
-- ✅ Vi editor
-- ✅ Init system
-- ✅ **100% Toybox compatibility**
-
-## License
-
-MIT OR Apache-2.0
-
-## Contributing
-
-Contributions are welcome! Please see TODO.md for areas that need work.
-
-## Comparison
+## 📋 Comparison
 
 | Feature | Armybox | Toybox | BusyBox |
 |---------|---------|--------|---------|
@@ -264,9 +230,33 @@ Contributions are welcome! Please see TODO.md for areas that need work.
 | Binary Size | **108 KB** | ~500 KB | 2.4 MB |
 | Per-Applet Size | **~380 bytes** | ~2.1 KB | ~9 KB |
 | `#[no_std]` | ✅ | N/A | N/A |
-| Applet Count | **291** | 238 | 274 |
+| Applet Count | **293** | 238 | 274 |
 | Toybox Compatible | ✅ 100% | N/A | Partial |
 | POSIX Shell | ✅ | ✅ | ✅ |
 | Vi Editor | ✅ | ✅ | ✅ |
 | Init System | ✅ | Partial | ✅ |
+| Terminal Multiplexer | ✅ | ❌ | ❌ |
 | License | MIT/Apache-2.0 | 0BSD | GPL v2 |
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## 📄 License
+
+Licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+## 🙏 Acknowledgments
+
+- [Toybox](https://landley.net/toybox/) — BSD-licensed Unix utilities
+- [BusyBox](https://busybox.net/) — The original multi-call binary inspiration
+- [libc](https://github.com/rust-lang/libc) — Rust FFI bindings to platform libraries
+
+---
+
+**Made with ❤️ by [Pegasus Heavy Industries](https://github.com/pegasusheavy)**

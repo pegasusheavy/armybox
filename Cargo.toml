@@ -1,18 +1,18 @@
 [package]
 name = "armybox"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
-description = "A #[no_std] BusyBox/Toybox clone in Rust - tiny Unix utilities"
+description = "A memory-safe #[no_std] BusyBox/Toybox clone in Rust - 293 Unix utilities in 108KB"
 documentation = "https://docs.rs/armybox"
 readme = "README.md"
-homepage = "https://github.com/PegasusHeavyIndustries/armybox"
-repository = "https://github.com/PegasusHeavyIndustries/armybox"
+homepage = "https://pegasusheavy.github.io/armybox"
+repository = "https://github.com/pegasusheavy/armybox"
 license = "MIT OR Apache-2.0"
 keywords = ["busybox", "toybox", "no_std", "embedded", "unix"]
 categories = ["command-line-utilities", "no-std", "embedded"]
-exclude = ["docs/", "dist/", "fuzz/", "packaging/", "scripts/", ".github/"]
+exclude = ["docs/", "dist/", "fuzz/", "packaging/", "scripts/", ".github/", "target/", "benches/", "crates/"]
 
 [features]
 default = ["alloc"]
@@ -23,7 +23,6 @@ apk = ["alloc"]     # Alpine Package Keeper (APK) package manager
 
 [dependencies]
 # Core dependency - provides syscall interface
-# Note: default-features disabled for no_std, but tests need linking
 libc = "0.2"
 
 [dev-dependencies]
