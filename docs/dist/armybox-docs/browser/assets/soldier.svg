@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="currentColor">
+  <!-- Toy Soldier Icon - Public Domain -->
+  <!-- Hat/Helmet -->
+  <ellipse cx="32" cy="8" rx="10" ry="4"/>
+  <rect x="22" y="6" width="20" height="8" rx="2"/>
+  <rect x="24" y="2" width="16" height="6"/>
+  <!-- Hat brim -->
+  <rect x="20" y="12" width="24" height="3" rx="1"/>
+
+  <!-- Head -->
+  <circle cx="32" cy="20" r="6"/>
+
+  <!-- Body/Jacket -->
+  <path d="M24 26 L24 44 L40 44 L40 26 Q38 24 32 24 Q26 24 24 26 Z"/>
+
+  <!-- Epaulettes -->
+  <rect x="19" y="26" width="6" height="4" rx="1"/>
+  <rect x="39" y="26" width="6" height="4" rx="1"/>
+
+  <!-- Belt -->
+  <rect x="24" y="38" width="16" height="3"/>
+  <rect x="30" y="37" width="4" height="5" rx="1"/>
+
+  <!-- Arms -->
+  <rect x="16" y="28" width="6" height="14" rx="2"/>
+  <rect x="42" y="28" width="6" height="14" rx="2"/>
+
+  <!-- Hands -->
+  <circle cx="19" cy="44" r="3"/>
+  <circle cx="45" cy="44" r="3"/>
+
+  <!-- Legs -->
+  <rect x="25" y="44" width="5" height="16" rx="1"/>
+  <rect x="34" y="44" width="5" height="16" rx="1"/>
+
+  <!-- Boots -->
+  <path d="M24 58 L24 62 L32 62 L32 58 Z"/>
+  <path d="M32 58 L32 62 L40 62 L40 58 Z"/>
+
+  <!-- Rifle -->
+  <rect x="46" y="24" width="2" height="28" rx="0.5" transform="rotate(15 47 38)"/>
+  <rect x="44" y="20" width="6" height="4" rx="1" transform="rotate(15 47 22)"/>
+</svg>

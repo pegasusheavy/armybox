@@ -1,0 +1,176 @@
+import { A as BuiltinPlugin, N as SourceMapInput, U as defineParallelPlugin, bt as OutputOptions, jt as freeExternalMemory, kt as RolldownOutput, o as InputOptions, wt as StringOrRegExp } from "./shared/define-config-DdWK1ZyG.mjs";
+import { A as IsolatedDeclarationsOptions, B as ResolverFactory, C as BindingViteCssPluginConfig, D as BindingWasmHelperPluginConfig, E as BindingViteResolvePluginConfig, F as NapiResolveOptions, G as moduleRunnerTransform, H as TransformResult, K as transform, N as MinifyOptions, P as MinifyResult, S as BindingUrlResolver, T as BindingViteHtmlPluginConfig, U as isolatedDeclaration, V as TransformOptions, W as minify, a as BindingClientHmrUpdate, d as BindingJsonPluginConfig, g as BindingRebuildStrategy, h as BindingReactRefreshWrapperPluginConfig, j as IsolatedDeclarationsResult, l as BindingImportGlobPluginConfig, m as BindingModulePreloadPolyfillPluginConfig, n as BindingBuildImportAnalysisPluginConfig, o as BindingDynamicImportVarsPluginConfig, p as BindingManifestPluginConfig, s as BindingEsmExternalRequirePluginConfig, t as BindingAssetPluginConfig, u as BindingIsolatedDeclarationPluginConfig, v as BindingReplacePluginConfig, w as BindingViteCssPostPluginConfig, x as BindingTransformPluginConfig, y as BindingReporterPluginConfig, z as ResolveResult } from "./shared/binding-BHtM7anm.mjs";
+
+//#region src/api/dev/dev-options.d.ts
+type DevOnHmrUpdates = (result: Error | {
+  updates: BindingClientHmrUpdate[];
+  changedFiles: string[];
+}) => void | Promise<void>;
+type DevOnOutput = (result: Error | RolldownOutput) => void | Promise<void>;
+interface DevWatchOptions {
+  /**
+  * If `true`, files are not written to disk.
+  * @default false
+  */
+  skipWrite?: boolean;
+  /**
+  * If `true`, use polling instead of native file system events for watching.
+  * @default false
+  */
+  usePolling?: boolean;
+  /**
+  * Poll interval in milliseconds (only used when usePolling is true).
+  * @default 100
+  */
+  pollInterval?: number;
+  /**
+  * If `true`, use debounced watcher. If `false`, use non-debounced watcher for immediate responses.
+  * @default true
+  */
+  useDebounce?: boolean;
+  /**
+  * Debounce duration in milliseconds (only used when useDebounce is true).
+  * @default 10
+  */
+  debounceDuration?: number;
+  /**
+  * Whether to compare file contents for poll-based watchers (only used when usePolling is true).
+  * When enabled, poll watchers will check file contents to determine if they actually changed.
+  * @default false
+  */
+  compareContentsForPolling?: boolean;
+  /**
+  * Tick rate in milliseconds for debounced watchers (only used when useDebounce is true).
+  * Controls how frequently the debouncer checks for events to process.
+  * When not specified, the debouncer will auto-select an appropriate tick rate (1/4 of the debounce duration).
+  * @default undefined (auto-select)
+  */
+  debounceTickRate?: number;
+}
+interface DevOptions {
+  onHmrUpdates?: DevOnHmrUpdates;
+  onOutput?: DevOnOutput;
+  /**
+  * Strategy for triggering rebuilds after HMR updates.
+  * - `'always'`: Always trigger a rebuild after HMR updates
+  * - `'auto'`: Trigger rebuild only if HMR updates contain full reload updates
+  * - `'never'`: Never trigger rebuild after HMR updates (default)
+  * @default 'auto'
+  */
+  rebuildStrategy?: "always" | "auto" | "never";
+  watch?: DevWatchOptions;
+}
+//#endregion
+//#region src/api/dev/dev-engine.d.ts
+declare class DevEngine {
+  #private;
+  static create(inputOptions: InputOptions, outputOptions?: OutputOptions, devOptions?: DevOptions): Promise<DevEngine>;
+  private constructor();
+  run(): Promise<void>;
+  ensureCurrentBuildFinish(): Promise<void>;
+  hasLatestBuildOutput(): Promise<boolean>;
+  ensureLatestBuildOutput(): Promise<void>;
+  invalidate(file: string, firstInvalidatedBy?: string): Promise<BindingClientHmrUpdate[]>;
+  registerModules(clientId: string, modules: string[]): void;
+  removeClient(clientId: string): void;
+  close(): Promise<void>;
+}
+//#endregion
+//#region src/api/dev/index.d.ts
+declare const dev: typeof DevEngine.create;
+//#endregion
+//#region src/api/experimental.d.ts
+/**
+* This is an experimental API. It's behavior may change in the future.
+*
+* Calling this API will only execute the scan stage of rolldown.
+*/
+declare const scan: (input: InputOptions) => Promise<void>;
+//#endregion
+//#region src/builtin-plugin/constructors.d.ts
+declare function modulePreloadPolyfillPlugin(config?: BindingModulePreloadPolyfillPluginConfig): BuiltinPlugin;
+type DynamicImportVarsPluginConfig = Omit<BindingDynamicImportVarsPluginConfig, "include" | "exclude"> & {
+  include?: StringOrRegExp | StringOrRegExp[];
+  exclude?: StringOrRegExp | StringOrRegExp[];
+};
+declare function dynamicImportVarsPlugin(config?: DynamicImportVarsPluginConfig): BuiltinPlugin;
+declare function importGlobPlugin(config?: BindingImportGlobPluginConfig): BuiltinPlugin;
+declare function reporterPlugin(config?: BindingReporterPluginConfig): BuiltinPlugin;
+declare function manifestPlugin(config?: BindingManifestPluginConfig): BuiltinPlugin;
+declare function wasmHelperPlugin(config?: BindingWasmHelperPluginConfig): BuiltinPlugin;
+declare function wasmFallbackPlugin(): BuiltinPlugin;
+declare function loadFallbackPlugin(): BuiltinPlugin;
+declare function jsonPlugin(config?: BindingJsonPluginConfig): BuiltinPlugin;
+declare function buildImportAnalysisPlugin(config: BindingBuildImportAnalysisPluginConfig): BuiltinPlugin;
+declare function viteResolvePlugin(config: BindingViteResolvePluginConfig): BuiltinPlugin;
+declare function isolatedDeclarationPlugin(config?: BindingIsolatedDeclarationPluginConfig): BuiltinPlugin;
+declare function webWorkerPostPlugin(): BuiltinPlugin;
+declare function esmExternalRequirePlugin(config?: BindingEsmExternalRequirePluginConfig): BuiltinPlugin;
+type ReactRefreshWrapperPluginConfig = Omit<BindingReactRefreshWrapperPluginConfig, "include" | "exclude"> & {
+  include?: StringOrRegExp | StringOrRegExp[];
+  exclude?: StringOrRegExp | StringOrRegExp[];
+};
+declare function reactRefreshWrapperPlugin(config: ReactRefreshWrapperPluginConfig): BuiltinPlugin;
+declare function viteCSSPostPlugin(config?: BindingViteCssPostPluginConfig): BuiltinPlugin;
+declare function viteHtmlPlugin(config?: BindingViteHtmlPluginConfig): BuiltinPlugin;
+//#endregion
+//#region src/builtin-plugin/alias-plugin.d.ts
+type AliasPluginAlias = {
+  find: string | RegExp;
+  replacement: string;
+};
+type AliasPluginConfig = {
+  entries: AliasPluginAlias[];
+};
+declare function aliasPlugin(config: AliasPluginConfig): BuiltinPlugin;
+//#endregion
+//#region src/builtin-plugin/asset-plugin.d.ts
+declare function assetPlugin(config: BindingAssetPluginConfig): BuiltinPlugin;
+//#endregion
+//#region src/builtin-plugin/replace-plugin.d.ts
+/**
+* Replaces targeted strings in files while bundling.
+*
+* @example
+* // Basic usage
+* ```js
+* replacePlugin({
+*   'process.env.NODE_ENV': JSON.stringify('production'),
+*    __buildVersion: 15
+* })
+* ```
+* @example
+* // With options
+* ```js
+* replacePlugin({
+*   'process.env.NODE_ENV': JSON.stringify('production'),
+*   __buildVersion: 15
+* }, {
+*   preventAssignment: false,
+* })
+* ```
+*/
+declare function replacePlugin(values?: BindingReplacePluginConfig["values"], options?: Omit<BindingReplacePluginConfig, "values">): BuiltinPlugin;
+//#endregion
+//#region src/builtin-plugin/transform-plugin.d.ts
+type TransformPattern = string | RegExp | readonly (RegExp | string)[];
+type TransformPluginConfig = Omit<BindingTransformPluginConfig, "include" | "exclude" | "jsxRefreshInclude" | "jsxRefreshExclude"> & {
+  include?: TransformPattern;
+  exclude?: TransformPattern;
+  jsxRefreshInclude?: TransformPattern;
+  jsxRefreshExclude?: TransformPattern;
+};
+declare function transformPlugin(config?: TransformPluginConfig): BuiltinPlugin;
+//#endregion
+//#region src/builtin-plugin/vite-css-plugin.d.ts
+type ViteCssPluginConfig = Omit<BindingViteCssPluginConfig, "compileCSS"> & {
+  compileCSS: (url: string, importer: string, resolver: BindingUrlResolver) => Promise<{
+    code: string;
+    map?: SourceMapInput;
+    modules?: Record<string, string>;
+    deps?: Set<string>;
+  }>;
+};
+declare function viteCSSPlugin(config?: ViteCssPluginConfig): BuiltinPlugin;
+//#endregion
+export { type BindingClientHmrUpdate, BindingRebuildStrategy, DevEngine, type DevOptions, type DevWatchOptions, type IsolatedDeclarationsOptions, type IsolatedDeclarationsResult, type MinifyOptions, type MinifyResult, type NapiResolveOptions as ResolveOptions, type ResolveResult, ResolverFactory, type TransformOptions, type TransformResult, aliasPlugin, assetPlugin, buildImportAnalysisPlugin, defineParallelPlugin, dev, dynamicImportVarsPlugin, esmExternalRequirePlugin, freeExternalMemory, importGlobPlugin, isolatedDeclaration, isolatedDeclarationPlugin, jsonPlugin, loadFallbackPlugin, manifestPlugin, minify, modulePreloadPolyfillPlugin, moduleRunnerTransform, reactRefreshWrapperPlugin, replacePlugin, reporterPlugin, scan, transform, transformPlugin, viteCSSPlugin, viteCSSPostPlugin, viteHtmlPlugin, viteResolvePlugin, wasmFallbackPlugin, wasmHelperPlugin, webWorkerPostPlugin };

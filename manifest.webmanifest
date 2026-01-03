@@ -1,0 +1,29 @@
+{
+  "name": "Armybox Documentation",
+  "short_name": "Armybox",
+  "description": "A #[no_std] BusyBox/Toybox clone written in Rust - 163 Unix command-line utilities in 220KB",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1f14",
+  "theme_color": "#4A5D23",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "32x32",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/soldier-icon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/hero-soldier.svg",
+      "sizes": "400x300",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
