@@ -19,7 +19,7 @@ import { RouterLink } from '@angular/router';
         <!-- Military badge -->
         <div class="inline-flex items-center gap-3 px-4 py-2 rounded mb-8 border-2 border-camo-olive" style="background: linear-gradient(135deg, rgba(74, 93, 35, 0.9) 0%, rgba(45, 64, 34, 0.9) 100%);">
           <span class="w-3 h-3 bg-camo-tan rounded-full animate-pulse"></span>
-          <span class="text-camo-sand font-bold uppercase tracking-wider text-sm">v0.2.0 — 201 APPLETS — 323KB / 117KB UPX</span>
+          <span class="text-camo-sand font-bold uppercase tracking-wider text-sm">v0.3.0 — 291 APPLETS — 108KB / 54KB UPX — 100% TOYBOX COMPATIBLE</span>
         </div>
 
         <h1 class="text-5xl md:text-7xl font-stencil text-army-900 mb-6 tracking-widest">
@@ -28,8 +28,8 @@ import { RouterLink } from '@angular/router';
         </h1>
 
         <p class="text-xl text-army-700 mb-10 max-w-2xl mx-auto text-balance font-medium">
-          A tactical BusyBox clone built in pure Rust with <code class="bg-army-100 px-1 rounded">#[no_std]</code>.
-          Memory-safe, combat-ready, incredibly tiny.
+          A tactical BusyBox/Toybox clone built in pure Rust with <code class="bg-army-100 px-1 rounded">#[no_std]</code>.
+          Memory-safe, combat-ready, incredibly tiny. <strong class="text-camo-olive">100% Toybox compatible.</strong>
         </p>
 
         <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -38,6 +38,9 @@ import { RouterLink } from '@angular/router';
           </a>
           <a routerLink="/applets" class="btn btn-secondary px-8 py-3 text-base">
             📋 View Arsenal
+          </a>
+          <a href="https://github.com/pegasusheavy/armybox" target="_blank" class="btn btn-secondary px-8 py-3 text-base">
+            🔗 GitHub
           </a>
         </div>
       </div>
@@ -68,7 +71,7 @@ import { RouterLink } from '@angular/router';
               <span class="text-camo-tan">$</span> ./target/release/armybox --install /usr/local/bin
             </div>
             <div class="text-camo-olive mt-4 text-xs">
-              # 201 utilities deployed. 323KB mission-ready. 117KB with UPX.
+              # 291 utilities deployed. 108KB mission-ready. 54KB with UPX.
             </div>
           </div>
         </div>
@@ -95,8 +98,8 @@ import { RouterLink } from '@angular/router';
             </div>
             <h3 class="font-bold text-army-900 mb-2 uppercase tracking-wider">Incredibly Tiny</h3>
             <p class="text-sm text-army-700">
-              <strong>308KB</strong> release binary, <strong>117KB</strong> with UPX.
-              That's ~1.63KB per applet — 6x more efficient than BusyBox.
+              <strong>108KB</strong> release binary, <strong>~54KB</strong> with UPX.
+              That's ~380 bytes per applet — 24x more efficient than BusyBox.
             </p>
           </div>
 
@@ -132,10 +135,10 @@ import { RouterLink } from '@angular/router';
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
               </svg>
             </div>
-            <h3 class="font-bold text-army-900 mb-2 uppercase tracking-wider">Raw Performance</h3>
+            <h3 class="font-bold text-army-900 mb-2 uppercase tracking-wider">100% Toybox Compatible</h3>
             <p class="text-sm text-army-700">
-              Direct libc syscalls with zero abstraction overhead.
-              No runtime, no GC, no overhead.
+              All 238 Toybox commands plus 53 additional utilities.
+              Drop-in replacement for any Toybox deployment.
             </p>
           </div>
 
@@ -147,7 +150,7 @@ import { RouterLink } from '@angular/router';
             </div>
             <h3 class="font-bold text-army-900 mb-2 uppercase tracking-wider">Single Payload</h3>
             <p class="text-sm text-army-700">
-              All 201 utilities in one tiny binary.
+              All 291 utilities in one tiny binary.
               Perfect for containers (FROM scratch), initramfs, rescue.
             </p>
           </div>
@@ -191,19 +194,19 @@ import { RouterLink } from '@angular/router';
             <ul class="space-y-3 text-sm">
               <li class="flex justify-between py-2 border-b border-camo-sand">
                 <span class="text-army-800 font-medium">Binary Size</span>
-                <strong class="text-camo-olive">311 KB</strong>
+                <strong class="text-camo-olive">108 KB</strong>
               </li>
               <li class="flex justify-between py-2 border-b border-camo-sand">
                 <span class="text-army-800 font-medium">UPX Compressed</span>
-                <strong class="text-camo-olive">~118 KB</strong>
+                <strong class="text-camo-olive">~54 KB</strong>
               </li>
               <li class="flex justify-between py-2 border-b border-camo-sand">
                 <span class="text-army-800 font-medium">Applets</span>
-                <strong class="text-army-900">201 (vi + sh + init + apk + full networking)</strong>
+                <strong class="text-army-900">291 (100% Toybox + extras)</strong>
               </li>
               <li class="flex justify-between py-2">
                 <span class="text-army-800 font-medium">Size per Applet</span>
-                <strong class="text-camo-olive">~1.75 KB</strong>
+                <strong class="text-camo-olive">~380 bytes</strong>
               </li>
             </ul>
           </div>
@@ -226,11 +229,11 @@ import { RouterLink } from '@angular/router';
               </li>
               <li class="flex justify-between py-2 border-b border-camo-sand">
                 <span class="text-army-800 font-medium">Applets</span>
-                <strong class="text-army-500">200+</strong>
+                <strong class="text-army-500">238</strong>
               </li>
               <li class="flex justify-between py-2">
                 <span class="text-army-800 font-medium">Size per Applet</span>
-                <strong class="text-army-500">~2.5 KB</strong>
+                <strong class="text-army-500">~2.1 KB</strong>
               </li>
             </ul>
           </div>
@@ -265,7 +268,7 @@ import { RouterLink } from '@angular/router';
 
         <div class="p-4 rounded-lg text-center" style="background: rgba(74, 93, 35, 0.1);">
           <p class="text-camo-forest font-medium">
-            Armybox is <strong>5x more efficient per applet</strong> than BusyBox and <strong>1.4x more efficient</strong> than Toybox!
+            Armybox is <strong>24x more efficient per applet</strong> than BusyBox and <strong>5.5x more efficient</strong> than Toybox!
           </p>
         </div>
       </div>
@@ -304,27 +307,33 @@ import { RouterLink } from '@angular/router';
               </tr>
               <tr>
                 <td class="py-3 px-4 text-army-800 font-medium">Binary Size</td>
-                <td class="py-3 px-4 text-center font-bold text-camo-olive">311 KB</td>
+                <td class="py-3 px-4 text-center font-bold text-camo-olive">108 KB</td>
                 <td class="py-3 px-4 text-center text-army-500">2.4 MB</td>
                 <td class="py-3 px-4 text-center text-army-500">~500 KB</td>
               </tr>
               <tr>
                 <td class="py-3 px-4 text-army-800 font-medium">UPX Compressed</td>
-                <td class="py-3 px-4 text-center font-bold text-camo-olive">~118 KB</td>
+                <td class="py-3 px-4 text-center font-bold text-camo-olive">~54 KB</td>
                 <td class="py-3 px-4 text-center text-army-500">~1 MB</td>
                 <td class="py-3 px-4 text-center text-army-500">~200 KB</td>
               </tr>
               <tr>
                 <td class="py-3 px-4 text-army-800 font-medium">Applets</td>
-                <td class="py-3 px-4 text-center font-bold text-army-900">201</td>
+                <td class="py-3 px-4 text-center font-bold text-army-900">291</td>
                 <td class="py-3 px-4 text-center text-army-500">274+</td>
-                <td class="py-3 px-4 text-center text-army-500">200+</td>
+                <td class="py-3 px-4 text-center text-army-500">238</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 text-army-800 font-medium">Toybox Compatible</td>
+                <td class="py-3 px-4 text-center font-bold text-camo-olive">✓ 100%</td>
+                <td class="py-3 px-4 text-center text-army-400">Partial</td>
+                <td class="py-3 px-4 text-center text-army-500">N/A</td>
               </tr>
               <tr>
                 <td class="py-3 px-4 text-army-800 font-medium">Size/Applet</td>
-                <td class="py-3 px-4 text-center font-bold text-camo-olive">~1.75 KB</td>
+                <td class="py-3 px-4 text-center font-bold text-camo-olive">~380 bytes</td>
                 <td class="py-3 px-4 text-center text-army-500">~9 KB</td>
-                <td class="py-3 px-4 text-center text-army-500">~2.5 KB</td>
+                <td class="py-3 px-4 text-center text-army-500">~2.1 KB</td>
               </tr>
               <tr>
                 <td class="py-3 px-4 text-army-800 font-medium">License</td>

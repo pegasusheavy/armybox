@@ -54,11 +54,11 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-center gap-2">
                   <span class="text-camo-olive">✓</span>
-                  <span class="text-army-700"><strong class="text-camo-olive">311 KB</strong> binary (~118 KB UPX)</span>
+                  <span class="text-army-700"><strong class="text-camo-olive">108 KB</strong> binary (~54 KB UPX)</span>
                 </li>
                 <li class="flex items-center gap-2">
                   <span class="text-camo-olive">✓</span>
-                  <span class="text-army-700"><strong class="text-camo-olive">201</strong> applets (full networking + vi + sh + init + apk)</span>
+                  <span class="text-army-700"><strong class="text-camo-olive">291</strong> applets (100% Toybox + 53 extras)</span>
                 </li>
                 <li class="flex items-center gap-2">
                   <span class="text-camo-olive">✓</span>
@@ -126,7 +126,7 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-center gap-2">
                   <span class="text-amber-500">○</span>
-                  <span class="text-army-600"><strong class="text-army-700">200+</strong> applets (~2.5 KB each)</span>
+                  <span class="text-army-600"><strong class="text-army-700">238</strong> applets (~2.1 KB each)</span>
                 </li>
                 <li class="flex items-center gap-2">
                   <span class="text-amber-500">○</span>
@@ -179,8 +179,8 @@ interface ComparisonItem {
             <div class="flex items-center gap-4">
               <div class="w-24 text-right font-bold text-camo-olive">armybox</div>
               <div class="flex-1 h-10 bg-army-100 rounded-lg overflow-hidden relative">
-                <div class="absolute inset-y-0 left-0 bg-camo-olive rounded-lg flex items-center justify-end pr-3" style="width: 15%;">
-                  <span class="text-camo-sand font-bold text-sm">~1.3 KB</span>
+                <div class="absolute inset-y-0 left-0 bg-camo-olive rounded-lg flex items-center justify-end pr-3" style="width: 4%;">
+                  <span class="text-camo-sand font-bold text-sm whitespace-nowrap ml-2">~380 B</span>
                 </div>
               </div>
             </div>
@@ -189,8 +189,8 @@ interface ComparisonItem {
             <div class="flex items-center gap-4">
               <div class="w-24 text-right font-bold text-amber-600">Toybox</div>
               <div class="flex-1 h-10 bg-army-100 rounded-lg overflow-hidden relative">
-                <div class="absolute inset-y-0 left-0 bg-amber-500 rounded-lg flex items-center justify-end pr-3" style="width: 28%;">
-                  <span class="text-white font-bold text-sm">~2.5 KB</span>
+                <div class="absolute inset-y-0 left-0 bg-amber-500 rounded-lg flex items-center justify-end pr-3" style="width: 23%;">
+                  <span class="text-white font-bold text-sm">~2.1 KB</span>
                 </div>
               </div>
             </div>
@@ -208,30 +208,29 @@ interface ComparisonItem {
 
           <div class="mt-12 p-6 rounded-lg text-center" style="background: rgba(74, 93, 35, 0.1);">
             <p class="text-camo-forest">
-              armybox is <strong class="text-camo-olive">7x more efficient</strong> than BusyBox and
-              <strong class="text-camo-olive">2x more efficient</strong> than Toybox per applet!
+              armybox is <strong class="text-camo-olive">24x more efficient</strong> than BusyBox and
+              <strong class="text-camo-olive">5.5x more efficient</strong> than Toybox per applet!
             </p>
           </div>
         </section>
 
         <!-- Toybox Deep Dive -->
         <section class="mb-20">
-          <h2 class="text-3xl font-stencil text-army-900 mb-8 text-center tracking-widest">TOYBOX DEEP DIVE</h2>
+          <h2 class="text-3xl font-stencil text-army-900 mb-8 text-center tracking-widest">TOYBOX COMPATIBILITY</h2>
 
           <div class="grid md:grid-cols-2 gap-8">
             <div class="card">
               <h3 class="font-bold text-amber-700 mb-4 uppercase tracking-wider flex items-center gap-2">
-                <span class="text-xl">🧸</span> What is Toybox?
+                <span class="text-xl">🧸</span> 100% Toybox Compatible
               </h3>
               <p class="text-sm text-army-700 mb-4">
-                Toybox is a BSD-licensed reimplementation of Unix command line utilities,
-                created by Rob Landley (who also worked on BusyBox). It's designed to be
-                simpler and smaller than BusyBox while avoiding GPL licensing concerns.
+                Armybox includes <strong>all 238 Toybox commands</strong> plus 53 additional utilities.
+                This makes armybox a drop-in replacement for any Toybox deployment while providing
+                the memory safety guarantees of Rust.
               </p>
               <p class="text-sm text-army-700">
-                <strong>Android Integration:</strong> Since Android 6.0 (Marshmallow),
-                Toybox has been the default command-line toolkit, replacing the previous
-                toolbox. This makes it battle-tested on billions of devices.
+                <strong>Android Integration:</strong> Since Toybox is the default toolkit on Android 6.0+,
+                armybox can replace it on billions of devices, bringing memory safety to the command line.
               </p>
             </div>
 
@@ -246,7 +245,7 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-camo-olive mt-0.5">✓</span>
-                  <span><strong>Smaller Binary:</strong> ~74KB vs Toybox's ~500KB default build</span>
+                  <span><strong>Smaller Binary:</strong> 108KB vs Toybox's ~500KB default build</span>
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-camo-olive mt-0.5">✓</span>
@@ -254,7 +253,7 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-camo-olive mt-0.5">✓</span>
-                  <span><strong>Modern Codebase:</strong> Easier to audit, extend, and maintain</span>
+                  <span><strong>More Applets:</strong> 291 vs 238 — includes init system, full networking, APK</span>
                 </li>
               </ul>
             </div>
@@ -329,7 +328,7 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-camo-olive">▸</span>
-                  <span>Android deployments with memory safety</span>
+                  <span>Replacing Toybox with memory safety</span>
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-camo-olive">▸</span>
@@ -351,11 +350,11 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-army-500">▸</span>
-                  <span>Shell (ash/hush) is a requirement</span>
+                  <span>Complex shell scripting (ash/hush)</span>
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-army-500">▸</span>
-                  <span>Initramfs with init system</span>
+                  <span>Initramfs with advanced init</span>
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-army-500">▸</span>
@@ -381,11 +380,11 @@ interface ComparisonItem {
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-amber-500">▸</span>
-                  <span>Simpler codebase than BusyBox</span>
+                  <span>No Rust toolchain available</span>
                 </li>
                 <li class="flex items-start gap-2">
                   <span class="text-amber-500">▸</span>
-                  <span>Broader applet coverage than armybox</span>
+                  <span>Rob Landley's coding style preferred</span>
                 </li>
               </ul>
             </div>
@@ -400,7 +399,7 @@ interface ComparisonItem {
             <div>
               <div class="text-4xl mb-2">🔒</div>
               <h3 class="font-bold text-camo-olive mb-2">Armybox</h3>
-              <p class="text-sm text-army-600">Smallest, safest, modern</p>
+              <p class="text-sm text-army-600">Smallest, safest, 100% Toybox compatible</p>
             </div>
             <div>
               <div class="text-4xl mb-2">📦</div>
@@ -410,7 +409,7 @@ interface ComparisonItem {
             <div>
               <div class="text-4xl mb-2">🧸</div>
               <h3 class="font-bold text-amber-600 mb-2">Toybox</h3>
-              <p class="text-sm text-army-600">BSD licensed, Android-ready</p>
+              <p class="text-sm text-army-600">BSD licensed, Android default</p>
             </div>
           </div>
         </section>
@@ -422,16 +421,17 @@ export class ComparisonComponent {
   comparisonData: ComparisonItem[] = [
     { feature: 'Language', armybox: 'Rust #[no_std]', busybox: 'C', toybox: 'C', armyboxBest: true },
     { feature: 'Memory Safety', armybox: '✓ Compile-time', busybox: '— Manual', toybox: '— Manual', armyboxBest: true },
-        { feature: 'Binary Size', armybox: '324 KB', busybox: '2.4 MB', toybox: '~500 KB', armyboxBest: true },
-        { feature: 'UPX Compressed', armybox: '~120 KB', busybox: '~1 MB', toybox: '~200 KB', armyboxBest: true },
-        { feature: 'Applet Count', armybox: '201', busybox: '274+', toybox: '200+' },
-        { feature: 'Size per Applet', armybox: '~1.63 KB', busybox: '~9 KB', toybox: '~2.5 KB', armyboxBest: true },
+    { feature: 'Binary Size', armybox: '108 KB', busybox: '2.4 MB', toybox: '~500 KB', armyboxBest: true },
+    { feature: 'UPX Compressed', armybox: '~54 KB', busybox: '~1 MB', toybox: '~200 KB', armyboxBest: true },
+    { feature: 'Applet Count', armybox: '291', busybox: '274+', toybox: '238', armyboxBest: true },
+    { feature: 'Toybox Compatible', armybox: '✓ 100%', busybox: 'Partial', toybox: 'N/A', armyboxBest: true },
+    { feature: 'Size per Applet', armybox: '~380 bytes', busybox: '~9 KB', toybox: '~2.1 KB', armyboxBest: true },
     { feature: 'License', armybox: 'MIT/Apache-2.0', busybox: 'GPL v2', toybox: '0BSD' },
     { feature: 'Standard Library', armybox: 'None (no_std)', busybox: 'libc', toybox: 'libc' },
     { feature: 'Editor (vi)', armybox: '✓', busybox: '✓', toybox: '✓' },
     { feature: 'Shell Included', armybox: '✓ sh/ash/dash', busybox: 'ash/hush', toybox: 'sh' },
     { feature: 'Archiving', armybox: '✓ tar/gzip/xz/cpio', busybox: '✓ Full', toybox: '✓ Full' },
-    { feature: 'Networking', armybox: '✓ wget/ping/nc', busybox: '✓ Full', toybox: '◐ Partial' },
+    { feature: 'Networking', armybox: '✓ Full (35+ cmds)', busybox: '✓ Full', toybox: '◐ Partial' },
     { feature: 'Init System', armybox: '✓ Yes', busybox: 'Yes', toybox: 'No', armyboxBest: true },
     { feature: 'Package Manager', armybox: '✓ APK (optional)', busybox: '—', toybox: '—', armyboxBest: true },
     { feature: 'Android Support', armybox: '✓ Native', busybox: 'Compatible', toybox: 'Native', armyboxBest: true },
@@ -452,6 +452,6 @@ export class ComparisonComponent {
     { category: 'Process Management (kill, pkill, pgrep)', armybox: 'full', busybox: 'full', toybox: 'full' },
     { category: 'Module Management (insmod, rmmod)', armybox: 'full', busybox: 'full', toybox: 'partial' },
     { category: 'Package Management (apk)', armybox: 'full', busybox: 'none', toybox: 'none' },
-    { category: 'User Management (useradd, passwd)', armybox: 'planned', busybox: 'full', toybox: 'partial' },
+    { category: 'Hardware (i2c, gpio, lspci, lsusb)', armybox: 'full', busybox: 'partial', toybox: 'full' },
   ];
 }
