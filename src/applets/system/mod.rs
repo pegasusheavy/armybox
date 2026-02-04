@@ -16,6 +16,16 @@ mod w;
 mod who;
 mod whoami;
 
+// Batch 2: date/time/environment
+mod date;
+mod env;
+mod free;
+mod printenv;
+mod sleep;
+mod tty;
+mod uptime;
+mod usleep;
+
 // Re-export batch 1 utilities
 pub use arch::arch;
 pub use groups::groups;
@@ -27,74 +37,17 @@ pub use w::w;
 pub use who::who;
 pub use whoami::whoami;
 
+// Re-export batch 2 utilities
+pub use date::date;
+pub use env::env;
+pub use free::free;
+pub use printenv::printenv;
+pub use sleep::sleep;
+pub use tty::tty;
+pub use uptime::uptime;
+pub use usleep::usleep;
+
 // Remaining utilities still inline below
-
-pub fn date(_argc: i32, _argv: *const *const u8) -> i32 {
-    let now = unsafe { libc::time(core::ptr::null_mut()) };
-    let tm = unsafe { libc::localtime(&now) };
-    if !tm.is_null() {
-        let t = unsafe { &*tm };
-        io::write_num(1, (t.tm_year + 1900) as u64);
-        io::write_str(1, b"-");
-        if t.tm_mon + 1 < 10 { io::write_str(1, b"0"); }
-        io::write_num(1, (t.tm_mon + 1) as u64);
-        io::write_str(1, b"-");
-        if t.tm_mday < 10 { io::write_str(1, b"0"); }
-        io::write_num(1, t.tm_mday as u64);
-        io::write_str(1, b" ");
-        if t.tm_hour < 10 { io::write_str(1, b"0"); }
-        io::write_num(1, t.tm_hour as u64);
-        io::write_str(1, b":");
-        if t.tm_min < 10 { io::write_str(1, b"0"); }
-        io::write_num(1, t.tm_min as u64);
-        io::write_str(1, b":");
-        if t.tm_sec < 10 { io::write_str(1, b"0"); }
-        io::write_num(1, t.tm_sec as u64);
-        io::write_str(1, b"\n");
-    }
-    0
-}
-
-pub fn env(_argc: i32, _argv: *const *const u8) -> i32 {
-    unsafe extern "C" { static environ: *const *const i8; }
-    unsafe {
-        let mut i = 0;
-        while !(*environ.add(i)).is_null() {
-            let e = io::cstr_to_slice(*environ.add(i) as *const u8);
-            io::write_all(1, e);
-            io::write_str(1, b"\n");
-            i += 1;
-        }
-    }
-    0
-}
-
-pub fn printenv(argc: i32, argv: *const *const u8) -> i32 {
-    if argc > 1 {
-        if let Some(name) = unsafe { get_arg(argv, 1) } {
-            let val = unsafe { libc::getenv(name.as_ptr() as *const i8) };
-            if !val.is_null() {
-                io::write_all(1, unsafe { io::cstr_to_slice(val as *const u8) });
-                io::write_str(1, b"\n");
-                return 0;
-            }
-            return 1;
-        }
-    }
-    env(argc, argv)
-}
-
-pub fn tty(_argc: i32, _argv: *const *const u8) -> i32 {
-    let name = unsafe { libc::ttyname(0) };
-    if !name.is_null() {
-        io::write_all(1, unsafe { io::cstr_to_slice(name as *const u8) });
-        io::write_str(1, b"\n");
-        0
-    } else {
-        io::write_str(1, b"not a tty\n");
-        1
-    }
-}
 
 pub fn kill(argc: i32, argv: *const *const u8) -> i32 {
     let mut signal = libc::SIGTERM;
@@ -434,51 +387,6 @@ pub fn pwdx(argc: i32, argv: *const *const u8) -> i32 {
         io::write_str(1, b"\n");
         0
     } else { 1 }
-}
-
-pub fn sleep(argc: i32, argv: *const *const u8) -> i32 {
-    if argc > 1 {
-        if let Some(arg) = unsafe { get_arg(argv, 1) } {
-            let secs = sys::parse_u64(arg).unwrap_or(0) as u32;
-            unsafe { libc::sleep(secs) };
-        }
-    }
-    0
-}
-
-pub fn usleep(argc: i32, argv: *const *const u8) -> i32 {
-    if argc > 1 {
-        if let Some(arg) = unsafe { get_arg(argv, 1) } {
-            let usecs = sys::parse_u64(arg).unwrap_or(0) as u32;
-            unsafe { libc::usleep(usecs) };
-        }
-    }
-    0
-}
-
-pub fn uptime(_argc: i32, _argv: *const *const u8) -> i32 {
-    let fd = io::open(b"/proc/uptime", libc::O_RDONLY, 0);
-    if fd >= 0 {
-        let mut buf = [0u8; 64];
-        let n = io::read(fd, &mut buf);
-        io::close(fd);
-        if n > 0 {
-            io::write_str(1, b"up ");
-            io::write_all(1, &buf[..n as usize]);
-        }
-    }
-    0
-}
-
-pub fn free(_argc: i32, _argv: *const *const u8) -> i32 {
-    let fd = io::open(b"/proc/meminfo", libc::O_RDONLY, 0);
-    if fd >= 0 {
-        let mut buf = [0u8; 2048];
-        let n = io::read(fd, &mut buf);
-        io::close(fd);
-        if n > 0 { io::write_all(1, &buf[..n as usize]); }
-    }
-    0
 }
 
 pub fn df(_argc: i32, _argv: *const *const u8) -> i32 {

@@ -1,0 +1,100 @@
+//! printenv - print environment variables
+//!
+//! Print the values of the specified environment variables.
+
+use crate::io;
+use crate::applets::get_arg;
+use super::env::env;
+
+/// printenv - print environment variables
+///
+/// # Synopsis
+/// ```text
+/// printenv [name...]
+/// ```
+///
+/// # Description
+/// Print the values of the specified environment variables.
+/// If no variables are specified, print all environment variables.
+///
+/// # Exit Status
+/// - 0: Success
+/// - 1: Variable not found
+/// - >1: An error occurred
+pub fn printenv(argc: i32, argv: *const *const u8) -> i32 {
+    if argc > 1 {
+        if let Some(name) = unsafe { get_arg(argv, 1) } {
+            let val = unsafe { libc::getenv(name.as_ptr() as *const i8) };
+            if !val.is_null() {
+                io::write_all(1, unsafe { io::cstr_to_slice(val as *const u8) });
+                io::write_str(1, b"\n");
+                return 0;
+            }
+            return 1;
+        }
+    }
+    env(argc, argv)
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+    use std::process::Command;
+    use std::path::PathBuf;
+
+    fn get_armybox_path() -> PathBuf {
+        if let Ok(path) = std::env::var("ARMYBOX_PATH") {
+            return PathBuf::from(path);
+        }
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| std::env::current_dir().unwrap());
+        let release = manifest_dir.join("target/release/armybox");
+        if release.exists() { return release; }
+        manifest_dir.join("target/debug/armybox")
+    }
+
+    #[test]
+    fn test_printenv_path() {
+        let armybox = get_armybox_path();
+        if !armybox.exists() { return; }
+
+        let output = Command::new(&armybox)
+            .args(["printenv", "PATH"])
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(0));
+        let stdout = std::string::String::from_utf8_lossy(&output.stdout);
+        assert!(!stdout.trim().is_empty());
+    }
+
+    #[test]
+    fn test_printenv_nonexistent() {
+        let armybox = get_armybox_path();
+        if !armybox.exists() { return; }
+
+        let output = Command::new(&armybox)
+            .args(["printenv", "NONEXISTENT_VAR_12345"])
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(1));
+    }
+
+    #[test]
+    fn test_printenv_no_args() {
+        let armybox = get_armybox_path();
+        if !armybox.exists() { return; }
+
+        let output = Command::new(&armybox)
+            .args(["printenv"])
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(0));
+        let stdout = std::string::String::from_utf8_lossy(&output.stdout);
+        // Should print all environment variables
+        assert!(stdout.contains("PATH="));
+    }
+}
