@@ -8,155 +8,18 @@ use super::{get_arg, has_opt, is_opt};
 
 // Individual utility modules
 mod cat;
+mod cp;
+mod mv;
+mod rm;
 
 // Re-export utilities
 pub use cat::cat;
+pub use cp::cp;
+pub use mv::mv;
+pub use rm::rm;
 
-/// cp - copy files
-pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
-    let mut recursive = false;
-    let mut force = false;
-    let mut interactive = false;
-    let mut preserve = false;
-    let mut files_start = 1;
-
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if arg[0] == b'-' {
-                if has_opt(arg, b'r') || has_opt(arg, b'R') { recursive = true; }
-                if has_opt(arg, b'f') { force = true; }
-                if has_opt(arg, b'i') { interactive = true; }
-                if has_opt(arg, b'p') { preserve = true; }
-                files_start = i + 1;
-            } else {
-                break;
-            }
-        }
-    }
-
-    if argc - files_start < 2 {
-        io::write_str(2, b"cp: missing operand\n");
-        return 1;
-    }
-
-    let dest = unsafe { get_arg(argv, argc - 1).unwrap() };
-
-    for i in files_start..(argc - 1) {
-        if let Some(src) = unsafe { get_arg(argv, i) } {
-            copy_file(src, dest, recursive, force, interactive, preserve);
-        }
-    }
-    0
-}
-
-fn copy_file(src: &[u8], dest: &[u8], recursive: bool, _force: bool, _interactive: bool, _preserve: bool) {
-    let src_fd = io::open(src, libc::O_RDONLY, 0);
-    if src_fd < 0 {
-        sys::perror(src);
-        return;
-    }
-
-    let dest_fd = io::open(dest, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
-    if dest_fd < 0 {
-        io::close(src_fd);
-        sys::perror(dest);
-        return;
-    }
-
-    let mut buf = [0u8; 4096];
-    loop {
-        let n = io::read(src_fd, &mut buf);
-        if n <= 0 { break; }
-        io::write_all(dest_fd, &buf[..n as usize]);
-    }
-
-    io::close(src_fd);
-    io::close(dest_fd);
-    let _ = recursive; // TODO: implement recursive copy
-}
-
-/// mv - move/rename files
-pub fn mv(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 3 {
-        io::write_str(2, b"mv: missing operand\n");
-        return 1;
-    }
-
-    let src = unsafe { get_arg(argv, 1).unwrap() };
-    let dest = unsafe { get_arg(argv, 2).unwrap() };
-
-    // Try rename first
-    if io::rename(src, dest) == 0 {
-        return 0;
-    }
-
-    // Fall back to copy + remove
-    copy_file(src, dest, false, true, false, false);
-    io::unlink(src);
-    0
-}
-
-/// rm - remove files
-pub fn rm(argc: i32, argv: *const *const u8) -> i32 {
-    let mut recursive = false;
-    let mut force = false;
-
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if arg[0] == b'-' {
-                if has_opt(arg, b'r') || has_opt(arg, b'R') { recursive = true; }
-                if has_opt(arg, b'f') { force = true; }
-            } else {
-                if recursive {
-                    remove_recursive(arg);
-                } else if io::unlink(arg) < 0 && !force {
-                    sys::perror(arg);
-                }
-            }
-        }
-    }
-    0
-}
-
-fn remove_recursive(path: &[u8]) {
-    let mut st: libc::stat = unsafe { core::mem::zeroed() };
-    if io::stat(path, &mut st) < 0 { return; }
-
-    if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
-        // Directory - recurse
-        let fd = io::open(path, libc::O_RDONLY | libc::O_DIRECTORY, 0);
-        if fd < 0 { return; }
-
-        let mut buf = [0u8; 4096];
-        loop {
-            let n = unsafe { libc::syscall(libc::SYS_getdents64, fd, buf.as_mut_ptr(), buf.len()) };
-            if n <= 0 { break; }
-
-            let mut offset = 0;
-            while offset < n as usize {
-                let dirent = unsafe { &*(buf.as_ptr().add(offset) as *const libc::dirent64) };
-                let name = unsafe { io::cstr_to_slice(dirent.d_name.as_ptr() as *const u8) };
-
-                if name != b"." && name != b".." {
-                    // Build full path
-                    let mut full_path = [0u8; 512];
-                    let mut len = 0;
-                    for c in path { full_path[len] = *c; len += 1; }
-                    full_path[len] = b'/'; len += 1;
-                    for c in name { full_path[len] = *c; len += 1; }
-
-                    remove_recursive(&full_path[..len]);
-                }
-
-                offset += dirent.d_reclen as usize;
-            }
-        }
-        io::close(fd);
-        io::rmdir(path);
-    } else {
-        io::unlink(path);
-    }
-}
+// Re-export helper for use by install
+pub(crate) use cp::copy_file;
 
 /// mkdir - create directories
 pub fn mkdir(argc: i32, argv: *const *const u8) -> i32 {
@@ -1065,7 +928,7 @@ pub fn install(argc: i32, argv: *const *const u8) -> i32 {
     } else if argc >= 3 {
         let src = unsafe { get_arg(argv, argc - 2).unwrap() };
         let dest = unsafe { get_arg(argv, argc - 1).unwrap() };
-        copy_file(src, dest, false, true, false, false);
+        copy_file(src, dest, true);
         io::chmod(dest, mode);
     }
     0
