@@ -5,117 +5,29 @@ use crate::io;
 use crate::sys;
 use super::{get_arg, has_opt};
 
-pub fn uname(argc: i32, argv: *const *const u8) -> i32 {
-    let mut show_all = false;
-    let mut show_s = false;
-    let mut show_n = false;
-    let mut show_r = false;
-    let mut show_m = false;
-    
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if has_opt(arg, b'a') { show_all = true; }
-            if has_opt(arg, b's') { show_s = true; }
-            if has_opt(arg, b'n') { show_n = true; }
-            if has_opt(arg, b'r') { show_r = true; }
-            if has_opt(arg, b'm') { show_m = true; }
-        }
-    }
-    
-    if show_all { show_s = true; show_n = true; show_r = true; show_m = true; }
-    if !show_s && !show_n && !show_r && !show_m { show_s = true; }
-    
-    let mut uts: libc::utsname = unsafe { core::mem::zeroed() };
-    if io::uname(&mut uts) != 0 { return 1; }
-    
-    if show_s { io::write_all(1, unsafe { io::cstr_to_slice(uts.sysname.as_ptr() as *const u8) }); io::write_str(1, b" "); }
-    if show_n { io::write_all(1, unsafe { io::cstr_to_slice(uts.nodename.as_ptr() as *const u8) }); io::write_str(1, b" "); }
-    if show_r { io::write_all(1, unsafe { io::cstr_to_slice(uts.release.as_ptr() as *const u8) }); io::write_str(1, b" "); }
-    if show_m { io::write_all(1, unsafe { io::cstr_to_slice(uts.machine.as_ptr() as *const u8) }); }
-    io::write_str(1, b"\n");
-    0
-}
+// Individual utility modules (batch 1: core system info)
+mod arch;
+mod groups;
+mod hostname;
+mod id;
+mod uname;
+mod users;
+mod w;
+mod who;
+mod whoami;
 
-pub fn hostname(argc: i32, argv: *const *const u8) -> i32 {
-    if argc > 1 {
-        if let Some(name) = unsafe { get_arg(argv, 1) } {
-            if unsafe { libc::sethostname(name.as_ptr() as *const i8, name.len()) } < 0 {
-                sys::perror(b"sethostname");
-                return 1;
-            }
-        }
-    } else {
-        let mut buf = [0u8; 256];
-        if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
-            io::write_all(1, unsafe { io::cstr_to_slice(buf.as_ptr()) });
-            io::write_str(1, b"\n");
-        }
-    }
-    0
-}
+// Re-export batch 1 utilities
+pub use arch::arch;
+pub use groups::groups;
+pub use hostname::hostname;
+pub use id::id;
+pub use uname::uname;
+pub use users::users;
+pub use w::w;
+pub use who::who;
+pub use whoami::whoami;
 
-pub fn whoami(_argc: i32, _argv: *const *const u8) -> i32 {
-    let uid = unsafe { libc::getuid() };
-    let pwd = unsafe { libc::getpwuid(uid) };
-    if !pwd.is_null() {
-        let name = unsafe { io::cstr_to_slice((*pwd).pw_name as *const u8) };
-        io::write_all(1, name);
-        io::write_str(1, b"\n");
-    }
-    0
-}
-
-pub fn id(argc: i32, argv: *const *const u8) -> i32 {
-    let uid = unsafe { libc::getuid() };
-    let gid = unsafe { libc::getgid() };
-    let euid = unsafe { libc::geteuid() };
-    let egid = unsafe { libc::getegid() };
-    
-    let _ = argc; let _ = argv;
-    
-    io::write_str(1, b"uid="); io::write_num(1, uid as u64);
-    io::write_str(1, b" gid="); io::write_num(1, gid as u64);
-    if euid != uid { io::write_str(1, b" euid="); io::write_num(1, euid as u64); }
-    if egid != gid { io::write_str(1, b" egid="); io::write_num(1, egid as u64); }
-    io::write_str(1, b"\n");
-    0
-}
-
-pub fn groups(_argc: i32, _argv: *const *const u8) -> i32 {
-    let mut gids = [0u32; 32];
-    let n = unsafe { libc::getgroups(32, gids.as_mut_ptr()) };
-    if n > 0 {
-        for i in 0..n as usize {
-            io::write_num(1, gids[i] as u64);
-            io::write_str(1, b" ");
-        }
-        io::write_str(1, b"\n");
-    }
-    0
-}
-
-pub fn who(_argc: i32, _argv: *const *const u8) -> i32 {
-    io::write_str(1, b"root     tty1         2024-01-01 00:00\n");
-    0
-}
-
-pub fn w(_argc: i32, _argv: *const *const u8) -> i32 {
-    who(_argc, _argv)
-}
-
-pub fn users(_argc: i32, _argv: *const *const u8) -> i32 {
-    io::write_str(1, b"root\n");
-    0
-}
-
-pub fn arch(_argc: i32, _argv: *const *const u8) -> i32 {
-    let mut uts: libc::utsname = unsafe { core::mem::zeroed() };
-    if io::uname(&mut uts) == 0 {
-        io::write_all(1, unsafe { io::cstr_to_slice(uts.machine.as_ptr() as *const u8) });
-        io::write_str(1, b"\n");
-    }
-    0
-}
+// Remaining utilities still inline below
 
 pub fn date(_argc: i32, _argv: *const *const u8) -> i32 {
     let now = unsafe { libc::time(core::ptr::null_mut()) };
