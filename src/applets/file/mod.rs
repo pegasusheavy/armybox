@@ -7,221 +7,46 @@ use crate::sys;
 use super::{get_arg, has_opt, is_opt};
 
 // Individual utility modules
+mod basename;
 mod cat;
+mod chgrp;
+mod chmod;
+mod chown;
 mod cp;
+mod dirname;
+mod ln;
 mod ls;
 mod mkdir;
 mod mv;
+mod pwd;
+mod readlink;
 mod rm;
 mod rmdir;
+mod stat;
+mod touch;
 
 // Re-export utilities
+pub use basename::basename;
 pub use cat::cat;
+pub use chgrp::chgrp;
+pub use chmod::chmod;
+pub use chown::chown;
 pub use cp::cp;
+pub use dirname::dirname;
+pub use ln::ln;
 pub use ls::ls;
 pub use mkdir::mkdir;
 pub use mv::mv;
+pub use pwd::pwd;
+pub use readlink::readlink;
 pub use rm::rm;
 pub use rmdir::rmdir;
+pub use stat::stat;
+pub use touch::touch;
 
 // Re-export helpers for use by install
 pub(crate) use cp::copy_file;
 pub(crate) use mkdir::mkdir_parents;
-
-/// touch - change file timestamps
-pub fn touch(argc: i32, argv: *const *const u8) -> i32 {
-    for i in 1..argc {
-        if let Some(path) = unsafe { get_arg(argv, i) } {
-            if path[0] != b'-' {
-                // Try to create file if doesn't exist
-                let fd = io::open(path, libc::O_WRONLY | libc::O_CREAT, 0o644);
-                if fd >= 0 {
-                    io::close(fd);
-                    // Update timestamps
-                    unsafe { libc::utimes(path.as_ptr() as *const i8, core::ptr::null()) };
-                } else {
-                    sys::perror(path);
-                }
-            }
-        }
-    }
-    0
-}
-
-/// ln - create links
-pub fn ln(argc: i32, argv: *const *const u8) -> i32 {
-    let mut symbolic = false;
-    let mut force = false;
-
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if arg[0] == b'-' {
-                if has_opt(arg, b's') { symbolic = true; }
-                if has_opt(arg, b'f') { force = true; }
-            }
-        }
-    }
-
-    if argc < 3 {
-        io::write_str(2, b"ln: missing operand\n");
-        return 1;
-    }
-
-    let target = unsafe { get_arg(argv, argc - 2).unwrap() };
-    let link_name = unsafe { get_arg(argv, argc - 1).unwrap() };
-
-    if force {
-        io::unlink(link_name);
-    }
-
-    let ret = if symbolic {
-        io::symlink(target, link_name)
-    } else {
-        io::link(target, link_name)
-    };
-
-    if ret < 0 {
-        sys::perror(link_name);
-        return 1;
-    }
-    0
-}
-
-/// pwd - print working directory
-pub fn pwd(_argc: i32, _argv: *const *const u8) -> i32 {
-    let mut buf = [0u8; 4096];
-    let ret = unsafe { libc::getcwd(buf.as_mut_ptr() as *mut i8, buf.len()) };
-    if !ret.is_null() {
-        io::write_all(1, &buf[..io::strlen_arr(&buf)]);
-        io::write_str(1, b"\n");
-        0
-    } else {
-        sys::perror(b"getcwd");
-        1
-    }
-}
-
-/// chmod - change file modes
-pub fn chmod(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 3 {
-        io::write_str(2, b"chmod: missing operand\n");
-        return 1;
-    }
-
-    let mode_str = unsafe { get_arg(argv, 1).unwrap() };
-    let mode = sys::parse_octal(mode_str).unwrap_or(0o644);
-
-    for i in 2..argc {
-        if let Some(path) = unsafe { get_arg(argv, i) } {
-            if io::chmod(path, mode) < 0 {
-                sys::perror(path);
-            }
-        }
-    }
-    0
-}
-
-/// chown - change file owner
-pub fn chown(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 3 {
-        io::write_str(2, b"chown: missing operand\n");
-        return 1;
-    }
-
-    let owner = unsafe { get_arg(argv, 1).unwrap() };
-    let uid = sys::parse_u64(owner).unwrap_or(0) as u32;
-
-    for i in 2..argc {
-        if let Some(path) = unsafe { get_arg(argv, i) } {
-            if unsafe { libc::chown(path.as_ptr() as *const i8, uid, u32::MAX) } < 0 {
-                sys::perror(path);
-            }
-        }
-    }
-    0
-}
-
-/// chgrp - change file group
-pub fn chgrp(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 3 {
-        io::write_str(2, b"chgrp: missing operand\n");
-        return 1;
-    }
-
-    let group = unsafe { get_arg(argv, 1).unwrap() };
-    let gid = sys::parse_u64(group).unwrap_or(0) as u32;
-
-    for i in 2..argc {
-        if let Some(path) = unsafe { get_arg(argv, i) } {
-            if unsafe { libc::chown(path.as_ptr() as *const i8, u32::MAX, gid) } < 0 {
-                sys::perror(path);
-            }
-        }
-    }
-    0
-}
-
-/// stat - display file status
-pub fn stat(argc: i32, argv: *const *const u8) -> i32 {
-    for i in 1..argc {
-        if let Some(path) = unsafe { get_arg(argv, i) } {
-            if path[0] == b'-' { continue; }
-
-            let mut st: libc::stat = unsafe { core::mem::zeroed() };
-            if io::stat(path, &mut st) < 0 {
-                sys::perror(path);
-                continue;
-            }
-
-            io::write_str(1, b"  File: ");
-            io::write_all(1, path);
-            io::write_str(1, b"\n  Size: ");
-            io::write_num(1, st.st_size as u64);
-            io::write_str(1, b"\tBlocks: ");
-            io::write_num(1, st.st_blocks as u64);
-            io::write_str(1, b"\nDevice: ");
-            io::write_num(1, st.st_dev as u64);
-            io::write_str(1, b"\tInode: ");
-            io::write_num(1, st.st_ino as u64);
-            io::write_str(1, b"\tLinks: ");
-            io::write_num(1, st.st_nlink as u64);
-            io::write_str(1, b"\nAccess: ");
-            let mut mode_buf = [0u8; 10];
-            sys::format_mode(st.st_mode as u32, &mut mode_buf);
-            io::write_all(1, &mode_buf);
-            io::write_str(1, b"\n");
-        }
-    }
-    0
-}
-
-/// readlink - print resolved symbolic link
-pub fn readlink(argc: i32, argv: *const *const u8) -> i32 {
-    let mut canonicalize = false;
-
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if arg[0] == b'-' {
-                if has_opt(arg, b'f') { canonicalize = true; }
-            } else {
-                let mut buf = [0u8; 4096];
-                let n = if canonicalize {
-                    io::realpath(arg, &mut buf)
-                } else {
-                    io::readlink(arg, &mut buf)
-                };
-                if n > 0 {
-                    io::write_all(1, &buf[..n as usize]);
-                    io::write_str(1, b"\n");
-                } else {
-                    sys::perror(arg);
-                    return 1;
-                }
-            }
-        }
-    }
-    0
-}
 
 /// realpath - print canonical path
 pub fn realpath(argc: i32, argv: *const *const u8) -> i32 {
@@ -239,67 +64,6 @@ pub fn realpath(argc: i32, argv: *const *const u8) -> i32 {
                 return 1;
             }
         }
-    }
-    0
-}
-
-/// basename - strip directory from file name
-pub fn basename(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 2 {
-        io::write_str(2, b"basename: missing operand\n");
-        return 1;
-    }
-
-    let path = unsafe { get_arg(argv, 1).unwrap() };
-    let suffix = if argc > 2 { unsafe { get_arg(argv, 2) } } else { None };
-
-    // Find last /
-    let mut start = 0;
-    for i in 0..path.len() {
-        if path[i] == b'/' {
-            start = i + 1;
-        }
-    }
-
-    let base = &path[start..];
-    let mut end = base.len();
-
-    // Strip suffix if provided
-    if let Some(s) = suffix {
-        if base.len() > s.len() && &base[base.len()-s.len()..] == s {
-            end = base.len() - s.len();
-        }
-    }
-
-    io::write_all(1, &base[..end]);
-    io::write_str(1, b"\n");
-    0
-}
-
-/// dirname - strip last component from file name
-pub fn dirname(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 2 {
-        io::write_str(2, b"dirname: missing operand\n");
-        return 1;
-    }
-
-    let path = unsafe { get_arg(argv, 1).unwrap() };
-
-    // Find last /
-    let mut last_slash = None;
-    for i in 0..path.len() {
-        if path[i] == b'/' {
-            last_slash = Some(i);
-        }
-    }
-
-    match last_slash {
-        Some(0) => { io::write_str(1, b"/\n"); }
-        Some(i) => {
-            io::write_all(1, &path[..i]);
-            io::write_str(1, b"\n");
-        }
-        None => { io::write_str(1, b".\n"); }
     }
     0
 }
