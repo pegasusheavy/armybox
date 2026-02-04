@@ -13,17 +13,27 @@ mod chgrp;
 mod chmod;
 mod chown;
 mod cp;
+mod dd;
 mod dirname;
+mod install;
+mod link_cmd;
 mod ln;
 mod ls;
 mod mkdir;
+mod mkfifo;
+mod mknod;
+mod mktemp;
 mod mv;
 mod pwd;
 mod readlink;
+mod realpath;
 mod rm;
 mod rmdir;
 mod stat;
+mod sync_cmd;
 mod touch;
+mod truncate;
+mod unlink;
 
 // Re-export utilities
 pub use basename::basename;
@@ -32,260 +42,31 @@ pub use chgrp::chgrp;
 pub use chmod::chmod;
 pub use chown::chown;
 pub use cp::cp;
+pub use dd::dd;
 pub use dirname::dirname;
+pub use install::install;
+pub use link_cmd::link;
 pub use ln::ln;
 pub use ls::ls;
 pub use mkdir::mkdir;
+pub use mkfifo::mkfifo;
+pub use mknod::mknod;
+pub use mktemp::mktemp;
 pub use mv::mv;
 pub use pwd::pwd;
 pub use readlink::readlink;
+pub use realpath::realpath;
 pub use rm::rm;
 pub use rmdir::rmdir;
 pub use stat::stat;
+pub use sync_cmd::sync_cmd;
 pub use touch::touch;
+pub use truncate::truncate;
+pub use unlink::unlink;
 
 // Re-export helpers for use by install
 pub(crate) use cp::copy_file;
 pub(crate) use mkdir::mkdir_parents;
-
-/// realpath - print canonical path
-pub fn realpath(argc: i32, argv: *const *const u8) -> i32 {
-    for i in 1..argc {
-        if let Some(path) = unsafe { get_arg(argv, i) } {
-            if path[0] == b'-' { continue; }
-
-            let mut buf = [0u8; 4096];
-            let n = io::realpath(path, &mut buf);
-            if n > 0 {
-                io::write_all(1, &buf[..n as usize]);
-                io::write_str(1, b"\n");
-            } else {
-                sys::perror(path);
-                return 1;
-            }
-        }
-    }
-    0
-}
-
-/// sync - sync filesystem
-pub fn sync_cmd(_argc: i32, _argv: *const *const u8) -> i32 {
-    unsafe { libc::sync() };
-    0
-}
-
-/// link - create hard link
-pub fn link(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 3 {
-        io::write_str(2, b"link: missing operand\n");
-        return 1;
-    }
-
-    let target = unsafe { get_arg(argv, 1).unwrap() };
-    let link_name = unsafe { get_arg(argv, 2).unwrap() };
-
-    if io::link(target, link_name) < 0 {
-        sys::perror(link_name);
-        return 1;
-    }
-    0
-}
-
-/// unlink - remove file
-pub fn unlink(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 2 {
-        io::write_str(2, b"unlink: missing operand\n");
-        return 1;
-    }
-
-    let path = unsafe { get_arg(argv, 1).unwrap() };
-    if io::unlink(path) < 0 {
-        sys::perror(path);
-        return 1;
-    }
-    0
-}
-
-/// dd - convert and copy a file
-pub fn dd(argc: i32, argv: *const *const u8) -> i32 {
-    let mut if_path: Option<&[u8]> = None;
-    let mut of_path: Option<&[u8]> = None;
-    let mut bs: usize = 512;
-    let mut count: Option<usize> = None;
-
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if arg.starts_with(b"if=") {
-                if_path = Some(&arg[3..]);
-            } else if arg.starts_with(b"of=") {
-                of_path = Some(&arg[3..]);
-            } else if arg.starts_with(b"bs=") {
-                bs = sys::parse_u64(&arg[3..]).unwrap_or(512) as usize;
-            } else if arg.starts_with(b"count=") {
-                count = Some(sys::parse_u64(&arg[6..]).unwrap_or(0) as usize);
-            }
-        }
-    }
-
-    let in_fd = match if_path {
-        Some(p) => io::open(p, libc::O_RDONLY, 0),
-        None => 0,
-    };
-    if in_fd < 0 { return 1; }
-
-    let out_fd = match of_path {
-        Some(p) => io::open(p, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644),
-        None => 1,
-    };
-    if out_fd < 0 {
-        if in_fd != 0 { io::close(in_fd); }
-        return 1;
-    }
-
-    #[cfg(feature = "alloc")]
-    {
-        use alloc::vec;
-        let mut buf = vec![0u8; bs];
-        let mut blocks = 0;
-
-        loop {
-            if let Some(c) = count {
-                if blocks >= c { break; }
-            }
-
-            let n = io::read(in_fd, &mut buf);
-            if n <= 0 { break; }
-            io::write_all(out_fd, &buf[..n as usize]);
-            blocks += 1;
-        }
-
-        io::write_num(2, blocks as u64);
-        io::write_str(2, b"+0 records in\n");
-        io::write_num(2, blocks as u64);
-        io::write_str(2, b"+0 records out\n");
-    }
-
-    #[cfg(not(feature = "alloc"))]
-    {
-        let mut buf = [0u8; 512];
-        let mut blocks = 0;
-
-        loop {
-            if let Some(c) = count {
-                if blocks >= c { break; }
-            }
-
-            let n = io::read(in_fd, &mut buf);
-            if n <= 0 { break; }
-            io::write_all(out_fd, &buf[..n as usize]);
-            blocks += 1;
-        }
-
-        let _ = bs;
-    }
-
-    if in_fd != 0 { io::close(in_fd); }
-    if out_fd != 1 { io::close(out_fd); }
-    0
-}
-
-/// mktemp - create temporary file/directory
-pub fn mktemp(argc: i32, argv: *const *const u8) -> i32 {
-    let mut dir = false;
-    let template = if argc > 1 {
-        for i in 1..argc {
-            if let Some(arg) = unsafe { get_arg(argv, i) } {
-                if has_opt(arg, b'd') { dir = true; }
-                else if arg[0] != b'-' { return create_temp(arg, dir); }
-            }
-        }
-        b"/tmp/tmp.XXXXXX"
-    } else {
-        b"/tmp/tmp.XXXXXX"
-    };
-    create_temp(template, dir)
-}
-
-fn create_temp(template: &[u8], dir: bool) -> i32 {
-    let mut path = [0u8; 256];
-    for (i, &c) in template.iter().enumerate() {
-        path[i] = c;
-    }
-
-    // Replace X with random chars
-    let seed = unsafe { libc::time(core::ptr::null_mut()) } as u64;
-    let mut rng = seed;
-    for i in 0..template.len() {
-        if path[i] == b'X' {
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
-            path[i] = b"0123456789abcdef"[(rng >> 60) as usize];
-        }
-    }
-
-    if dir {
-        if io::mkdir(&path[..template.len()], 0o700) < 0 {
-            sys::perror(&path[..template.len()]);
-            return 1;
-        }
-    } else {
-        let fd = io::open(&path[..template.len()], libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL, 0o600);
-        if fd < 0 {
-            sys::perror(&path[..template.len()]);
-            return 1;
-        }
-        io::close(fd);
-    }
-
-    io::write_all(1, &path[..template.len()]);
-    io::write_str(1, b"\n");
-    0
-}
-
-/// mkfifo - make FIFO special file
-pub fn mkfifo(argc: i32, argv: *const *const u8) -> i32 {
-    let mode = 0o644u32;
-
-    for i in 1..argc {
-        if let Some(path) = unsafe { get_arg(argv, i) } {
-            if path[0] != b'-' {
-                if unsafe { libc::mkfifo(path.as_ptr() as *const i8, mode) } < 0 {
-                    sys::perror(path);
-                    return 1;
-                }
-            }
-        }
-    }
-    0
-}
-
-/// mknod - make block or character special files
-pub fn mknod(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 4 {
-        io::write_str(2, b"mknod: missing operand\n");
-        return 1;
-    }
-
-    let path = unsafe { get_arg(argv, 1).unwrap() };
-    let type_arg = unsafe { get_arg(argv, 2).unwrap() };
-
-    let (mode, dev) = if type_arg == b"p" {
-        (libc::S_IFIFO | 0o666, 0)
-    } else if argc >= 5 {
-        let major = sys::parse_u64(unsafe { get_arg(argv, 3).unwrap() }).unwrap_or(0) as u32;
-        let minor = sys::parse_u64(unsafe { get_arg(argv, 4).unwrap() }).unwrap_or(0) as u32;
-        let m = if type_arg == b"b" { libc::S_IFBLK } else { libc::S_IFCHR };
-        (m | 0o666, sys::makedev(major, minor))
-    } else {
-        io::write_str(2, b"mknod: missing major/minor\n");
-        return 1;
-    };
-
-    if unsafe { libc::mknod(path.as_ptr() as *const i8, mode, dev) } < 0 {
-        sys::perror(path);
-        return 1;
-    }
-    0
-}
 
 /// split - split file into pieces
 pub fn split(argc: i32, argv: *const *const u8) -> i32 {
@@ -321,60 +102,6 @@ pub fn split(argc: i32, argv: *const *const u8) -> i32 {
     io::write_str(2, b"split: simplified implementation\n");
 
     if fd != 0 { io::close(fd); }
-    0
-}
-
-/// install - copy files and set attributes
-pub fn install(argc: i32, argv: *const *const u8) -> i32 {
-    let mut dir_mode = false;
-    let mut mode = 0o755u32;
-
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if has_opt(arg, b'd') { dir_mode = true; }
-            if has_opt(arg, b'm') && i + 1 < argc {
-                if let Some(m) = unsafe { get_arg(argv, i + 1) } {
-                    mode = sys::parse_octal(m).unwrap_or(0o755);
-                }
-            }
-        }
-    }
-
-    if dir_mode {
-        for i in 1..argc {
-            if let Some(path) = unsafe { get_arg(argv, i) } {
-                if path[0] != b'-' {
-                    mkdir_parents(path, mode);
-                }
-            }
-        }
-    } else if argc >= 3 {
-        let src = unsafe { get_arg(argv, argc - 2).unwrap() };
-        let dest = unsafe { get_arg(argv, argc - 1).unwrap() };
-        copy_file(src, dest, true);
-        io::chmod(dest, mode);
-    }
-    0
-}
-
-/// truncate - shrink or extend file size
-pub fn truncate(argc: i32, argv: *const *const u8) -> i32 {
-    let mut size: i64 = 0;
-
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if has_opt(arg, b's') && i + 1 < argc {
-                if let Some(s) = unsafe { get_arg(argv, i + 1) } {
-                    size = sys::parse_u64(s).unwrap_or(0) as i64;
-                }
-            } else if arg[0] != b'-' {
-                if unsafe { libc::truncate(arg.as_ptr() as *const i8, size) } < 0 {
-                    sys::perror(arg);
-                    return 1;
-                }
-            }
-        }
-    }
     0
 }
 
