@@ -195,20 +195,26 @@ pub fn tail(argc: i32, argv: *const *const u8) -> i32 {
 fn tail_fd(fd: i32, lines: usize) {
     #[cfg(feature = "alloc")]
     {
-        use alloc::vec::Vec;
         use alloc::collections::VecDeque;
 
         let content = io::read_all(fd);
+        if content.is_empty() {
+            return;
+        }
+
+        // Collect line start positions
         let mut line_starts: VecDeque<usize> = VecDeque::new();
         line_starts.push_back(0);
 
         for (i, &c) in content.iter().enumerate() {
             if c == b'\n' && i + 1 < content.len() {
                 line_starts.push_back(i + 1);
-                if line_starts.len() > lines + 1 {
-                    line_starts.pop_front();
-                }
             }
+        }
+
+        // Keep only the last N lines
+        while line_starts.len() > lines {
+            line_starts.pop_front();
         }
 
         if let Some(&start) = line_starts.front() {
@@ -548,118 +554,159 @@ pub fn nl(argc: i32, argv: *const *const u8) -> i32 {
 
 /// tr - translate characters
 pub fn tr(argc: i32, argv: *const *const u8) -> i32 {
-    let mut delete = false;
-    let mut squeeze = false;
-    let mut complement = false;
-    let mut set1_idx = 0;
-    let mut set2_idx = 0;
+    #[cfg(feature = "alloc")]
+    {
+        let mut delete = false;
+        let mut squeeze = false;
+        let mut complement = false;
+        let mut set1_idx = 0;
+        let mut set2_idx = 0;
 
-    for i in 1..argc {
-        if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if arg[0] == b'-' {
-                if has_opt(arg, b'd') { delete = true; }
-                if has_opt(arg, b's') { squeeze = true; }
-                if has_opt(arg, b'c') || has_opt(arg, b'C') { complement = true; }
-            } else if set1_idx == 0 {
-                set1_idx = i;
-            } else if set2_idx == 0 {
-                set2_idx = i;
+        for i in 1..argc {
+            if let Some(arg) = unsafe { get_arg(argv, i) } {
+                if arg[0] == b'-' {
+                    if has_opt(arg, b'd') { delete = true; }
+                    if has_opt(arg, b's') { squeeze = true; }
+                    if has_opt(arg, b'c') || has_opt(arg, b'C') { complement = true; }
+                } else if set1_idx == 0 {
+                    set1_idx = i;
+                } else if set2_idx == 0 {
+                    set2_idx = i;
+                }
             }
         }
-    }
 
-    if set1_idx == 0 {
-        io::write_str(2, b"tr: missing operand\n");
-        return 1;
-    }
+        if set1_idx == 0 {
+            io::write_str(2, b"tr: missing operand\n");
+            return 1;
+        }
 
-    let set1 = unsafe { get_arg(argv, set1_idx).unwrap() };
-    let set2 = if set2_idx > 0 { unsafe { get_arg(argv, set2_idx) } } else { None };
+        let set1 = unsafe { get_arg(argv, set1_idx).unwrap() };
+        let set2 = if set2_idx > 0 { unsafe { get_arg(argv, set2_idx) } } else { None };
 
-    let mut map = [0u8; 256];
-    for i in 0..256 { map[i] = i as u8; }
+        let mut map = [0u8; 256];
+        for i in 0..256 { map[i] = i as u8; }
 
-    let set1_expanded = expand_set(set1);
+        let set1_expanded = expand_set(set1);
 
-    if delete {
-        // Delete mode
-        let mut buf = [0u8; 4096];
-        let mut last_char: Option<u8> = None;
+        if delete {
+            // Delete mode
+            let mut buf = [0u8; 4096];
+            let mut last_char: Option<u8> = None;
 
-        loop {
-            let n = io::read(0, &mut buf);
-            if n <= 0 { break; }
+            loop {
+                let n = io::read(0, &mut buf);
+                if n <= 0 { break; }
 
-            for &c in &buf[..n as usize] {
-                let in_set = if complement {
-                    !set1_expanded.contains(&c)
+                for &c in &buf[..n as usize] {
+                    let in_set = if complement {
+                        !set1_expanded.contains(&c)
+                    } else {
+                        set1_expanded.contains(&c)
+                    };
+
+                    if !in_set {
+                        if squeeze {
+                            if Some(c) != last_char {
+                                io::write_all(1, &[c]);
+                                last_char = Some(c);
+                            }
+                        } else {
+                            io::write_all(1, &[c]);
+                        }
+                    }
+                }
+            }
+        } else if let Some(s2) = set2 {
+            // Translate mode
+            let set2_expanded = expand_set(s2);
+
+            for (i, &c) in set1_expanded.iter().enumerate() {
+                let replacement = if i < set2_expanded.len() {
+                    set2_expanded[i]
+                } else if !set2_expanded.is_empty() {
+                    set2_expanded[set2_expanded.len() - 1]
                 } else {
-                    set1_expanded.contains(&c)
+                    c
                 };
 
-                if !in_set {
-                    if squeeze {
-                        if Some(c) != last_char {
-                            io::write_all(1, &[c]);
-                            last_char = Some(c);
+                if complement {
+                    for j in 0..256 {
+                        if !set1_expanded.contains(&(j as u8)) {
+                            map[j] = replacement;
+                        }
+                    }
+                } else {
+                    map[c as usize] = replacement;
+                }
+            }
+
+            let mut buf = [0u8; 4096];
+            let mut last_char: Option<u8> = None;
+
+            loop {
+                let n = io::read(0, &mut buf);
+                if n <= 0 { break; }
+
+                for &c in &buf[..n as usize] {
+                    let out = map[c as usize];
+                    if squeeze && set2_expanded.contains(&out) {
+                        if Some(out) != last_char {
+                            io::write_all(1, &[out]);
+                            last_char = Some(out);
                         }
                     } else {
-                        io::write_all(1, &[c]);
-                    }
-                }
-            }
-        }
-    } else if let Some(s2) = set2 {
-        // Translate mode
-        let set2_expanded = expand_set(s2);
-
-        for (i, &c) in set1_expanded.iter().enumerate() {
-            let replacement = if i < set2_expanded.len() {
-                set2_expanded[i]
-            } else if !set2_expanded.is_empty() {
-                set2_expanded[set2_expanded.len() - 1]
-            } else {
-                c
-            };
-
-            if complement {
-                for j in 0..256 {
-                    if !set1_expanded.contains(&(j as u8)) {
-                        map[j] = replacement;
-                    }
-                }
-            } else {
-                map[c as usize] = replacement;
-            }
-        }
-
-        let mut buf = [0u8; 4096];
-        let mut last_char: Option<u8> = None;
-
-        loop {
-            let n = io::read(0, &mut buf);
-            if n <= 0 { break; }
-
-            for &c in &buf[..n as usize] {
-                let out = map[c as usize];
-                if squeeze && set2_expanded.contains(&out) {
-                    if Some(out) != last_char {
                         io::write_all(1, &[out]);
                         last_char = Some(out);
                     }
-                } else {
-                    io::write_all(1, &[out]);
-                    last_char = Some(out);
                 }
             }
         }
+        return 0;
     }
-    0
+
+    #[cfg(not(feature = "alloc"))]
+    {
+        let _ = argc;
+        let _ = argv;
+        io::write_str(2, b"tr: requires alloc feature\n");
+        return 1;
+    }
 }
 
+#[cfg(feature = "alloc")]
+fn expand_set(s: &[u8]) -> alloc::vec::Vec<u8> {
+    use alloc::vec::Vec;
+    let mut result = Vec::new();
+    let mut i = 0;
+
+    while i < s.len() {
+        // Check for range pattern: x-y
+        if i + 2 < s.len() && s[i + 1] == b'-' {
+            let start = s[i];
+            let end = s[i + 2];
+            if start <= end {
+                for c in start..=end {
+                    result.push(c);
+                }
+            } else {
+                // Descending range
+                for c in (end..=start).rev() {
+                    result.push(c);
+                }
+            }
+            i += 3;
+        } else {
+            result.push(s[i]);
+            i += 1;
+        }
+    }
+    result
+}
+
+#[cfg(not(feature = "alloc"))]
 fn expand_set(s: &[u8]) -> &[u8] {
-    // Simplified - just return as-is
-    // Full impl would handle [:alpha:], a-z, etc.
+    // Without alloc, just return as-is (limited functionality)
     s
 }
 
@@ -668,23 +715,43 @@ pub fn cut(argc: i32, argv: *const *const u8) -> i32 {
     let mut delimiter = b'\t';
     let mut field: Option<usize> = None;
     let mut chars: Option<usize> = None;
+    let mut i = 1;
 
-    for i in 1..argc {
+    while i < argc {
         if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if has_opt(arg, b'd') && i + 1 < argc {
-                if let Some(d) = unsafe { get_arg(argv, i + 1) } {
-                    if !d.is_empty() { delimiter = d[0]; }
+            if arg.len() >= 2 && arg[0] == b'-' && arg[1] == b'd' {
+                // Handle -dX (attached) or -d X (separate)
+                if arg.len() > 2 {
+                    delimiter = arg[2];
+                } else if i + 1 < argc {
+                    if let Some(d) = unsafe { get_arg(argv, i + 1) } {
+                        if !d.is_empty() { delimiter = d[0]; }
+                    }
+                    i += 1;
                 }
-            } else if has_opt(arg, b'f') && i + 1 < argc {
-                if let Some(f) = unsafe { get_arg(argv, i + 1) } {
-                    field = Some(sys::parse_u64(f).unwrap_or(1) as usize);
+            } else if arg.len() >= 2 && arg[0] == b'-' && arg[1] == b'f' {
+                // Handle -fN (attached) or -f N (separate)
+                if arg.len() > 2 {
+                    field = Some(sys::parse_u64(&arg[2..]).unwrap_or(1) as usize);
+                } else if i + 1 < argc {
+                    if let Some(f) = unsafe { get_arg(argv, i + 1) } {
+                        field = Some(sys::parse_u64(f).unwrap_or(1) as usize);
+                    }
+                    i += 1;
                 }
-            } else if has_opt(arg, b'c') && i + 1 < argc {
-                if let Some(c) = unsafe { get_arg(argv, i + 1) } {
-                    chars = Some(sys::parse_u64(c).unwrap_or(1) as usize);
+            } else if arg.len() >= 2 && arg[0] == b'-' && arg[1] == b'c' {
+                // Handle -cN (attached) or -c N (separate)
+                if arg.len() > 2 {
+                    chars = Some(sys::parse_u64(&arg[2..]).unwrap_or(1) as usize);
+                } else if i + 1 < argc {
+                    if let Some(c) = unsafe { get_arg(argv, i + 1) } {
+                        chars = Some(sys::parse_u64(c).unwrap_or(1) as usize);
+                    }
+                    i += 1;
                 }
             }
         }
+        i += 1;
     }
 
     let mut buf = [0u8; 4096];
@@ -700,18 +767,20 @@ pub fn cut(argc: i32, argv: *const *const u8) -> i32 {
                 if let Some(f) = field {
                     let mut field_num = 1;
                     let mut start = 0;
+                    let mut found = false;
 
                     for j in 0..line_len {
                         if line[j] == delimiter {
                             if field_num == f {
                                 io::write_all(1, &line[start..j]);
+                                found = true;
                                 break;
                             }
                             field_num += 1;
                             start = j + 1;
                         }
                     }
-                    if field_num == f {
+                    if !found && field_num == f {
                         io::write_all(1, &line[start..line_len]);
                     }
                 } else if let Some(c) = chars {
@@ -733,10 +802,119 @@ pub fn cut(argc: i32, argv: *const *const u8) -> i32 {
 }
 
 /// paste - merge lines of files
+/// paste - merge lines of files
 pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
-    io::write_str(2, b"paste: stub\n");
-    let _ = argc;
-    let _ = argv;
+    #[cfg(feature = "alloc")]
+    {
+        use alloc::vec::Vec;
+
+        let mut delimiter = b'\t';
+        let mut serial = false;
+        let mut files: Vec<&[u8]> = Vec::new();
+
+        let mut i = 1;
+        while i < argc {
+            if let Some(arg) = unsafe { get_arg(argv, i) } {
+                if arg.starts_with(b"-") && arg.len() > 1 {
+                    if arg == b"-s" {
+                        serial = true;
+                    } else if arg == b"-d" || arg.starts_with(b"-d") {
+                        // Delimiter
+                        if arg.len() > 2 {
+                            delimiter = arg[2];
+                        } else if i + 1 < argc {
+                            i += 1;
+                            if let Some(d) = unsafe { get_arg(argv, i) } {
+                                if !d.is_empty() {
+                                    delimiter = d[0];
+                                }
+                            }
+                        }
+                    }
+                } else if arg == b"-" {
+                    files.push(b"-");
+                } else {
+                    files.push(arg);
+                }
+            }
+            i += 1;
+        }
+
+        if files.is_empty() {
+            files.push(b"-");
+        }
+
+        if serial {
+            // Serial mode: output each file on a single line, fields delimited
+            for &file in &files {
+                let fd = if file == b"-" {
+                    0
+                } else {
+                    io::open(file, libc::O_RDONLY, 0)
+                };
+                if fd < 0 && file != b"-" {
+                    io::write_str(2, b"paste: cannot open file\n");
+                    continue;
+                }
+
+                let content = io::read_all(fd);
+                if fd > 0 { io::close(fd); }
+
+                let mut first = true;
+                for line in content.split(|&c| c == b'\n') {
+                    if line.is_empty() { continue; }
+                    if !first {
+                        io::write_all(1, &[delimiter]);
+                    }
+                    io::write_all(1, line);
+                    first = false;
+                }
+                io::write_str(1, b"\n");
+            }
+        } else {
+            // Normal mode: merge corresponding lines from each file
+            let mut file_data: Vec<Vec<u8>> = Vec::new();
+            let mut fds: Vec<i32> = Vec::new();
+
+            for &file in &files {
+                let fd = if file == b"-" {
+                    0
+                } else {
+                    io::open(file, libc::O_RDONLY, 0)
+                };
+                if fd < 0 && file != b"-" {
+                    io::write_str(2, b"paste: cannot open file\n");
+                    file_data.push(Vec::new());
+                    fds.push(-1);
+                } else {
+                    let content = io::read_all(fd);
+                    if fd > 0 { io::close(fd); }
+                    file_data.push(content);
+                    fds.push(0);
+                }
+            }
+
+            // Convert to lines
+            let file_lines: Vec<Vec<&[u8]>> = file_data.iter()
+                .map(|d| d.split(|&c| c == b'\n').collect::<Vec<_>>())
+                .collect();
+
+            // Find max number of lines
+            let max_lines = file_lines.iter().map(|l| l.len()).max().unwrap_or(0);
+
+            for line_idx in 0..max_lines {
+                for (file_idx, lines) in file_lines.iter().enumerate() {
+                    if file_idx > 0 {
+                        io::write_all(1, &[delimiter]);
+                    }
+                    if line_idx < lines.len() {
+                        io::write_all(1, lines[line_idx]);
+                    }
+                }
+                io::write_str(1, b"\n");
+            }
+        }
+    }
     0
 }
 
@@ -749,16 +927,38 @@ pub fn sort(argc: i32, argv: *const *const u8) -> i32 {
         let mut reverse = false;
         let mut numeric = false;
         let mut unique = false;
+        let mut file_idx = 0;
 
         for i in 1..argc {
             if let Some(arg) = unsafe { get_arg(argv, i) } {
-                if has_opt(arg, b'r') { reverse = true; }
-                if has_opt(arg, b'n') { numeric = true; }
-                if has_opt(arg, b'u') { unique = true; }
+                if arg[0] == b'-' && arg.len() > 1 {
+                    if has_opt(arg, b'r') { reverse = true; }
+                    if has_opt(arg, b'n') { numeric = true; }
+                    if has_opt(arg, b'u') { unique = true; }
+                } else if file_idx == 0 {
+                    file_idx = i;
+                }
             }
         }
 
-        let content = io::read_all(0);
+        // Read from file or stdin
+        let content = if file_idx > 0 {
+            if let Some(path) = unsafe { get_arg(argv, file_idx) } {
+                let fd = io::open(path, libc::O_RDONLY, 0);
+                if fd < 0 {
+                    io::write_str(2, b"sort: cannot open file\n");
+                    return 1;
+                }
+                let c = io::read_all(fd);
+                io::close(fd);
+                c
+            } else {
+                io::read_all(0)
+            }
+        } else {
+            io::read_all(0)
+        };
+
         let mut lines: Vec<&[u8]> = content.split(|&c| c == b'\n').filter(|l| !l.is_empty()).collect();
 
         if numeric {
@@ -793,12 +993,17 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
     let mut count = false;
     let mut repeated = false;
     let mut unique_only = false;
+    let mut file_idx = 0;
 
     for i in 1..argc {
         if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if has_opt(arg, b'c') { count = true; }
-            if has_opt(arg, b'd') { repeated = true; }
-            if has_opt(arg, b'u') { unique_only = true; }
+            if arg[0] == b'-' && arg.len() > 1 {
+                if has_opt(arg, b'c') { count = true; }
+                if has_opt(arg, b'd') { repeated = true; }
+                if has_opt(arg, b'u') { unique_only = true; }
+            } else if file_idx == 0 {
+                file_idx = i;
+            }
         }
     }
 
@@ -806,7 +1011,24 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
     {
         use alloc::vec::Vec;
 
-        let content = io::read_all(0);
+        // Read from file or stdin
+        let content = if file_idx > 0 {
+            if let Some(path) = unsafe { get_arg(argv, file_idx) } {
+                let fd = io::open(path, libc::O_RDONLY, 0);
+                if fd < 0 {
+                    io::write_str(2, b"uniq: cannot open file\n");
+                    return 1;
+                }
+                let c = io::read_all(fd);
+                io::close(fd);
+                c
+            } else {
+                io::read_all(0)
+            }
+        } else {
+            io::read_all(0)
+        };
+
         let lines: Vec<&[u8]> = content.split(|&c| c == b'\n').collect();
 
         let mut i = 0;
@@ -847,17 +1069,24 @@ pub fn grep(argc: i32, argv: *const *const u8) -> i32 {
     let mut count_only = false;
     let mut line_numbers = false;
     let mut ignore_case = false;
+    let mut quiet = false;
+    let mut files_with_matches = false;
     let mut pattern_idx = 0;
+    let mut files_start = 0;
 
     for i in 1..argc {
         if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if arg[0] == b'-' {
+            if arg[0] == b'-' && arg.len() > 1 {
                 if has_opt(arg, b'v') { invert = true; }
                 if has_opt(arg, b'c') { count_only = true; }
                 if has_opt(arg, b'n') { line_numbers = true; }
                 if has_opt(arg, b'i') { ignore_case = true; }
+                if has_opt(arg, b'q') { quiet = true; }
+                if has_opt(arg, b'l') { files_with_matches = true; }
             } else if pattern_idx == 0 {
                 pattern_idx = i;
+            } else if files_start == 0 {
+                files_start = i;
             }
         }
     }
@@ -868,7 +1097,54 @@ pub fn grep(argc: i32, argv: *const *const u8) -> i32 {
     }
 
     let pattern = unsafe { get_arg(argv, pattern_idx).unwrap() };
+    let mut total_count = 0u64;
+    let mut found_match = false;
 
+    // If no files specified, read from stdin
+    if files_start == 0 {
+        let count = grep_fd(0, None, pattern, invert, count_only, line_numbers, ignore_case, quiet, files_with_matches);
+        if count > 0 { found_match = true; }
+        total_count += count;
+    } else {
+        // Process each file
+        let multiple_files = (argc - files_start) > 1;
+        for i in files_start..argc {
+            if let Some(file) = unsafe { get_arg(argv, i) } {
+                let fd = if file == b"-" {
+                    0
+                } else {
+                    io::open(file, libc::O_RDONLY, 0)
+                };
+
+                if fd < 0 {
+                    io::write_str(2, b"grep: ");
+                    io::write_all(2, file);
+                    io::write_str(2, b": No such file or directory\n");
+                    continue;
+                }
+
+                let prefix = if multiple_files { Some(file) } else { None };
+                let count = grep_fd(fd, prefix, pattern, invert, count_only, line_numbers, ignore_case, quiet, files_with_matches);
+                if count > 0 { found_match = true; }
+                total_count += count;
+
+                if fd != 0 {
+                    io::close(fd);
+                }
+
+                // For -l, stop after first match in file
+                if files_with_matches && count > 0 {
+                    continue;
+                }
+            }
+        }
+    }
+
+    if found_match { 0 } else { 1 }
+}
+
+fn grep_fd(fd: i32, prefix: Option<&[u8]>, pattern: &[u8], invert: bool, count_only: bool,
+           line_numbers: bool, ignore_case: bool, quiet: bool, files_with_matches: bool) -> u64 {
     let mut count = 0u64;
     let mut line_num = 0u64;
     let mut buf = [0u8; 4096];
@@ -876,7 +1152,7 @@ pub fn grep(argc: i32, argv: *const *const u8) -> i32 {
     let mut line_len = 0;
 
     loop {
-        let n = io::read(0, &mut buf);
+        let n = io::read(fd, &mut buf);
         if n <= 0 { break; }
 
         for &c in &buf[..n as usize] {
@@ -890,7 +1166,21 @@ pub fn grep(argc: i32, argv: *const *const u8) -> i32 {
 
                 if matches != invert {
                     count += 1;
-                    if !count_only {
+
+                    if files_with_matches {
+                        // For -l, just print filename once and return
+                        if let Some(p) = prefix {
+                            io::write_all(1, p);
+                            io::write_str(1, b"\n");
+                        }
+                        return count;
+                    }
+
+                    if !count_only && !quiet {
+                        if let Some(p) = prefix {
+                            io::write_all(1, p);
+                            io::write_str(1, b":");
+                        }
                         if line_numbers {
                             io::write_num(1, line_num);
                             io::write_str(1, b":");
@@ -907,12 +1197,42 @@ pub fn grep(argc: i32, argv: *const *const u8) -> i32 {
         }
     }
 
-    if count_only {
+    // Handle last line if no trailing newline
+    if line_len > 0 {
+        line_num += 1;
+        let matches = if ignore_case {
+            contains_ignore_case(&line[..line_len], pattern)
+        } else {
+            contains(&line[..line_len], pattern)
+        };
+
+        if matches != invert {
+            count += 1;
+            if !count_only && !quiet && !files_with_matches {
+                if let Some(p) = prefix {
+                    io::write_all(1, p);
+                    io::write_str(1, b":");
+                }
+                if line_numbers {
+                    io::write_num(1, line_num);
+                    io::write_str(1, b":");
+                }
+                io::write_all(1, &line[..line_len]);
+                io::write_str(1, b"\n");
+            }
+        }
+    }
+
+    if count_only && !quiet {
+        if let Some(p) = prefix {
+            io::write_all(1, p);
+            io::write_str(1, b":");
+        }
         io::write_num(1, count);
         io::write_str(1, b"\n");
     }
 
-    if count > 0 { 0 } else { 1 }
+    count
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
@@ -1148,9 +1468,134 @@ pub fn awk(argc: i32, argv: *const *const u8) -> i32 {
 }
 
 /// comm - compare sorted files
-pub fn comm(_argc: i32, _argv: *const *const u8) -> i32 {
-    io::write_str(2, b"comm: stub\n");
+/// comm - compare two sorted files line by line
+pub fn comm(argc: i32, argv: *const *const u8) -> i32 {
+    #[cfg(feature = "alloc")]
+    {
+        use alloc::vec::Vec;
+
+        let mut suppress_col1 = false;
+        let mut suppress_col2 = false;
+        let mut suppress_col3 = false;
+        let mut file1: Option<&[u8]> = None;
+        let mut file2: Option<&[u8]> = None;
+
+        for i in 1..argc {
+            if let Some(arg) = unsafe { get_arg(argv, i) } {
+                if arg.starts_with(b"-") && arg.len() > 1 && arg[1] != b'-' {
+                    for &c in &arg[1..] {
+                        match c {
+                            b'1' => suppress_col1 = true,
+                            b'2' => suppress_col2 = true,
+                            b'3' => suppress_col3 = true,
+                            _ => {}
+                        }
+                    }
+                } else if file1.is_none() {
+                    file1 = Some(arg);
+                } else if file2.is_none() {
+                    file2 = Some(arg);
+                }
+            }
+        }
+
+        let file1 = match file1 {
+            Some(f) => f,
+            None => {
+                io::write_str(2, b"comm: missing operand\n");
+                return 1;
+            }
+        };
+        let file2 = match file2 {
+            Some(f) => f,
+            None => {
+                io::write_str(2, b"comm: missing operand\n");
+                return 1;
+            }
+        };
+
+        // Read both files
+        let fd1 = if file1 == b"-" { 0 } else { io::open(file1, libc::O_RDONLY, 0) };
+        if fd1 < 0 && file1 != b"-" {
+            io::write_str(2, b"comm: cannot open file1\n");
+            return 1;
+        }
+        let content1 = io::read_all(fd1);
+        if fd1 > 0 { io::close(fd1); }
+
+        let fd2 = if file2 == b"-" { 0 } else { io::open(file2, libc::O_RDONLY, 0) };
+        if fd2 < 0 && file2 != b"-" {
+            io::write_str(2, b"comm: cannot open file2\n");
+            return 1;
+        }
+        let content2 = io::read_all(fd2);
+        if fd2 > 0 { io::close(fd2); }
+
+        let lines1: Vec<&[u8]> = content1.split(|&c| c == b'\n').filter(|l| !l.is_empty()).collect();
+        let lines2: Vec<&[u8]> = content2.split(|&c| c == b'\n').filter(|l| !l.is_empty()).collect();
+
+        let mut i = 0;
+        let mut j = 0;
+
+        while i < lines1.len() || j < lines2.len() {
+            if i >= lines1.len() {
+                // Only file2 has remaining lines
+                if !suppress_col2 {
+                    if !suppress_col1 { io::write_str(1, b"\t"); }
+                    io::write_all(1, lines2[j]);
+                    io::write_str(1, b"\n");
+                }
+                j += 1;
+            } else if j >= lines2.len() {
+                // Only file1 has remaining lines
+                if !suppress_col1 {
+                    io::write_all(1, lines1[i]);
+                    io::write_str(1, b"\n");
+                }
+                i += 1;
+            } else {
+                let cmp = cmp_bytes(lines1[i], lines2[j]);
+                if cmp < 0 {
+                    // Line only in file1
+                    if !suppress_col1 {
+                        io::write_all(1, lines1[i]);
+                        io::write_str(1, b"\n");
+                    }
+                    i += 1;
+                } else if cmp > 0 {
+                    // Line only in file2
+                    if !suppress_col2 {
+                        if !suppress_col1 { io::write_str(1, b"\t"); }
+                        io::write_all(1, lines2[j]);
+                        io::write_str(1, b"\n");
+                    }
+                    j += 1;
+                } else {
+                    // Line in both files
+                    if !suppress_col3 {
+                        if !suppress_col1 { io::write_str(1, b"\t"); }
+                        if !suppress_col2 { io::write_str(1, b"\t"); }
+                        io::write_all(1, lines1[i]);
+                        io::write_str(1, b"\n");
+                    }
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+    }
     0
+}
+
+fn cmp_bytes(a: &[u8], b: &[u8]) -> i32 {
+    let min_len = a.len().min(b.len());
+    for i in 0..min_len {
+        if a[i] < b[i] { return -1; }
+        if a[i] > b[i] { return 1; }
+    }
+    if a.len() < b.len() { -1 }
+    else if a.len() > b.len() { 1 }
+    else { 0 }
 }
 
 /// expand - convert tabs to spaces

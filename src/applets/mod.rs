@@ -25,11 +25,13 @@ pub unsafe fn get_arg(argv: *const *const u8, idx: i32) -> Option<&'static [u8]>
     if argv.is_null() {
         return None;
     }
-    let ptr = *argv.add(idx as usize);
+    // SAFETY: Caller guarantees argv is valid and contains at least idx+1 elements
+    let ptr = unsafe { *argv.add(idx as usize) };
     if ptr.is_null() {
         return None;
     }
-    Some(io::cstr_to_slice(ptr))
+    // SAFETY: ptr is a valid C string from argv
+    Some(unsafe { io::cstr_to_slice(ptr) })
 }
 
 /// Check if argument has option char

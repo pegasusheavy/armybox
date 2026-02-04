@@ -53,3 +53,4 @@ panic = "unwind"
 [[bin]]
 name = "armybox"
 path = "src/main.rs"
+test = false  # Binary uses no_std/no_main, can't be tested directly

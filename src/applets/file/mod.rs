@@ -1,54 +1,16 @@
 //! File operation applets
+//!
+//! POSIX.1-2017 compliant file manipulation utilities.
 
 use crate::io;
 use crate::sys;
 use super::{get_arg, has_opt, is_opt};
 
-/// cat - concatenate files
-pub fn cat(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 2 {
-        // Read from stdin
-        let mut buf = [0u8; 4096];
-        loop {
-            let n = io::read(0, &mut buf);
-            if n <= 0 { break; }
-            io::write_all(1, &buf[..n as usize]);
-        }
-        return 0;
-    }
+// Individual utility modules
+mod cat;
 
-    for i in 1..argc {
-        let path = match unsafe { get_arg(argv, i) } {
-            Some(p) => p,
-            None => continue,
-        };
-
-        if path == b"-" {
-            let mut buf = [0u8; 4096];
-            loop {
-                let n = io::read(0, &mut buf);
-                if n <= 0 { break; }
-                io::write_all(1, &buf[..n as usize]);
-            }
-            continue;
-        }
-
-        let fd = io::open(path, libc::O_RDONLY, 0);
-        if fd < 0 {
-            sys::perror(path);
-            continue;
-        }
-
-        let mut buf = [0u8; 4096];
-        loop {
-            let n = io::read(fd, &mut buf);
-            if n <= 0 { break; }
-            io::write_all(1, &buf[..n as usize]);
-        }
-        io::close(fd);
-    }
-    0
-}
+// Re-export utilities
+pub use cat::cat;
 
 /// cp - copy files
 pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
@@ -355,7 +317,7 @@ pub fn ls(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-fn list_dir(path: &[u8], show_all: bool, long_format: bool, one_per_line: bool, _show_inode: bool, _classify: bool) {
+fn list_dir(path: &[u8], show_all: bool, long_format: bool, one_per_line: bool, show_inode: bool, classify: bool) {
     let fd = io::open(path, libc::O_RDONLY | libc::O_DIRECTORY, 0);
     if fd < 0 {
         sys::perror(path);
@@ -363,6 +325,9 @@ fn list_dir(path: &[u8], show_all: bool, long_format: bool, one_per_line: bool, 
     }
 
     let mut buf = [0u8; 4096];
+    let mut col = 0;
+    let term_width = 80; // Default terminal width
+
     loop {
         let n = unsafe { libc::syscall(libc::SYS_getdents64, fd, buf.as_mut_ptr(), buf.len()) };
         if n <= 0 { break; }
@@ -387,37 +352,217 @@ fn list_dir(path: &[u8], show_all: bool, long_format: bool, one_per_line: bool, 
 
                 let mut st: libc::stat = unsafe { core::mem::zeroed() };
                 if io::lstat(&full_path[..len], &mut st) == 0 {
+                    // Show inode if requested
+                    if show_inode {
+                        io::write_num(1, st.st_ino as u64);
+                        io::write_str(1, b" ");
+                    }
+
+                    // File mode
                     let mut mode_buf = [0u8; 10];
                     sys::format_mode(st.st_mode as u32, &mut mode_buf);
                     io::write_all(1, &mode_buf);
                     io::write_str(1, b" ");
-                    io::write_num(1, st.st_nlink as u64);
-                    io::write_str(1, b" ");
-                    io::write_num(1, st.st_uid as u64);
-                    io::write_str(1, b" ");
-                    io::write_num(1, st.st_gid as u64);
-                    io::write_str(1, b" ");
-                    io::write_num(1, st.st_size as u64);
-                    io::write_str(1, b" ");
-                }
-            }
 
-            io::write_all(1, name);
-            if one_per_line || long_format {
-                io::write_str(1, b"\n");
+                    // Number of links (right-aligned in 3 chars)
+                    let nlink = st.st_nlink as u64;
+                    if nlink < 10 { io::write_str(1, b"  "); }
+                    else if nlink < 100 { io::write_str(1, b" "); }
+                    io::write_num(1, nlink);
+                    io::write_str(1, b" ");
+
+                    // UID (right-aligned in 5 chars)
+                    let uid = st.st_uid as u64;
+                    if uid < 10 { io::write_str(1, b"    "); }
+                    else if uid < 100 { io::write_str(1, b"   "); }
+                    else if uid < 1000 { io::write_str(1, b"  "); }
+                    else if uid < 10000 { io::write_str(1, b" "); }
+                    io::write_num(1, uid);
+                    io::write_str(1, b" ");
+
+                    // GID (right-aligned in 5 chars)
+                    let gid = st.st_gid as u64;
+                    if gid < 10 { io::write_str(1, b"    "); }
+                    else if gid < 100 { io::write_str(1, b"   "); }
+                    else if gid < 1000 { io::write_str(1, b"  "); }
+                    else if gid < 10000 { io::write_str(1, b" "); }
+                    io::write_num(1, gid);
+                    io::write_str(1, b" ");
+
+                    // Size (right-aligned in 8 chars)
+                    let size = st.st_size as u64;
+                    if size < 10 { io::write_str(1, b"       "); }
+                    else if size < 100 { io::write_str(1, b"      "); }
+                    else if size < 1000 { io::write_str(1, b"     "); }
+                    else if size < 10000 { io::write_str(1, b"    "); }
+                    else if size < 100000 { io::write_str(1, b"   "); }
+                    else if size < 1000000 { io::write_str(1, b"  "); }
+                    else if size < 10000000 { io::write_str(1, b" "); }
+                    io::write_num(1, size);
+                    io::write_str(1, b" ");
+
+                    // Date/time (simplified: show mtime)
+                    format_time(st.st_mtime as u64);
+                    io::write_str(1, b" ");
+
+                    // Filename
+                    io::write_all(1, name);
+
+                    // For symlinks, show target
+                    if (st.st_mode & libc::S_IFMT) == libc::S_IFLNK {
+                        io::write_str(1, b" -> ");
+                        let mut link_target = [0u8; 256];
+                        let link_len = io::readlink(&full_path[..len], &mut link_target);
+                        if link_len > 0 {
+                            io::write_all(1, &link_target[..link_len as usize]);
+                        }
+                    }
+
+                    // Classify suffix
+                    if classify {
+                        write_classify_suffix(st.st_mode as u32);
+                    }
+
+                    io::write_str(1, b"\n");
+                }
             } else {
-                io::write_str(1, b"  ");
+                // Show inode if requested
+                if show_inode {
+                    let mut full_path = [0u8; 512];
+                    let mut len = 0;
+                    for c in path { full_path[len] = *c; len += 1; }
+                    full_path[len] = b'/'; len += 1;
+                    for c in name { full_path[len] = *c; len += 1; }
+
+                    let mut st: libc::stat = unsafe { core::mem::zeroed() };
+                    if io::lstat(&full_path[..len], &mut st) == 0 {
+                        io::write_num(1, st.st_ino as u64);
+                        io::write_str(1, b" ");
+                    }
+                }
+
+                if one_per_line {
+                    io::write_all(1, name);
+                    if classify {
+                        let mut full_path = [0u8; 512];
+                        let mut len = 0;
+                        for c in path { full_path[len] = *c; len += 1; }
+                        full_path[len] = b'/'; len += 1;
+                        for c in name { full_path[len] = *c; len += 1; }
+
+                        let mut st: libc::stat = unsafe { core::mem::zeroed() };
+                        if io::lstat(&full_path[..len], &mut st) == 0 {
+                            write_classify_suffix(st.st_mode as u32);
+                        }
+                    }
+                    io::write_str(1, b"\n");
+                } else {
+                    // Column format
+                    let entry_len = name.len() + 2; // name + 2 spaces
+                    if col + entry_len > term_width && col > 0 {
+                        io::write_str(1, b"\n");
+                        col = 0;
+                    }
+                    io::write_all(1, name);
+                    io::write_str(1, b"  ");
+                    col += entry_len;
+                }
             }
 
             offset += dirent.d_reclen as usize;
         }
     }
 
-    if !one_per_line && !long_format {
+    if !one_per_line && !long_format && col > 0 {
         io::write_str(1, b"\n");
     }
 
     io::close(fd);
+}
+
+/// Format Unix timestamp as "Mon DD HH:MM" or "Mon DD  YYYY" for older files
+fn format_time(timestamp: u64) {
+    const MONTHS: [&[u8]; 12] = [
+        b"Jan", b"Feb", b"Mar", b"Apr", b"May", b"Jun",
+        b"Jul", b"Aug", b"Sep", b"Oct", b"Nov", b"Dec"
+    ];
+
+    // Simple time calculation (not handling timezones)
+    let secs_per_day = 86400u64;
+    let secs_per_hour = 3600u64;
+    let secs_per_min = 60u64;
+
+    // Days since epoch
+    let days = timestamp / secs_per_day;
+    let time_of_day = timestamp % secs_per_day;
+    let hour = (time_of_day / secs_per_hour) % 24;
+    let minute = (time_of_day % secs_per_hour) / secs_per_min;
+
+    // Calculate year, month, day (simplified - doesn't handle leap years perfectly)
+    let mut year = 1970u64;
+    let mut remaining_days = days;
+
+    loop {
+        let days_in_year = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 366 } else { 365 };
+        if remaining_days < days_in_year {
+            break;
+        }
+        remaining_days -= days_in_year;
+        year += 1;
+    }
+
+    let days_in_months: [u64; 12] = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    let mut month = 0usize;
+    for (i, &days_in_month) in days_in_months.iter().enumerate() {
+        if remaining_days < days_in_month {
+            month = i;
+            break;
+        }
+        remaining_days -= days_in_month;
+    }
+    let day = remaining_days + 1;
+
+    // Get current time to determine if we show time or year
+    let now = unsafe { libc::time(core::ptr::null_mut()) } as u64;
+    let six_months_ago = now.saturating_sub(180 * secs_per_day);
+
+    io::write_all(1, MONTHS[month]);
+    io::write_str(1, b" ");
+    if day < 10 { io::write_str(1, b" "); }
+    io::write_num(1, day);
+    io::write_str(1, b" ");
+
+    if timestamp < six_months_ago || timestamp > now {
+        // Show year for old/future files
+        io::write_str(1, b" ");
+        io::write_num(1, year);
+    } else {
+        // Show time for recent files
+        if hour < 10 { io::write_str(1, b"0"); }
+        io::write_num(1, hour);
+        io::write_str(1, b":");
+        if minute < 10 { io::write_str(1, b"0"); }
+        io::write_num(1, minute);
+    }
+}
+
+/// Write classify suffix (-F option)
+fn write_classify_suffix(mode: u32) {
+    match mode & libc::S_IFMT as u32 {
+        m if m == libc::S_IFDIR as u32 => { io::write_str(1, b"/"); }
+        m if m == libc::S_IFLNK as u32 => { io::write_str(1, b"@"); }
+        m if m == libc::S_IFIFO as u32 => { io::write_str(1, b"|"); }
+        m if m == libc::S_IFSOCK as u32 => { io::write_str(1, b"="); }
+        m if m == libc::S_IFREG as u32 => {
+            if mode & 0o111 != 0 { io::write_str(1, b"*"); }
+        }
+        _ => {}
+    }
 }
 
 /// pwd - print working directory

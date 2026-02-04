@@ -444,6 +444,9 @@ pub fn getty(argc: i32, argv: *const *const u8) -> i32 {
     // Make this the controlling terminal
     unsafe {
         libc::setsid();
+        #[cfg(target_env = "musl")]
+        libc::ioctl(fd, libc::TIOCSCTTY as libc::c_int, 0);
+        #[cfg(not(target_env = "musl"))]
         libc::ioctl(fd, libc::TIOCSCTTY as libc::c_ulong, 0);
     }
 
