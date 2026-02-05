@@ -322,8 +322,27 @@ pub fn format_num_buf(n: u64, buf: &mut [u8]) -> usize {
 }
 
 /// Format number to string (simple version that writes directly)
+///
+/// # Safety Warning
+/// This function uses a static buffer and is NOT thread-safe.
+/// The returned slice is only valid until the next call to this function.
+/// Prefer `format_u64()` with a caller-provided buffer for thread-safe usage.
+///
+/// # Example
+/// ```ignore
+/// // WRONG - data race if called from multiple threads
+/// let a = format_num(123);
+/// let b = format_num(456); // 'a' is now invalid!
+///
+/// // RIGHT - use immediately
+/// io::write_all(1, format_num(123));
+/// ```
+#[deprecated(note = "Use format_u64() with a local buffer instead - this function is not thread-safe")]
 pub fn format_num(n: u64) -> &'static [u8] {
     // Use format_u64 which already exists
+    // SAFETY: This uses a static mutable buffer which creates a data race
+    // if called from multiple threads. Caller must use the result immediately
+    // before any other call to this function.
     static mut BUF: [u8; 24] = [0; 24];
     #[allow(static_mut_refs)]
     unsafe {

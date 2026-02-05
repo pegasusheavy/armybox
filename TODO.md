@@ -757,6 +757,136 @@ An Alpine-compatible Linux distribution powered by armybox.
 
 ---
 
+## Stubbed/Incomplete Implementations (Refactoring TODO)
+
+This section tracks utilities that are currently stubbed or have incomplete implementations discovered during the refactoring effort.
+
+### Archive Utilities - Not Implemented (Complex Algorithms)
+| Utility | Status | Notes |
+|---------|--------|-------|
+| bzip2 | Stub | Burrows-Wheeler transform required |
+| bunzip2 | Stub | Calls bzip2 |
+| bzcat | Stub | Calls bzip2 |
+| xz | Stub | LZMA/XZ compression required |
+| unxz | Stub | Calls xz |
+| xzcat | Stub | Calls xz |
+| compress | Stub | LZW compression (legacy format) |
+| uncompress | Stub | Calls compress |
+
+### File Utilities - Stubs
+| Utility | Status | Notes |
+|---------|--------|-------|
+| chattr | Stub | ioctl for ext2/3/4 attributes |
+| lsattr | Stub | ioctl for ext2/3/4 attributes |
+| makedevs | Stub | Create device nodes |
+| setfattr | Stub | Extended attribute support |
+| patch | Stub | Basic patch application needed |
+
+### File Utilities - Missing Options
+| Utility | Missing | Notes |
+|---------|---------|-------|
+| chgrp | -h, -R | Symlink handling, recursive |
+| chown | -h, -R | Symlink handling, recursive |
+| chmod | -R, symbolic | Recursive, symbolic mode (u+x) |
+| cp | -i, -p | Interactive, preserve attrs |
+| mv | -i | Interactive mode |
+| rm | -i | Interactive mode |
+| touch | -a, -c, -m | Access/mod time, no-create |
+| pwd | -L | Logical path from PWD env |
+
+### Network Utilities - Not Implemented
+| Utility | Status | Notes |
+|---------|--------|-------|
+| arping | Stub | ARP request sending |
+| brctl | Stub | Bridge control |
+| ether-wake | Stub | Wake-on-LAN magic packets |
+| ftpget | Stub | FTP download |
+| ftpput | Stub | FTP upload |
+| httpd | Stub | Simple HTTP daemon |
+| ifup | Stub | Network interface up script |
+| ifdown | Stub | Network interface down script |
+| microcom | Stub | Serial terminal emulator |
+| nbd-client | Stub | Network Block Device client |
+| nbd-server | Stub | Network Block Device server |
+| slattach | Stub | Serial line attachment |
+| sntp | Stub | Simple NTP client |
+| telnet | Stub | Telnet client |
+| tftp | Stub | TFTP client |
+| traceroute | Stub | UDP/ICMP route tracing |
+| traceroute6 | Stub | IPv6 route tracing |
+| tunctl | Stub | TUN/TAP device control |
+| vconfig | Stub | VLAN configuration |
+
+### System Utilities - Stubs/Partial
+| Utility | Status | Notes |
+|---------|--------|-------|
+| i2ctransfer | Partial | Transfer not implemented |
+| insmod | Stub | Module insertion |
+| logger | Stub | Minimal syslog stub |
+| login | Stub | Session management |
+| losetup | Partial | Setup not implemented |
+| uclampset | Stub | CPU utilization clamping |
+| users | Stub | Needs utmp reading |
+| w | Stub | Needs utmp reading |
+| who | Stub | Needs utmp/wtmp reading |
+
+### Misc Utilities - Empty Stubs (do nothing)
+| Utility | Status | Notes |
+|---------|--------|-------|
+| base32 | Stub | base32 encode/decode |
+| getopt | Stub | Option parsing helper |
+| iconv | Stub | Character set conversion |
+| memeater | Stub | Memory stress test |
+| mix | Stub | Audio mixer |
+| mkpasswd | Stub | Returns fake hash |
+| od | Stub | Octal/hex dump |
+| ts | Stub | Timestamp input lines |
+| tsort | Stub | Topological sort |
+| unicode | Stub | Unicode utilities |
+| uudecode | Stub | UU decoding |
+| uuencode | Stub | UU encoding |
+
+### Editor/Package Stubs
+| Utility | Status | Notes |
+|---------|--------|-------|
+| vi | Stub | Visual text editor |
+| hexedit | Stub | Hex editor |
+| apk | Stub | Alpine package manager |
+
+### Refactoring Work Status
+| Category | Status | Notes |
+|----------|--------|-------|
+| File utilities | Complete | Extracted to individual files |
+| Text utilities | Complete | Extracted to individual files |
+| System utilities | Complete | Extracted to individual files |
+| Network utilities | Complete | 39 utilities extracted |
+| Archive utilities | Complete | 7 utilities extracted |
+| Misc utilities | In Progress | ~50 utilities to extract |
+| Shell utilities | Pending | Need extraction from shell/mod.rs |
+| Process utilities | Check | Verify process/mod.rs |
+
+### Priority Implementation Targets
+
+**High Priority (Common Utilities)**
+1. vi - Essential editor for scripts
+2. bzip2/bunzip2 - Common compression format
+3. xz/unxz - Modern compression format
+4. traceroute - Essential network diagnostic
+5. patch - Essential for applying patches
+
+**Medium Priority**
+1. base32 - Encoding utility
+2. od - Binary file inspection
+3. getopt - Shell script option parsing
+4. iconv - Character set conversion
+
+**Low Priority (Niche/Legacy)**
+1. compress/uncompress - Legacy LZW format
+2. uuencode/uudecode - Legacy encoding
+3. memeater/mix - Specialty utilities
+
+---
+
 ## Notes
 - Prioritize memory safety over raw performance
 - Use `unsafe` only when absolutely necessary and document reasoning

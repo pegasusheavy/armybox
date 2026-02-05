@@ -1,11 +1,54 @@
 //! Low-level I/O primitives using libc
 //!
 //! This module provides basic I/O operations without std dependency.
+//!
+//! # Safety Architecture
+//!
+//! This module wraps unsafe libc functions to provide a safer Rust interface.
+//! The general safety principles followed are:
+//!
+//! 1. **Path handling**: All path arguments are `&[u8]` and are copied into
+//!    a null-terminated buffer before passing to libc. Paths longer than
+//!    `PATH_MAX` (4096 bytes) are rejected with an error return.
+//!
+//! 2. **Buffer management**: Functions that fill buffers (like `read`, `getcwd`)
+//!    take mutable slices and respect their bounds.
+//!
+//! 3. **Pointer validity**: Functions returning pointers (`getenv`, `ttyname`)
+//!    return `Option` types and document lifetime constraints.
+//!
+//! 4. **Error handling**: System call errors are propagated as negative return
+//!    values or `None`, matching POSIX conventions.
+//!
+//! # Thread Safety
+//!
+//! Most functions in this module are thread-safe as they wrap thread-safe
+//! POSIX functions. Exceptions are documented on the individual functions.
+//! Notable non-thread-safe operations include:
+//! - `getenv()` - returned data can be invalidated by concurrent `setenv()`
+//! - Functions using `readdir()` on the same `DIR*` from multiple threads
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
 use core::ptr;
+
+/// Maximum path length supported (matches PATH_MAX on Linux)
+pub const PATH_MAX: usize = 4096;
+
+/// Copy a path into a null-terminated buffer
+///
+/// Returns `true` if successful, `false` if path is too long.
+/// This is a safe helper that ensures proper null termination.
+#[inline]
+pub fn path_to_cstr(path: &[u8], buf: &mut [u8; PATH_MAX]) -> bool {
+    if path.len() >= PATH_MAX {
+        return false;
+    }
+    buf[..path.len()].copy_from_slice(path);
+    buf[path.len()] = 0;
+    true
+}
 
 /// Write all bytes to a file descriptor
 pub fn write_all(fd: i32, buf: &[u8]) -> isize {
@@ -123,6 +166,18 @@ pub fn open(path: &[u8], flags: i32, mode: u32) -> i32 {
 /// Close a file descriptor
 pub fn close(fd: i32) -> i32 {
     unsafe { libc::close(fd) }
+}
+
+/// Create a zeroed stat buffer
+///
+/// This is safe because `libc::stat` is a POD type (Plain Old Data)
+/// that can be safely zero-initialized. Using this helper centralizes
+/// the unsafe `mem::zeroed()` call.
+#[inline]
+pub fn stat_zeroed() -> libc::stat {
+    // SAFETY: libc::stat is a C struct with no invariants that would be
+    // violated by zero initialization. All fields are numeric types.
+    unsafe { core::mem::zeroed() }
 }
 
 /// Get file status
@@ -446,6 +501,26 @@ pub fn ttyname(fd: i32) -> Option<Vec<u8>> {
 }
 
 /// Get environment variable
+///
+/// # Safety Warning
+/// The returned slice points to libc-managed memory. This memory can be
+/// invalidated by any call to `setenv`, `unsetenv`, or `putenv`. The caller
+/// must copy the data if it needs to persist across such calls.
+///
+/// The `'static` lifetime is a lie - the data is only valid until the
+/// environment is modified. This is an inherent limitation of the POSIX API.
+///
+/// # Example
+/// ```ignore
+/// // SAFE: immediate use
+/// if let Some(val) = getenv(b"PATH") {
+///     io::write_all(1, val);
+/// }
+///
+/// // DANGEROUS: storing reference across setenv
+/// let path = getenv(b"PATH");
+/// setenv(b"FOO", b"bar"); // path may now be invalid!
+/// ```
 pub fn getenv(name: &[u8]) -> Option<&'static [u8]> {
     let mut name_buf = [0u8; 256];
     if name.len() >= name_buf.len() {
@@ -454,16 +529,82 @@ pub fn getenv(name: &[u8]) -> Option<&'static [u8]> {
     name_buf[..name.len()].copy_from_slice(name);
     name_buf[name.len()] = 0;
 
+    // SAFETY: libc::getenv returns a pointer to environment memory.
+    // This memory is managed by libc and can be invalidated by setenv/unsetenv.
     let ptr = unsafe { libc::getenv(name_buf.as_ptr() as *const i8) };
     if ptr.is_null() {
         None
     } else {
-        let mut len = 0;
-        while unsafe { *ptr.add(len) } != 0 {
-            len += 1;
-        }
+        // SAFETY: We scan for null terminator with a reasonable limit (via strlen)
+        let len = strlen(ptr as *const u8);
+        // SAFETY: The slice is valid as long as no environment modification occurs.
+        // The 'static lifetime is technically incorrect but matches POSIX semantics.
         Some(unsafe { core::slice::from_raw_parts(ptr as *const u8, len) })
     }
+}
+
+/// Set an environment variable
+///
+/// Sets the environment variable `name` to `value`. If `overwrite` is true,
+/// an existing variable will be replaced; otherwise it will be left unchanged.
+///
+/// # Returns
+/// 0 on success, -1 on error (e.g., out of memory or invalid name).
+///
+/// # Safety Note
+/// This function invalidates any pointers previously returned by `getenv()`
+/// for any environment variable, not just the one being set.
+pub fn setenv(name: &[u8], value: &[u8], overwrite: bool) -> i32 {
+    // Validate name doesn't contain '=' or is empty
+    if name.is_empty() || name.contains(&b'=') {
+        return -1;
+    }
+
+    let mut name_buf = [0u8; 256];
+    let mut value_buf = [0u8; 4096];
+
+    if name.len() >= name_buf.len() || value.len() >= value_buf.len() {
+        return -1;
+    }
+
+    name_buf[..name.len()].copy_from_slice(name);
+    name_buf[name.len()] = 0;
+    value_buf[..value.len()].copy_from_slice(value);
+    value_buf[value.len()] = 0;
+
+    // SAFETY: Both buffers are properly null-terminated and within bounds.
+    // The libc function copies the data, so our stack buffers can go out of scope.
+    unsafe {
+        libc::setenv(
+            name_buf.as_ptr() as *const i8,
+            value_buf.as_ptr() as *const i8,
+            if overwrite { 1 } else { 0 },
+        )
+    }
+}
+
+/// Unset (remove) an environment variable
+///
+/// # Returns
+/// 0 on success, -1 on error.
+///
+/// # Safety Note
+/// This function may invalidate pointers previously returned by `getenv()`.
+pub fn unsetenv(name: &[u8]) -> i32 {
+    if name.is_empty() || name.contains(&b'=') {
+        return -1;
+    }
+
+    let mut name_buf = [0u8; 256];
+    if name.len() >= name_buf.len() {
+        return -1;
+    }
+
+    name_buf[..name.len()].copy_from_slice(name);
+    name_buf[name.len()] = 0;
+
+    // SAFETY: Buffer is properly null-terminated.
+    unsafe { libc::unsetenv(name_buf.as_ptr() as *const i8) }
 }
 
 /// Send signal to process
@@ -512,10 +653,24 @@ pub fn exit(code: i32) -> ! {
 // Helper functions for argument parsing
 // ============================================================================
 
-/// Get C string length
+/// Get C string length with a safety limit
+///
+/// # Safety
+/// The caller must ensure:
+/// - `s` is a valid pointer to a null-terminated C string
+/// - The string (including null terminator) fits within allocated memory
+///
+/// This function limits scanning to 1MB to prevent runaway reads on
+/// non-terminated strings. Returns the length excluding null terminator.
 pub fn strlen(s: *const u8) -> usize {
+    const MAX_STRLEN: usize = 1024 * 1024; // 1MB safety limit
     let mut len = 0;
-    while unsafe { *s.add(len) } != 0 {
+    // SAFETY: We read one byte at a time, checking for null terminator.
+    // The MAX_STRLEN limit prevents unbounded reads if string is not terminated.
+    while len < MAX_STRLEN {
+        if unsafe { *s.add(len) } == 0 {
+            break;
+        }
         len += 1;
     }
     len
@@ -527,8 +682,21 @@ pub fn strlen_arr(s: &[u8]) -> usize {
 }
 
 /// Convert C string pointer to slice
+///
+/// # Safety
+/// The caller must ensure:
+/// - `s` is a valid, non-null pointer to a null-terminated C string
+/// - The memory remains valid for the `'static` lifetime (or the caller
+///   must ensure the slice is not used after the memory is freed)
+/// - The string is properly null-terminated within allocated bounds
+///
+/// The `'static` lifetime is often incorrect - callers should typically
+/// constrain the actual lifetime based on the source of the pointer.
 pub unsafe fn cstr_to_slice(s: *const u8) -> &'static [u8] {
+    debug_assert!(!s.is_null(), "cstr_to_slice called with null pointer");
     let len = strlen(s);
+    // SAFETY: Caller guarantees pointer validity and null termination.
+    // The 'static lifetime is the caller's responsibility to honor.
     unsafe { core::slice::from_raw_parts(s, len) }
 }
 
@@ -543,12 +711,29 @@ pub fn starts_with(s: &[u8], prefix: &[u8]) -> bool {
 }
 
 /// Get dirent name as u8 slice
-/// On Linux, d_name is [i8; 256], we need to convert to u8
+///
+/// On Linux, d_name is [i8; 256], we need to convert to u8.
+///
+/// # Safety
+/// The caller must ensure:
+/// - `entry` is a valid pointer to a `libc::dirent` structure
+/// - The dirent was obtained from a valid `readdir()` call
+/// - The pointer remains valid (not invalidated by `closedir` or another `readdir`)
+///
+/// The returned slice is only valid until the next `readdir()` call on the
+/// same directory stream, or until `closedir()` is called.
+///
+/// # Returns
+/// A tuple of (name_slice, length). The slice does NOT include the null terminator.
 pub unsafe fn dirent_name(entry: *const libc::dirent) -> (&'static [u8], usize) {
+    debug_assert!(!entry.is_null(), "dirent_name called with null pointer");
+    // SAFETY: Caller guarantees entry is a valid dirent pointer.
+    // d_name is a fixed-size array within the struct, so access is safe.
     unsafe {
         let name_ptr = (*entry).d_name.as_ptr();
         let mut len = 0;
-        while *name_ptr.add(len) != 0 && len < 255 {
+        // Limit to 255 to stay within d_name bounds (256 bytes including null)
+        while len < 255 && *name_ptr.add(len) != 0 {
             len += 1;
         }
         let slice = core::slice::from_raw_parts(name_ptr as *const u8, len);

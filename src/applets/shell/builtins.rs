@@ -1,0 +1,297 @@
+//! Shell built-in commands
+//!
+//! This module implements the built-in commands for the shell, including:
+//! - exit: Exit the shell with optional status code
+//! - cd: Change current directory
+//! - pwd: Print working directory
+//! - export: Export variables to environment
+//! - unset: Remove variables
+//! - echo: Print arguments
+//! - test/[: Evaluate conditional expressions
+//! - true/false/:: Return success/failure/no-op
+//! - source/.: Execute script in current environment
+//! - read: Read line from stdin into variable
+//! - exec: Replace shell with command
+//! - set: Set shell options
+//! - shift: Shift positional parameters
+//! - return: Return from function or sourced script
+
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
+#[cfg(feature = "alloc")]
+use crate::io;
+#[cfg(feature = "alloc")]
+use crate::sys;
+
+#[cfg(feature = "alloc")]
+use super::state::Shell;
+#[cfg(feature = "alloc")]
+use super::parser::Command;
+#[cfg(feature = "alloc")]
+use super::execute::{execute_script, execute_command};
+#[cfg(feature = "alloc")]
+use super::util::{file_exists, is_regular_file, is_directory, is_readable, is_writable, is_executable, is_symlink, file_size};
+
+/// Execute a built-in command if recognized
+///
+/// Returns true if the command was handled as a builtin, false otherwise.
+/// Handles: exit, cd, export, unset, set, pwd, echo, test, [, true, false, :,
+/// read, shift, return, break, continue, exec, eval, source, .
+#[cfg(feature = "alloc")]
+pub(super) fn execute_builtin(shell: &mut Shell, cmd: &Command) -> bool {
+    if cmd.args.is_empty() { return true; }
+
+    let name = &cmd.args[0];
+
+    if name == b"exit" {
+        shell.should_exit = true;
+        shell.exit_code = if cmd.args.len() > 1 {
+            sys::parse_i64(&cmd.args[1]).unwrap_or(0) as i32
+        } else {
+            shell.last_status
+        };
+        return true;
+    }
+
+    if name == b"cd" {
+        let path = if cmd.args.len() > 1 {
+            &cmd.args[1]
+        } else if let Some(home) = io::getenv(b"HOME") {
+            home
+        } else {
+            b"/root"
+        };
+
+        if io::chdir(path) < 0 {
+            io::write_str(2, b"cd: ");
+            io::write_all(2, path);
+            io::write_str(2, b": No such directory\n");
+            shell.last_status = 1;
+        } else {
+            shell.last_status = 0;
+        }
+        return true;
+    }
+
+    if name == b"pwd" {
+        let mut buf = [0u8; 4096];
+        unsafe {
+            if !libc::getcwd(buf.as_mut_ptr() as *mut i8, buf.len()).is_null() {
+                let len = io::strlen(buf.as_ptr());
+                io::write_all(1, &buf[..len]);
+                io::write_str(1, b"\n");
+                shell.last_status = 0;
+            } else {
+                shell.last_status = 1;
+            }
+        }
+        return true;
+    }
+
+    if name == b"export" {
+        if cmd.args.len() > 1 {
+            let arg = &cmd.args[1];
+            if let Some(eq_pos) = arg.iter().position(|&c| c == b'=') {
+                let name_part = &arg[..eq_pos];
+                let value_part = &arg[eq_pos + 1..];
+                // Use io::setenv which handles null-termination safely
+                io::setenv(name_part, value_part, true);
+            } else {
+                // Export existing variable
+                if let Some(value) = shell.get_var(arg) {
+                    io::setenv(arg, value, true);
+                }
+            }
+        }
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"unset" {
+        if cmd.args.len() > 1 {
+            let var = &cmd.args[1];
+            shell.variables.remove(var);
+            // Use io::unsetenv which handles null-termination safely
+            io::unsetenv(var);
+        }
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"echo" {
+        let mut newline = true;
+        let mut start = 1;
+
+        if cmd.args.len() > 1 && cmd.args[1] == b"-n" {
+            newline = false;
+            start = 2;
+        }
+
+        let mut first = true;
+        for arg in &cmd.args[start..] {
+            if !first { io::write_str(1, b" "); }
+            io::write_all(1, arg);
+            first = false;
+        }
+        if newline { io::write_str(1, b"\n"); }
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"test" || name == b"[" {
+        shell.last_status = execute_test(&cmd.args[1..]);
+        return true;
+    }
+
+    if name == b"true" {
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"false" {
+        shell.last_status = 1;
+        return true;
+    }
+
+    if name == b":" {
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"source" || name == b"." {
+        if cmd.args.len() > 1 {
+            let fd = io::open(&cmd.args[1], libc::O_RDONLY, 0);
+            if fd >= 0 {
+                let content = io::read_all(fd);
+                io::close(fd);
+                execute_script(shell, &content);
+            } else {
+                io::write_str(2, b"sh: cannot open ");
+                io::write_all(2, &cmd.args[1]);
+                io::write_str(2, b"\n");
+                shell.last_status = 1;
+            }
+        }
+        return true;
+    }
+
+    if name == b"read" {
+        if cmd.args.len() > 1 {
+            let var_name = &cmd.args[1];
+            let mut line = Vec::new();
+            let mut buf = [0u8; 1];
+            loop {
+                let n = io::read(0, &mut buf);
+                if n <= 0 || buf[0] == b'\n' { break; }
+                line.push(buf[0]);
+            }
+            shell.set_var(var_name, &line);
+        }
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"exec" {
+        if cmd.args.len() > 1 {
+            let mut cmd_exec = Command::new();
+            for arg in &cmd.args[1..] {
+                cmd_exec.args.push(arg.clone());
+            }
+            execute_command(&cmd_exec);
+            shell.last_status = 127;
+        }
+        return true;
+    }
+
+    if name == b"set" {
+        if cmd.args.len() > 1 && cmd.args[1] == b"-e" {
+            // set -e: exit on error (just acknowledge, don't implement fully)
+        }
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"shift" {
+        // shift - in scripts this shifts positional parameters
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"return" {
+        shell.last_status = if cmd.args.len() > 1 {
+            sys::parse_i64(&cmd.args[1]).unwrap_or(0) as i32
+        } else {
+            0
+        };
+        return true;
+    }
+
+    false
+}
+
+/// Execute test command (test/[)
+///
+/// Implements conditional expressions:
+/// - Unary tests: -e, -f, -d, -r, -w, -x, -s, -n, -z, -L/-h
+/// - Binary tests: =, ==, !=, -eq, -ne, -lt, -gt, -le, -ge
+///
+/// Returns 0 for true, 1 for false.
+#[cfg(feature = "alloc")]
+pub(super) fn execute_test(args: &[Vec<u8>]) -> i32 {
+    if args.is_empty() { return 1; }
+
+    // Remove trailing ] if present
+    let args: Vec<&[u8]> = args.iter()
+        .map(|a| a.as_slice())
+        .filter(|a| *a != b"]")
+        .collect();
+
+    if args.is_empty() { return 1; }
+
+    // Single arg: true if non-empty
+    if args.len() == 1 {
+        return if args[0].is_empty() { 1 } else { 0 };
+    }
+
+    // Two args: unary operators
+    if args.len() == 2 {
+        let op = args[0];
+        let arg = args[1];
+
+        if op == b"-n" { return if arg.is_empty() { 1 } else { 0 }; }
+        if op == b"-z" { return if arg.is_empty() { 0 } else { 1 }; }
+        if op == b"-e" || op == b"-a" { return if file_exists(arg) { 0 } else { 1 }; }
+        if op == b"-f" { return if is_regular_file(arg) { 0 } else { 1 }; }
+        if op == b"-d" { return if is_directory(arg) { 0 } else { 1 }; }
+        if op == b"-r" { return if is_readable(arg) { 0 } else { 1 }; }
+        if op == b"-w" { return if is_writable(arg) { 0 } else { 1 }; }
+        if op == b"-x" { return if is_executable(arg) { 0 } else { 1 }; }
+        if op == b"-s" { return if file_size(arg) > 0 { 0 } else { 1 }; }
+        if op == b"-L" || op == b"-h" { return if is_symlink(arg) { 0 } else { 1 }; }
+        if op == b"!" { return execute_test(&[arg.to_vec()]) ^ 1; }
+    }
+
+    // Three args: binary operators
+    if args.len() == 3 {
+        let left = args[0];
+        let op = args[1];
+        let right = args[2];
+
+        if op == b"=" || op == b"==" { return if left == right { 0 } else { 1 }; }
+        if op == b"!=" { return if left != right { 0 } else { 1 }; }
+
+        // Numeric comparisons
+        let ln = sys::parse_i64(left).unwrap_or(0);
+        let rn = sys::parse_i64(right).unwrap_or(0);
+
+        if op == b"-eq" { return if ln == rn { 0 } else { 1 }; }
+        if op == b"-ne" { return if ln != rn { 0 } else { 1 }; }
+        if op == b"-lt" { return if ln < rn { 0 } else { 1 }; }
+        if op == b"-le" { return if ln <= rn { 0 } else { 1 }; }
+        if op == b"-gt" { return if ln > rn { 0 } else { 1 }; }
+        if op == b"-ge" { return if ln >= rn { 0 } else { 1 }; }
+    }
+
+    1
+}

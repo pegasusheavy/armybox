@@ -5,6 +5,7 @@
 mod file;
 mod text;
 mod system;
+mod process;
 mod misc;
 mod network;
 mod archive;
@@ -17,7 +18,7 @@ mod package;
 use crate::io;
 
 /// Number of applets
-pub const APPLET_COUNT: usize = 293;
+pub const APPLET_COUNT: usize = 296;
 
 /// Get argument as byte slice
 #[inline]
@@ -138,14 +139,14 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     if name == b"env" { return Some(system::env); }
     if name == b"printenv" { return Some(system::printenv); }
     if name == b"tty" { return Some(system::tty); }
-    if name == b"kill" { return Some(system::kill); }
-    if name == b"killall" { return Some(system::killall); }
-    if name == b"killall5" { return Some(system::killall5); }
-    if name == b"ps" { return Some(system::ps); }
-    if name == b"pgrep" { return Some(system::pgrep); }
-    if name == b"pkill" { return Some(system::pkill); }
-    if name == b"pidof" { return Some(system::pidof); }
-    if name == b"pwdx" { return Some(system::pwdx); }
+    if name == b"kill" { return Some(process::kill); }
+    if name == b"killall" { return Some(process::killall); }
+    if name == b"killall5" { return Some(process::killall5); }
+    if name == b"ps" { return Some(process::ps); }
+    if name == b"pgrep" { return Some(process::pgrep); }
+    if name == b"pkill" { return Some(process::pkill); }
+    if name == b"pidof" { return Some(process::pidof); }
+    if name == b"pwdx" { return Some(process::pwdx); }
     if name == b"sleep" { return Some(system::sleep); }
     if name == b"usleep" { return Some(system::usleep); }
     if name == b"uptime" { return Some(system::uptime); }
@@ -160,11 +161,11 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     if name == b"reboot" { return Some(system::reboot); }
     if name == b"poweroff" { return Some(system::poweroff); }
     if name == b"chroot" { return Some(system::chroot); }
-    if name == b"nice" { return Some(system::nice); }
-    if name == b"renice" { return Some(system::renice); }
-    if name == b"nohup" { return Some(system::nohup); }
-    if name == b"setsid" { return Some(system::setsid); }
-    if name == b"timeout" { return Some(system::timeout); }
+    if name == b"nice" { return Some(process::nice); }
+    if name == b"renice" { return Some(process::renice); }
+    if name == b"nohup" { return Some(process::nohup); }
+    if name == b"setsid" { return Some(process::setsid); }
+    if name == b"timeout" { return Some(process::timeout); }
     if name == b"logname" { return Some(system::logname); }
     if name == b"logger" { return Some(system::logger); }
     if name == b"dnsdomainname" { return Some(system::dnsdomainname); }
@@ -185,14 +186,14 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     if name == b"lsmod" { return Some(system::lsmod); }
     if name == b"pivot_root" { return Some(system::pivot_root); }
     if name == b"readahead" { return Some(system::readahead_cmd); }
-    if name == b"taskset" { return Some(system::taskset); }
+    if name == b"taskset" { return Some(process::taskset); }
     if name == b"rfkill" { return Some(system::rfkill); }
-    if name == b"ionice" { return Some(system::ionice); }
-    if name == b"chrt" { return Some(system::chrt); }
+    if name == b"ionice" { return Some(process::ionice); }
+    if name == b"chrt" { return Some(process::chrt); }
     // New toybox applets
     if name == b"acpi" { return Some(system::acpi); }
     if name == b"cal" { return Some(system::cal); }
-    if name == b"top" { return Some(system::top); }
+    if name == b"top" { return Some(process::top); }
     if name == b"vmstat" { return Some(system::vmstat); }
     if name == b"watch" { return Some(system::watch); }
     if name == b"hwclock" { return Some(system::hwclock); }
@@ -200,16 +201,16 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     if name == b"shuf" { return Some(system::shuf); }
     if name == b"mkswap" { return Some(system::mkswap); }
     if name == b"nologin" { return Some(system::nologin); }
-    if name == b"nsenter" { return Some(system::nsenter); }
-    if name == b"unshare" { return Some(system::unshare); }
-    if name == b"pmap" { return Some(system::pmap); }
+    if name == b"nsenter" { return Some(process::nsenter); }
+    if name == b"unshare" { return Some(process::unshare); }
+    if name == b"pmap" { return Some(process::pmap); }
     if name == b"su" { return Some(system::su); }
     if name == b"login" { return Some(system::login); }
     if name == b"eject" { return Some(system::eject); }
     if name == b"blockdev" { return Some(system::blockdev); }
-    if name == b"prlimit" { return Some(system::prlimit); }
+    if name == b"prlimit" { return Some(process::prlimit); }
     if name == b"rtcwake" { return Some(system::rtcwake); }
-    if name == b"uclampset" { return Some(system::uclampset); }
+    if name == b"uclampset" { return Some(process::uclampset); }
     if name == b"ulimit" { return Some(system::ulimit); }
 
     // Misc utilities
@@ -310,6 +311,9 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     if name == b"unzip" { return Some(archive::unzip); }
     if name == b"compress" { return Some(archive::compress); }
     if name == b"uncompress" { return Some(archive::uncompress); }
+    if name == b"lzma" { return Some(archive::lzma); }
+    if name == b"unlzma" { return Some(archive::unlzma); }
+    if name == b"lzcat" { return Some(archive::lzcat); }
 
     // Editors
     if name == b"vi" { return Some(editors::vi); }
@@ -357,8 +361,8 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     if name == b"i2cset" { return Some(system::i2cset); }
     if name == b"i2ctransfer" { return Some(system::i2ctransfer); }
     if name == b"inotifyd" { return Some(system::inotifyd); }
-    if name == b"iorenice" { return Some(system::iorenice); }
-    if name == b"iotop" { return Some(system::iotop); }
+    if name == b"iorenice" { return Some(process::iorenice); }
+    if name == b"iotop" { return Some(process::iotop); }
     if name == b"linux32" { return Some(system::linux32); }
     if name == b"lspci" { return Some(system::lspci); }
     if name == b"lsusb" { return Some(system::lsusb); }
@@ -403,6 +407,7 @@ pub fn list_applets() {
         b"ipaddr", b"ipcalc", b"iplink", b"ipneigh", b"iproute", b"iprule",
         b"kill", b"killall", b"killall5",
         b"link", b"linux32", b"linuxrc", b"ln", b"logger", b"login", b"logname", b"losetup", b"ls", b"lsattr", b"lsmod", b"lspci", b"lsusb",
+        b"lzcat", b"lzma",
         b"makedevs", b"mcookie", b"md5sum", b"memeater", b"mesg", b"microcom", b"mix", b"mkdir", b"mkfifo", b"mknod", b"mkpasswd", b"mkswap", b"mktemp",
         b"modinfo", b"modprobe", b"mount", b"mountpoint", b"mv",
         b"nameif", b"nbd-client", b"nbd-server", b"nc", b"netcat", b"netstat", b"nice", b"nl", b"nohup", b"nologin", b"nproc", b"nsenter", b"nslookup",
@@ -416,7 +421,7 @@ pub fn list_applets() {
         b"swapoff", b"swapon", b"switch_root", b"sync", b"sysctl",
         b"tac", b"tail", b"tar", b"taskset", b"tee", b"telinit", b"telnet", b"test", b"tftp", b"time", b"timeout",
         b"tmux", b"top", b"touch", b"toybox", b"tr", b"traceroute", b"traceroute6", b"true", b"truncate", b"ts", b"tsort", b"tty", b"tunctl",
-        b"uclampset", b"ulimit", b"umount", b"uname", b"uncompress", b"unexpand", b"unicode", b"uniq", b"unix2dos", b"unlink",
+        b"uclampset", b"ulimit", b"umount", b"uname", b"uncompress", b"unexpand", b"unicode", b"uniq", b"unix2dos", b"unlink", b"unlzma",
         b"unshare", b"unxz", b"unzip", b"uptime", b"users", b"usleep", b"uudecode", b"uuencode", b"uuidgen",
         b"vconfig", b"vi", b"view", b"vmstat",
         b"w", b"watch", b"watchdog", b"wc", b"wget", b"which", b"who", b"whoami",
