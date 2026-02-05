@@ -776,11 +776,17 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 ### File Utilities - Stubs
 | Utility | Status | Notes |
 |---------|--------|-------|
-| chattr | Stub | ioctl for ext2/3/4 attributes |
-| lsattr | Stub | ioctl for ext2/3/4 attributes |
-| makedevs | Stub | Create device nodes |
-| setfattr | Stub | Extended attribute support |
-| patch | Stub | Basic patch application needed |
+| (none) | - | All file utilities fully implemented |
+
+### File Utilities - Fully Implemented (previously marked as stubs)
+| Utility | Status | Notes |
+|---------|--------|-------|
+| chattr | Complete | ioctl for ext2/3/4 attributes with +/-/= modes |
+| lsattr | Complete | ioctl for ext2/3/4 attributes with -l long format |
+| makedevs | Complete | Device node creation from table or command line |
+| setfattr | Complete | Extended attribute support with -n/-v/-x options |
+| patch | Complete | Unified diff parsing with -p/-i/-o/-R/-N/-b options |
+| fstype | Complete | Filesystem detection via magic numbers |
 
 ### File Utilities - Missing Options
 | Utility | Missing | Notes |
@@ -797,7 +803,6 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 ### Network Utilities - Not Implemented
 | Utility | Status | Notes |
 |---------|--------|-------|
-| brctl | Stub | Bridge control |
 | httpd | Stub | Simple HTTP daemon |
 | microcom | Stub | Serial terminal emulator |
 | nbd-client | Stub | Network Block Device client |
@@ -820,16 +825,14 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 | traceroute6 | Complete | IPv6 route tracing |
 | tunctl | Complete | TUN/TAP device control |
 | vconfig | Complete | VLAN configuration |
+| brctl | Complete | Bridge admin with addbr/delbr/addif/delif/show/stp/setfd/sethello/setmaxage/setageing |
 
 ### System Utilities - Stubs/Partial
 | Utility | Status | Notes |
 |---------|--------|-------|
 | i2ctransfer | Partial | Transfer not implemented |
 | login | Stub | Session management |
-| losetup | Partial | Setup not implemented |
 | uclampset | Stub | CPU utilization clamping |
-| users | Stub | Needs utmp reading |
-| who | Stub | Needs utmp/wtmp reading |
 
 ### System Utilities - Fully Implemented
 | Utility | Status | Notes |
@@ -847,6 +850,9 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 | ulimit | Complete | All resource limits |
 | unshare | Complete | Namespace unsharing |
 | pmap | Complete | Process memory map |
+| losetup | Complete | Loop device setup with -a/-d/-f/-o/-r/-P options |
+| who | Complete | Full utmp parsing with -a/-b/-d/-H/-l/-m/-q/-r/-s/-t/-T/-u options |
+| users | Complete | User list from utmp |
 
 ### Misc Utilities - Stubs
 | Utility | Status | Notes |
@@ -872,9 +878,9 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 ### Editor/Package Status
 | Utility | Status | Notes |
 |---------|--------|-------|
-| vi | Implemented | Visual text editor with modal editing |
-| hexedit | Stub | Hex editor |
-| apk | Implemented | Alpine package manager (optional feature) |
+| vi | Complete | Visual text editor with modal editing, search, yank/paste |
+| hexedit | Complete | Hex editor with navigation, editing, save |
+| apk | Complete | Alpine package manager (optional feature) |
 
 ### Refactoring Work Status
 | Category | Status | Notes |
@@ -909,14 +915,22 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 3. ~~memeater~~ - ✅ Implemented
 
 **Remaining True Stubs**
-- bzip2/xz family - Complex compression algorithms
-- vi/hexedit - Full-featured editors
-- patch - Diff application
-- compress/uncompress - Legacy LZW
+- bzip2/xz family - Complex compression algorithms (Burrows-Wheeler / LZMA)
+- compress/uncompress - Legacy LZW compression
 - httpd - HTTP server daemon
-- brctl - Bridge control
-- microcom - Serial terminal
+- microcom - Serial terminal emulator
 - nbd-client/server - Network block device
+- login - Session management with PAM
+- mix - Audio mixer (OSS/ALSA)
+
+**Recently Completed (previously listed as stubs)**
+- vi - Full modal editor with search, yank/paste, commands
+- hexedit - Hex editor with navigation and editing
+- patch - Unified diff parser and applier
+- brctl - Bridge control with all subcommands
+- who/users - Full utmp reading
+- chattr/lsattr - ext2/3/4 file attributes
+- losetup - Loop device setup
 
 ---
 
