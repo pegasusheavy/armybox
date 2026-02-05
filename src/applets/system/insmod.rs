@@ -2,6 +2,9 @@
 //!
 //! Insert a loadable module into the kernel.
 
+extern crate alloc;
+use alloc::vec::Vec;
+use alloc::vec;
 use crate::io;
 use crate::sys;
 use crate::applets::get_arg;
@@ -10,19 +13,41 @@ use crate::applets::get_arg;
 ///
 /// # Synopsis
 /// ```text
-/// insmod module.ko
+/// insmod module.ko [module_params...]
 /// ```
 ///
 /// # Description
-/// Insert a loadable module into the kernel. This is a stub implementation.
+/// Insert a loadable module into the kernel using the init_module syscall.
+/// Module parameters can be passed as additional arguments.
 ///
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
+#[cfg(target_os = "linux")]
 pub fn insmod(argc: i32, argv: *const *const u8) -> i32 {
-    if argc < 2 { return 1; }
-    let path = unsafe { get_arg(argv, 1).unwrap() };
+    if argc < 2 {
+        io::write_str(2, b"Usage: insmod MODULE [params...]\n");
+        return 1;
+    }
 
+    let path = match unsafe { get_arg(argv, 1) } {
+        Some(p) => p,
+        None => return 1,
+    };
+
+    // Collect module parameters
+    let mut params = Vec::new();
+    for i in 2..argc {
+        if let Some(arg) = unsafe { get_arg(argv, i) } {
+            if !params.is_empty() {
+                params.push(b' ');
+            }
+            params.extend_from_slice(arg);
+        }
+    }
+    params.push(0); // Null terminate
+
+    // Open and read the module file
     let fd = io::open(path, libc::O_RDONLY, 0);
     if fd < 0 {
         sys::perror(path);
@@ -31,12 +56,79 @@ pub fn insmod(argc: i32, argv: *const *const u8) -> i32 {
 
     // Get file size
     let size = unsafe { libc::lseek(fd, 0, libc::SEEK_END) };
+    if size < 0 {
+        sys::perror(b"lseek");
+        io::close(fd);
+        return 1;
+    }
     unsafe { libc::lseek(fd, 0, libc::SEEK_SET) };
 
-    // This would need mmap and init_module syscall
+    // Read the entire module into memory
+    let mut module_data: Vec<u8> = vec![0; size as usize];
+    let mut total_read = 0usize;
+
+    while total_read < size as usize {
+        let n = io::read(fd, &mut module_data[total_read..]);
+        if n <= 0 {
+            if n < 0 {
+                sys::perror(path);
+            } else {
+                io::write_str(2, b"insmod: unexpected end of file\n");
+            }
+            io::close(fd);
+            return 1;
+        }
+        total_read += n as usize;
+    }
     io::close(fd);
-    let _ = size;
-    io::write_str(2, b"insmod: not fully implemented\n");
+
+    // Validate ELF magic
+    if module_data.len() < 4 || &module_data[0..4] != b"\x7FELF" {
+        io::write_str(2, b"insmod: not a valid ELF module\n");
+        return 1;
+    }
+
+    // Call init_module syscall
+    // int init_module(void *module_image, unsigned long len, const char *param_values);
+    let ret = unsafe {
+        libc::syscall(
+            libc::SYS_init_module,
+            module_data.as_ptr() as *const libc::c_void,
+            module_data.len() as libc::c_ulong,
+            params.as_ptr() as *const libc::c_char,
+        )
+    };
+
+    if ret != 0 {
+        let errno = unsafe { *libc::__errno_location() };
+        io::write_str(2, b"insmod: cannot insert '");
+        io::write_all(2, path);
+        io::write_str(2, b"': ");
+
+        // Provide helpful error messages
+        match errno {
+            libc::ENOEXEC => { io::write_str(2, b"Invalid module format\n"); }
+            libc::ENOENT => { io::write_str(2, b"Unknown symbol in module\n"); }
+            libc::EEXIST => { io::write_str(2, b"Module already loaded\n"); }
+            libc::EPERM => { io::write_str(2, b"Operation not permitted\n"); }
+            libc::ENOMEM => { io::write_str(2, b"Out of memory\n"); }
+            libc::EBUSY => { io::write_str(2, b"Module is busy\n"); }
+            libc::EOVERFLOW => { io::write_str(2, b"Module too large\n"); }
+            _ => {
+                io::write_str(2, b"Error ");
+                io::write_num(2, errno as u64);
+                io::write_str(2, b"\n");
+            }
+        }
+        return 1;
+    }
+
+    0
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn insmod(_argc: i32, _argv: *const *const u8) -> i32 {
+    io::write_str(2, b"insmod: only available on Linux\n");
     1
 }
 
