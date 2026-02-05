@@ -800,13 +800,13 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 | touch | -a, -c, -m | Access/mod time, no-create |
 | pwd | -L | Logical path from PWD env |
 
-### Network Utilities - Not Implemented
+### Network Utilities - Additional Implementations (previously marked as stubs)
 | Utility | Status | Notes |
 |---------|--------|-------|
-| httpd | Stub | Simple HTTP daemon |
-| microcom | Stub | Serial terminal emulator |
-| nbd-client | Stub | Network Block Device client |
-| nbd-server | Stub | Network Block Device server |
+| httpd | Complete | HTTP server with GET, MIME types, directory listing |
+| microcom | Complete | Serial terminal with baud rate, raw mode, Ctrl+X exit |
+| nbd-client | Complete | Full NBD protocol with newstyle support |
+| nbd-server | Complete | NBD server with read-only, copy-on-write modes |
 
 ### Network Utilities - Fully Implemented
 | Utility | Status | Notes |
@@ -914,16 +914,15 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 2. ~~uuencode/uudecode~~ - ✅ Implemented
 3. ~~memeater~~ - ✅ Implemented
 
-**Remaining True Stubs**
-- bzip2/xz family - Complex compression algorithms (Burrows-Wheeler / LZMA)
+**Remaining True Stubs (Compression Algorithms Only)**
+- bzip2/bunzip2/bzcat - Burrows-Wheeler transform compression
+- xz/unxz/xzcat/lzma/unlzma/lzcat - LZMA compression
 - compress/uncompress - Legacy LZW compression
-- httpd - HTTP server daemon
-- microcom - Serial terminal emulator
-- nbd-client/server - Network block device
-- login - Session management with PAM
-- mix - Audio mixer (OSS/ALSA)
 
-**Recently Completed (previously listed as stubs)**
+Note: These require implementing complex compression algorithms from scratch.
+Consider using external libraries (libbz2, liblzma) if no_std isn't required.
+
+**Fully Implemented (previously listed as stubs)**
 - vi - Full modal editor with search, yank/paste, commands
 - hexedit - Hex editor with navigation and editing
 - patch - Unified diff parser and applier
@@ -931,6 +930,11 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 - who/users - Full utmp reading
 - chattr/lsattr - ext2/3/4 file attributes
 - losetup - Loop device setup
+- httpd - HTTP server with GET, MIME types, directory listing
+- microcom - Serial terminal emulator
+- nbd-client/nbd-server - Network Block Device protocol
+- login - Full session management with password validation (~1000 lines)
+- mix - OSS audio mixer (ALSA systems need alsamixer)
 
 ---
 
