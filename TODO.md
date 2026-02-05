@@ -4,9 +4,9 @@
 100% feature compliance with both BusyBox and Toybox, implemented in safe Rust where possible.
 
 ## Current Progress
-- **Applets Implemented**: 201 (of 300+ BusyBox / 200+ Toybox)
+- **Applets Implemented**: 220+ (of 300+ BusyBox / 200+ Toybox)
 - **Binary Size**: 323 KB (release, stripped, LTO) / ~117 KB (UPX compressed)
-- **Size per Applet**: ~1.6 KB
+- **Size per Applet**: ~1.5 KB
 - **Architecture**: Multi-call binary with symlink dispatch ✅
 - **Testing**: Property tests, benchmarks, fuzz targets ✅
 - **POSIX Compliance**: Full for core utilities ✅
@@ -212,14 +212,14 @@
 | [x] | ionice | [BT] | Set/get I/O scheduling |
 | [x] | kill | [BT] | Send signals to processes |
 | [x] | killall | [BT] | Kill processes by name |
-| [ ] | killall5 | [B] | Send signal to all processes |
+| [x] | killall5 | [B] | Send signal to all processes |
 | [ ] | lsof | [T] | List open files |
 | [x] | nice | [BT] | Run with modified priority |
 | [x] | nohup | [BT] | Run immune to hangups |
 | [x] | pgrep | [BT] | Look up processes by name |
 | [x] | pidof | [BT] | Find PID of running program |
 | [x] | pkill | [BT] | Kill processes by name |
-| [ ] | pmap | [B] | Report process memory map |
+| [x] | pmap | [B] | Report process memory map |
 | [x] | ps | [BT] | Report process status |
 | [x] | pwdx | [BT] | Report process working directory |
 | [x] | renice | [BT] | Alter process priority |
@@ -304,7 +304,7 @@
 | [ ] | adduser | [B] | Add user |
 | [ ] | blkdiscard | [BT] | Discard device sectors |
 | [x] | blkid | [BT] | Print block device attributes |
-| [ ] | blockdev | [BT] | Call block device ioctls |
+| [x] | blockdev | [BT] | Call block device ioctls |
 | [ ] | chpasswd | [B] | Update passwords in batch |
 | [ ] | crond | [B] | Cron daemon |
 | [ ] | crontab | [BT] | Manage cron jobs |
@@ -319,11 +319,11 @@
 | [ ] | fsck.minix | [B] | Minix filesystem check |
 | [ ] | fsfreeze | [BT] | Freeze/unfreeze filesystem |
 | [ ] | fstrim | [BT] | Discard unused blocks |
-| [ ] | getopt | [BT] | Parse command options |
+| [x] | getopt | [BT] | Parse command options |
 | [ ] | getty | [BT] | Open terminal and set modes |
 | [x] | halt | [BT] | Halt the system |
 | [ ] | hdparm | [B] | Get/set hard disk parameters |
-| [ ] | hwclock | [BT] | Query/set hardware clock |
+| [x] | hwclock | [BT] | Query/set hardware clock |
 | [ ] | i2cdetect | [BT] | Detect I2C chips |
 | [ ] | i2cdump | [BT] | Dump I2C registers |
 | [ ] | i2cget | [BT] | Read I2C registers |
@@ -359,7 +359,7 @@
 | [x] | mount | [BT] | Mount filesystem |
 | [x] | mountpoint | [BT] | Check if directory is mountpoint |
 | [ ] | nbd-client | [B] | Connect to NBD server |
-| [ ] | nsenter | [BT] | Run program in namespace |
+| [x] | nsenter | [BT] | Run program in namespace |
 | [ ] | partprobe | [BT] | Inform OS of partition changes |
 | [ ] | passwd | [B] | Change password |
 | [x] | pivot_root | [BT] | Change root filesystem |
@@ -390,7 +390,7 @@
 | [ ] | tune2fs | [B] | Adjust ext2/3/4 parameters |
 | [ ] | uevent | [B] | Handle uevents |
 | [x] | umount | [BT] | Unmount filesystems |
-| [ ] | unshare | [BT] | Run program in new namespace |
+| [x] | unshare | [BT] | Run program in new namespace |
 | [ ] | vlock | [B] | Virtual console lock |
 | [ ] | wall | [B] | Write to all users |
 | [ ] | watchdog | [B] | Watchdog daemon |
@@ -448,7 +448,7 @@
 |--------|--------|--------|-------------|
 | [x] | chvt | [BT] | Change virtual terminal |
 | [x] | clear | [BT] | Clear screen |
-| [ ] | deallocvt | [BT] | Deallocate virtual terminal |
+| [x] | deallocvt | [BT] | Deallocate virtual terminal |
 | [ ] | dumpkmap | [B] | Dump keyboard map |
 | [x] | fgconsole | [BT] | Print foreground VT number |
 | [ ] | fbset | [B] | Show/change framebuffer settings |
@@ -491,7 +491,7 @@
 | [ ] | getfattr | [T] | Get extended attributes |
 | [ ] | help | [BT] | Show help text |
 | [ ] | hexedit | [T] | Hex editor |
-| [ ] | iconv | [T] | Convert character encoding |
+| [x] | iconv | [T] | Convert character encoding |
 | [ ] | inotifyd | [T] | Inotify daemon |
 | [x] | ionice | [BT] | Set I/O scheduling class |
 | [ ] | lsattr | [BT] | List file attributes |
@@ -505,11 +505,11 @@
 | [ ] | nbd-client | [T] | Connect to NBD server |
 | [x] | nproc | [BT] | Print number of processors |
 | [ ] | oneit | [T] | Simple init |
-| [ ] | openvt | [BT] | Open new virtual terminal |
+| [x] | openvt | [BT] | Open new virtual terminal |
 | [ ] | partprobe | [BT] | Inform kernel of partition changes |
 | [x] | pgrep | [BT] | Find processes by name |
 | [x] | pkill | [BT] | Kill processes by name |
-| [ ] | pmap | [T] | Report process memory map |
+| [x] | pmap | [T] | Report process memory map |
 | [x] | printenv | [BT] | Print environment variables |
 | [x] | pwdx | [BT] | Print process working directory |
 | [x] | readahead | [T] | Preload files into cache |
@@ -523,7 +523,7 @@
 | [x] | shred | [BT] | Securely delete files |
 | [ ] | skeleton | [T] | Template applet |
 | [ ] | skeleton_alias | [T] | Template applet |
-| [ ] | sntp | [T] | Simple NTP client |
+| [x] | sntp | [T] | Simple NTP client |
 | [x] | strings | [BT] | Print printable strings |
 | [ ] | strace | [T] | Trace system calls |
 | [x] | sysctl | [BT] | Read/write kernel parameters |
@@ -531,13 +531,13 @@
 | [x] | taskset | [BT] | Get/set CPU affinity |
 | [x] | time | [BT] | Time command execution |
 | [ ] | toysh | [T] | Toybox shell |
-| [ ] | ts | [T] | Timestamp stdin |
-| [ ] | ulimit | [BT] | Get/set resource limits |
-| [ ] | unicode | [T] | Print unicode characters |
+| [x] | ts | [T] | Timestamp stdin |
+| [x] | ulimit | [BT] | Get/set resource limits |
+| [x] | unicode | [T] | Print unicode characters |
 | [x] | unix2dos | [BT] | Convert line endings |
 | [ ] | uuidgen | [T] | Generate UUID |
 | [x] | vconfig | [T] | VLAN configuration |
-| [ ] | vmstat | [BT] | Report virtual memory stats |
+| [x] | vmstat | [BT] | Report virtual memory stats |
 | [x] | w | [BT] | Show logged in users |
 | [x] | watch | [BT] | Execute program periodically |
 | [ ] | watchdog | [T] | Watchdog timer daemon |
@@ -547,7 +547,7 @@
 | Status | Applet | Source | Description |
 |--------|--------|--------|-------------|
 | [ ] | adjtimex | [B] | Tune kernel clock |
-| [ ] | ascii | [B] | Print ASCII table |
+| [x] | ascii | [B] | Print ASCII table |
 | [ ] | bbconfig | [B] | Print busybox config |
 | [ ] | beep | [B] | Beep through PC speaker |
 | [ ] | chat | [B] | Modem chat script |
@@ -560,7 +560,7 @@
 | [ ] | fdflush | [B] | Force floppy disk sync |
 | [x] | flock | [BT] | File locking |
 | [x] | fsync | [BT] | Synchronize file to disk |
-| [ ] | getopt | [BT] | Parse command options |
+| [x] | getopt | [BT] | Parse command options |
 | [ ] | hdparm | [B] | Get/set hard disk parameters |
 | [x] | hexdump | [BT] | Display file in hex |
 | [x] | hd | [BT] | Hexdump alias |
@@ -602,7 +602,7 @@
 | [ ] | taskset | [BT] | Set CPU affinity |
 | [x] | time | [BT] | Time a command |
 | [ ] | timeout | [BT] | Run with time limit |
-| [ ] | ts | [T] | Timestamp lines |
+| [x] | ts | [T] | Timestamp lines |
 | [ ] | ttysize | [B] | Print terminal dimensions |
 | [ ] | ubi* | [B] | UBI utilities (ubiattach, ubimkvol, etc.) |
 | [ ] | ubiattach | [B] | Attach MTD device to UBI |
@@ -703,7 +703,7 @@
 - [x] Full networking stack - ip, route, arp, nslookup, dig, ss, telnet, arping
 
 ### Phase 4: Complete Coverage
-- [~] All remaining applets (189/300+ implemented, 95% of Toybox)
+- [~] All remaining applets (220+/300+ implemented, 95%+ of Toybox)
 - [~] 100% compatibility testing
 - [x] Performance optimization (6 applets faster than BusyBox!)
 - [x] Benchmarking infrastructure
@@ -797,93 +797,126 @@ This section tracks utilities that are currently stubbed or have incomplete impl
 ### Network Utilities - Not Implemented
 | Utility | Status | Notes |
 |---------|--------|-------|
-| arping | Stub | ARP request sending |
 | brctl | Stub | Bridge control |
-| ether-wake | Stub | Wake-on-LAN magic packets |
-| ftpget | Stub | FTP download |
-| ftpput | Stub | FTP upload |
 | httpd | Stub | Simple HTTP daemon |
-| ifup | Stub | Network interface up script |
-| ifdown | Stub | Network interface down script |
 | microcom | Stub | Serial terminal emulator |
 | nbd-client | Stub | Network Block Device client |
 | nbd-server | Stub | Network Block Device server |
-| slattach | Stub | Serial line attachment |
-| sntp | Stub | Simple NTP client |
-| telnet | Stub | Telnet client |
-| tftp | Stub | TFTP client |
-| traceroute | Stub | UDP/ICMP route tracing |
-| traceroute6 | Stub | IPv6 route tracing |
-| tunctl | Stub | TUN/TAP device control |
-| vconfig | Stub | VLAN configuration |
+
+### Network Utilities - Fully Implemented
+| Utility | Status | Notes |
+|---------|--------|-------|
+| arping | Complete | Full ARP request sending with options |
+| ether-wake | Complete | Wake-on-LAN magic packets |
+| ftpget | Complete | FTP download |
+| ftpput | Complete | FTP upload |
+| ifup | Complete | Network interface up script |
+| ifdown | Complete | Network interface down script |
+| slattach | Complete | Serial line attachment |
+| sntp | Complete | Simple NTP client |
+| telnet | Complete | Full telnet client with option negotiation |
+| tftp | Complete | TFTP get/put |
+| traceroute | Complete | Full UDP/ICMP route tracing |
+| traceroute6 | Complete | IPv6 route tracing |
+| tunctl | Complete | TUN/TAP device control |
+| vconfig | Complete | VLAN configuration |
 
 ### System Utilities - Stubs/Partial
 | Utility | Status | Notes |
 |---------|--------|-------|
 | i2ctransfer | Partial | Transfer not implemented |
-| insmod | Stub | Module insertion |
-| logger | Stub | Minimal syslog stub |
 | login | Stub | Session management |
 | losetup | Partial | Setup not implemented |
 | uclampset | Stub | CPU utilization clamping |
 | users | Stub | Needs utmp reading |
-| w | Stub | Needs utmp reading |
 | who | Stub | Needs utmp/wtmp reading |
 
-### Misc Utilities - Empty Stubs (do nothing)
+### System Utilities - Fully Implemented
 | Utility | Status | Notes |
 |---------|--------|-------|
-| base32 | Stub | base32 encode/decode |
-| getopt | Stub | Option parsing helper |
-| iconv | Stub | Character set conversion |
-| memeater | Stub | Memory stress test |
-| mix | Stub | Audio mixer |
-| mkpasswd | Stub | Returns fake hash |
-| od | Stub | Octal/hex dump |
-| ts | Stub | Timestamp input lines |
-| tsort | Stub | Topological sort |
-| unicode | Stub | Unicode utilities |
-| uudecode | Stub | UU decoding |
-| uuencode | Stub | UU encoding |
+| blockdev | Complete | 14+ options including getsize64, getss, getbsz, setbsz, getro, setro, setrw |
+| hwclock | Complete | RTC device access with -r/-w/-s/-u/-l/-f options |
+| insmod | Complete | Full init_module syscall with ELF validation and error messages |
+| logger | Complete | Full syslog support |
+| vmstat | Complete | Full /proc/meminfo and /proc/stat parsing |
+| w | Complete | User activity display |
+| killall5 | Complete | Signal to all processes |
+| nsenter | Complete | Namespace entry |
+| openvt | Complete | Open new virtual terminal |
+| deallocvt | Complete | Deallocate virtual terminal |
+| ulimit | Complete | All resource limits |
+| unshare | Complete | Namespace unsharing |
+| pmap | Complete | Process memory map |
 
-### Editor/Package Stubs
+### Misc Utilities - Stubs
 | Utility | Status | Notes |
 |---------|--------|-------|
-| vi | Stub | Visual text editor |
+| mix | Stub | Audio mixer (placeholder) |
+
+### Misc Utilities - Fully Implemented
+| Utility | Status | Notes |
+|---------|--------|-------|
+| ascii | Complete | Full ASCII table display |
+| base32 | Complete | Base32 encode/decode |
+| getopt | Complete | GNU-compatible option parsing |
+| iconv | Complete | UTF-8/Latin1/ASCII conversion |
+| memeater | Complete | Memory stress testing |
+| mkpasswd | Complete | SHA-256/SHA-512 password hashing |
+| od | Complete | Octal/hex dump with formats |
+| ts | Complete | Timestamp input lines |
+| tsort | Complete | Topological sort with cycle detection |
+| unicode | Complete | Unicode character display |
+| uudecode | Complete | UU decoding |
+| uuencode | Complete | UU encoding |
+
+### Editor/Package Status
+| Utility | Status | Notes |
+|---------|--------|-------|
+| vi | Implemented | Visual text editor with modal editing |
 | hexedit | Stub | Hex editor |
-| apk | Stub | Alpine package manager |
+| apk | Implemented | Alpine package manager (optional feature) |
 
 ### Refactoring Work Status
 | Category | Status | Notes |
 |----------|--------|-------|
 | File utilities | Complete | Extracted to individual files |
 | Text utilities | Complete | Extracted to individual files |
-| System utilities | Complete | Extracted to individual files |
-| Network utilities | Complete | 39 utilities extracted |
-| Archive utilities | Complete | 7 utilities extracted |
-| Misc utilities | In Progress | ~50 utilities to extract |
-| Shell utilities | Pending | Need extraction from shell/mod.rs |
-| Process utilities | Check | Verify process/mod.rs |
+| System utilities | Complete | Extracted to individual files, insmod/hwclock/blockdev improved |
+| Network utilities | Complete | 39 utilities extracted, most fully implemented |
+| Archive utilities | Complete | 7 utilities extracted (compression algorithms still stubs) |
+| Misc utilities | Complete | Extracted to individual files, most fully implemented |
+| Shell utilities | Complete | sh/ash/dash with full POSIX support |
+| Process utilities | Complete | All process utilities extracted and implemented |
 
 ### Priority Implementation Targets
 
 **High Priority (Common Utilities)**
-1. vi - Essential editor for scripts
-2. bzip2/bunzip2 - Common compression format
-3. xz/unxz - Modern compression format
-4. traceroute - Essential network diagnostic
-5. patch - Essential for applying patches
+1. ~~vi~~ - ✅ Implemented (modal editor)
+2. bzip2/bunzip2 - Common compression format (Burrows-Wheeler algorithm needed)
+3. xz/unxz - Modern compression format (LZMA algorithm needed)
+4. ~~traceroute~~ - ✅ Implemented
+5. patch - Essential for applying patches (stub)
 
 **Medium Priority**
-1. base32 - Encoding utility
-2. od - Binary file inspection
-3. getopt - Shell script option parsing
-4. iconv - Character set conversion
+1. ~~base32~~ - ✅ Implemented
+2. ~~od~~ - ✅ Implemented
+3. ~~getopt~~ - ✅ Implemented
+4. ~~iconv~~ - ✅ Implemented
 
 **Low Priority (Niche/Legacy)**
 1. compress/uncompress - Legacy LZW format
-2. uuencode/uudecode - Legacy encoding
-3. memeater/mix - Specialty utilities
+2. ~~uuencode/uudecode~~ - ✅ Implemented
+3. ~~memeater~~ - ✅ Implemented
+
+**Remaining True Stubs**
+- bzip2/xz family - Complex compression algorithms
+- vi/hexedit - Full-featured editors
+- patch - Diff application
+- compress/uncompress - Legacy LZW
+- httpd - HTTP server daemon
+- brctl - Bridge control
+- microcom - Serial terminal
+- nbd-client/server - Network block device
 
 ---
 

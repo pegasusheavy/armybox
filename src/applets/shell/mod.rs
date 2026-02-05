@@ -25,33 +25,44 @@
 //! - `builtins` - Built-in commands
 //! - `util` - Utility functions
 
+#[cfg(feature = "sh")]
 mod arithmetic;
+#[cfg(feature = "sh")]
 mod builtins;
+#[cfg(feature = "sh")]
 mod control;
+#[cfg(feature = "sh")]
 mod entry;
+#[cfg(feature = "sh")]
 mod execute;
+#[cfg(feature = "sh")]
 mod expand;
+#[cfg(feature = "sh")]
 mod parser;
+#[cfg(feature = "sh")]
 mod state;
+#[cfg(feature = "sh")]
 mod util;
 
 // Re-export get_arg from parent for entry.rs
+#[cfg(feature = "sh")]
 pub(self) use super::get_arg;
 
 // Re-export the public entry points
+#[cfg(feature = "sh")]
 pub use entry::{ash, dash, sh};
 
 // Re-export items needed by submodules via super::
 // These allow submodules to use `super::function_name` instead of fully qualified paths
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "sh", feature = "alloc"))]
 pub(self) use execute::execute_script;
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "sh", feature = "alloc"))]
 pub(self) use expand::expand_string;
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "sh", feature = "alloc"))]
 pub(self) use parser::parse_word;
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "sh", feature = "alloc"))]
 pub(self) use util::skip_whitespace_and_comments;

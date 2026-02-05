@@ -2,7 +2,7 @@
 //!
 //! Minimal vi/vim implementation and hexedit.
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "vi", feature = "alloc"))]
 use alloc::vec::Vec;
 
 use crate::io;
@@ -15,7 +15,7 @@ use super::get_arg;
 /// - Insert mode: i (insert), a (append), o (open line)
 /// - Command mode: :w (write), :q (quit), :wq, :q!
 /// - Search: / and n for next
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "vi", feature = "alloc"))]
 pub fn vi(argc: i32, argv: *const *const u8) -> i32 {
     let filename = if argc > 1 {
         unsafe { get_arg(argv, 1) }
@@ -99,13 +99,14 @@ pub fn vi(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(feature = "alloc"))]
+#[cfg(all(feature = "vi", not(feature = "alloc")))]
 pub fn vi(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"vi: requires alloc feature\n");
     1
 }
 
 /// view - read-only vi
+#[cfg(feature = "vi")]
 pub fn view(argc: i32, argv: *const *const u8) -> i32 {
     vi(argc, argv)
 }
@@ -113,7 +114,7 @@ pub fn view(argc: i32, argv: *const *const u8) -> i32 {
 /// hexedit - hex editor
 ///
 /// Simple hex editor for binary files.
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "hexedit", feature = "alloc"))]
 pub fn hexedit(argc: i32, argv: *const *const u8) -> i32 {
     let filename = if argc > 1 {
         match unsafe { get_arg(argv, 1) } {
@@ -178,7 +179,7 @@ pub fn hexedit(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(feature = "alloc"))]
+#[cfg(all(feature = "hexedit", not(feature = "alloc")))]
 pub fn hexedit(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"hexedit: requires alloc feature\n");
     1
@@ -188,7 +189,7 @@ pub fn hexedit(_argc: i32, _argv: *const *const u8) -> i32 {
 // Vi Editor Implementation
 // ============================================================================
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "vi", feature = "alloc"))]
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
     Normal,
@@ -196,7 +197,7 @@ enum Mode {
     Command,
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "vi", feature = "alloc"))]
 struct Editor {
     lines: Vec<Vec<u8>>,
     cursor_x: usize,
@@ -214,7 +215,7 @@ struct Editor {
     should_quit: bool,
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "vi", feature = "alloc"))]
 impl Editor {
     fn new() -> Self {
         Editor {
@@ -663,7 +664,7 @@ impl Editor {
 // Hex Editor Implementation
 // ============================================================================
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "hexedit", feature = "alloc"))]
 struct HexEditor {
     data: Vec<u8>,
     filename: Vec<u8>,
@@ -673,7 +674,7 @@ struct HexEditor {
     rows: usize,
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "hexedit", feature = "alloc"))]
 impl HexEditor {
     fn new(data: Vec<u8>, filename: Vec<u8>) -> Self {
         HexEditor {
@@ -821,7 +822,7 @@ impl HexEditor {
 // ============================================================================
 
 /// Read a key from stdin
-#[cfg(feature = "alloc")]
+#[cfg(any(all(feature = "vi", feature = "alloc"), all(feature = "hexedit", feature = "alloc")))]
 fn read_key() -> u8 {
     let mut c = [0u8; 1];
     let n = io::read(0, &mut c);
@@ -849,14 +850,14 @@ fn read_key() -> u8 {
     c[0]
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "vi", feature = "alloc"))]
 fn append_num(buf: &mut Vec<u8>, n: usize) {
     let mut tmp = [0u8; 16];
     let s = crate::sys::format_u64(n as u64, &mut tmp);
     buf.extend_from_slice(s);
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "vi", feature = "alloc"))]
 fn format_write_msg(bytes: usize, lines: usize) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.push(b'"');
@@ -870,7 +871,7 @@ fn format_write_msg(bytes: usize, lines: usize) -> Vec<u8> {
     msg
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "vi", feature = "alloc"))]
 fn find_pattern(line: &[u8], pattern: &[u8], start: usize) -> Option<usize> {
     if pattern.is_empty() || start + pattern.len() > line.len() {
         return None;
@@ -883,7 +884,7 @@ fn find_pattern(line: &[u8], pattern: &[u8], start: usize) -> Option<usize> {
     None
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(any(all(feature = "vi", feature = "alloc"), all(feature = "hexedit", feature = "alloc")))]
 fn format_hex_addr(addr: usize) -> [u8; 8] {
     let mut result = [b'0'; 8];
     let mut tmp = [0u8; 16];
@@ -897,7 +898,7 @@ fn format_hex_addr(addr: usize) -> [u8; 8] {
     result
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "hexedit", feature = "alloc"))]
 fn format_hex_byte(b: u8) -> [u8; 2] {
     const HEX: &[u8] = b"0123456789abcdef";
     [HEX[(b >> 4) as usize], HEX[(b & 0xF) as usize]]
