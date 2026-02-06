@@ -1113,6 +1113,260 @@ Test Suite Support:      100% (all lit requirements met)
 
 ---
 
+## Self-Hosting Linux Container (musl + Clang)
+
+Goal: Build a minimal self-hosting Linux environment using:
+- **armybox** for core utilities
+- **musl** as the C library
+- **Clang/LLVM** as the C/C++ compiler (no GCC dependency)
+
+This follows the [CMLFS (Clang-Built Musl Linux From Scratch)](https://github.com/dslm4515/CMLFS) approach.
+
+### Bootstrap Stages
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Stage 0: Cross-compile minimal toolchain from host system      │
+│  (Requires: existing GCC/Clang on host)                         │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 1: Build Stage-1 Clang using cross toolchain             │
+│  (First native Clang, may still link to libgcc_s)               │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 2: Build Stage-2 Clang with Stage-1 Clang                │
+│  (Self-hosting Clang, uses LLVM runtimes: libunwind, libc++)    │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 3: Build complete system in chroot                       │
+│  (armybox, musl, final Clang, all packages)                     │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 4: Self-hosting verification                             │
+│  (Rebuild everything using only tools from Stage 3)             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Complete Toolchain Components
+
+#### LLVM Toolchain (replaces GCC + GNU Binutils)
+
+| Component | Replaces | Purpose |
+|-----------|----------|---------|
+| clang | gcc | C compiler |
+| clang++ | g++ | C++ compiler |
+| lld | ld (GNU ld) | Linker |
+| llvm-ar | ar | Create/modify archives |
+| llvm-ranlib | ranlib | Index archives |
+| llvm-nm | nm | List symbols |
+| llvm-objdump | objdump | Display object info |
+| llvm-objcopy | objcopy | Copy/translate objects |
+| llvm-strip | strip | Strip symbols |
+| llvm-readelf | readelf | Display ELF info |
+| llvm-size | size | List section sizes |
+| llvm-strings | strings | Print strings (armybox has this) |
+| libunwind | libgcc_s | Stack unwinding |
+| libc++ | libstdc++ | C++ standard library |
+| libc++abi | libsupc++ | C++ ABI support |
+| compiler-rt | libgcc | Compiler runtime |
+
+#### C Library
+
+| Component | Purpose |
+|-----------|---------|
+| musl | C standard library, dynamic linker |
+
+#### Build System Tools
+
+| Tool | armybox | Required | Notes |
+|------|---------|----------|-------|
+| make | ❌ | **Critical** | GNU Make 4.0+ compatible |
+| cmake | External | Required | Build system generator |
+| ninja | External | Recommended | Faster than make |
+| python3 | External | Required | Build scripts, lit tests |
+| pkg-config | ❌ | Important | Library discovery |
+
+### Armybox Utilities Required for Self-Hosting
+
+#### ✅ Already Implemented
+
+**Shell & Scripting:**
+- sh, ash, dash (POSIX shell)
+- test, [, true, false
+- expr, env, printenv
+
+**File Operations:**
+- cp, mv, rm, mkdir, rmdir, ln, chmod, chown, touch
+- install, find, xargs
+- cat, head, tail, tee
+- ls, stat, file, readlink, realpath
+
+**Text Processing:**
+- grep, egrep, fgrep
+- sed, awk
+- sort, uniq, cut, tr, paste
+- diff, cmp, patch
+- wc, nl
+
+**Archives:**
+- tar, gzip, gunzip, zcat
+- bzip2, bunzip2, bzcat
+- xz, unxz, xzcat
+
+**Network:**
+- wget (download sources)
+
+**Process Management:**
+- kill, killall, ps, top
+- nice, nohup, timeout
+- ulimit
+
+**System:**
+- uname, hostname, date
+- mount, umount
+- chroot
+
+#### ❌ Missing - Must Implement
+
+| Utility | Priority | Complexity | Notes |
+|---------|----------|------------|-------|
+| **make** | Critical | High | GNU Make compatible, pattern rules, functions |
+| pkg-config | High | Medium | pkgconf is simpler alternative |
+
+#### ❌ Missing - Use LLVM Tools Instead
+
+These are provided by the LLVM toolchain, no need to implement in armybox:
+
+| Utility | LLVM Equivalent |
+|---------|-----------------|
+| ar | llvm-ar |
+| ranlib | llvm-ranlib |
+| nm | llvm-nm |
+| strip | llvm-strip |
+| objdump | llvm-objdump |
+| objcopy | llvm-objcopy |
+| readelf | llvm-readelf |
+
+### Build Dependencies by Package
+
+#### musl libc
+```
+Required: make, sed, grep
+Optional: (none for basic build)
+Compiler: Clang with -target and --sysroot
+```
+
+#### LLVM/Clang
+```
+Required: cmake, ninja/make, python3, sh, sed, grep, find
+Required: tar, xz (source extraction)
+Required: libunwind, libc++abi, libc++ (runtime libraries)
+Patches: musl compatibility patches for:
+  - linux-gnu → linux-musl references
+  - Dynamic linker path (/lib/ld-musl-*.so.1)
+  - Remove libgcc_s dependency
+```
+
+#### Typical Package (autotools)
+```
+Required: sh, make, sed, grep, awk
+Required: install, mkdir, cp, ln, chmod
+Configure: ./configure --prefix=/usr --host=x86_64-linux-musl
+Build: make -j$(nproc)
+Install: make DESTDIR=/target install
+```
+
+#### Typical Package (cmake)
+```
+Required: cmake, ninja/make, sh
+Required: install, mkdir, cp, ln, chmod
+Configure: cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr
+Build: ninja -C build
+Install: DESTDIR=/target ninja -C build install
+```
+
+### Minimal Self-Hosting System Packages
+
+```
+Core System:
+├── musl                 # C library + dynamic linker
+├── armybox              # Core utilities (this project)
+├── clang                # C/C++ compiler
+├── lld                  # Linker
+├── llvm                 # Core LLVM libraries
+├── compiler-rt          # Compiler runtime
+├── libunwind            # Stack unwinding
+├── libc++               # C++ standard library
+├── libc++abi            # C++ ABI
+├── make                 # Build system (armybox OR GNU make)
+├── cmake                # Build system generator
+├── ninja                # Build executor (optional)
+└── python3              # Build scripts
+
+Optional but Recommended:
+├── linux-headers        # Kernel headers for syscalls
+├── pkgconf              # Library discovery
+├── git                  # Version control
+├── curl                 # Download tool
+└── ca-certificates      # HTTPS support
+```
+
+### Self-Hosting Verification Test
+
+A system is self-hosting when it can rebuild itself:
+
+```sh
+#!/bin/sh
+# Test: Can we rebuild armybox using only tools in this container?
+
+# 1. Verify toolchain
+clang --version
+lld --version
+make --version
+
+# 2. Extract and build
+tar xf armybox-*.tar.xz
+cd armybox
+./configure CC=clang CXX=clang++ LD=ld.lld
+make -j$(nproc)
+
+# 3. Verify output
+./armybox --list | wc -l  # Should show all applets
+```
+
+### Implementation Priority for armybox
+
+1. **make** - GNU Make compatible implementation
+   - Pattern rules (`%.o: %.c`)
+   - Built-in functions (`$(wildcard)`, `$(patsubst)`, etc.)
+   - Include directives
+   - Parallel execution (`-j`)
+   - Phony targets
+   - **Estimated: 2000-4000 lines**
+
+2. **pkg-config** (or pkgconf)
+   - Parse .pc files
+   - Output cflags/libs
+   - Handle dependencies
+   - **Estimated: 500-1000 lines**
+
+### Summary: Self-Hosting Readiness
+
+```
+Shell Utilities:         100% ✅
+Text Processing:         100% ✅
+File Operations:         100% ✅
+Archive Utilities:       100% ✅
+Build Tools:             50%  (missing: make, pkg-config)
+Binary Utilities:        0%   (use LLVM tools instead)
+```
+
+**Critical Gap:** `make` is the only critical missing utility. Once implemented, armybox + LLVM toolchain can provide a complete self-hosting musl/Clang Linux environment.
+
+### References
+- [CMLFS - Clang-Built Musl Linux From Scratch](https://github.com/dslm4515/CMLFS)
+- [musl libc - Building LLVM](https://wiki.musl-libc.org/building-llvm.html)
+- [Alpine build-base](https://git.alpinelinux.org/aports/tree/main/build-base/APKBUILD)
+- [musl FAQ](https://www.musl-libc.org/faq.html)
+
+---
+
 ## Notes
 - Prioritize memory safety over raw performance
 - Use `unsafe` only when absolutely necessary and document reasoning
