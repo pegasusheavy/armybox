@@ -209,9 +209,6 @@ fn decode_frame(data: &[u8], offset: usize, output: &mut Vec<u8>) -> Result<usiz
         let block_type = BlockType::from_u8(((block_header >> 1) & 3) as u8);
         let block_size = (block_header >> 3) as usize;
 
-        #[cfg(test)]
-        eprintln!("[FRAME] block: last={}, type={:?}, size={}", last_block, block_type, block_size);
-
         if pos + block_size > data.len() && block_type != BlockType::Rle {
             return Err(ZstdError::CorruptData);
         }
@@ -249,16 +246,11 @@ fn decode_frame(data: &[u8], offset: usize, output: &mut Vec<u8>) -> Result<usiz
     // Verify checksum if present
     if header.has_checksum {
         if pos + 4 > data.len() {
-            #[cfg(test)]
-            eprintln!("[FRAME] CHECKSUM: not enough data (pos={}, data.len()={})", pos, data.len());
             return Err(ZstdError::CorruptData);
         }
         let stored_checksum = read_le32(data, pos);
         let computed = (xxhash64(&output[output_start..]) & 0xFFFFFFFF) as u32;
         if stored_checksum != computed {
-            #[cfg(test)]
-            eprintln!("[FRAME] CHECKSUM MISMATCH: stored={:#010x}, computed={:#010x}, output_size={}",
-                stored_checksum, computed, output.len() - output_start);
             return Err(ZstdError::ChecksumMismatch);
         }
         pos += 4;
@@ -268,8 +260,6 @@ fn decode_frame(data: &[u8], offset: usize, output: &mut Vec<u8>) -> Result<usiz
     if let Some(fcs) = header.frame_content_size {
         let actual_size = (output.len() - output_start) as u64;
         if actual_size != fcs {
-            #[cfg(test)]
-            eprintln!("[FRAME] CONTENT SIZE MISMATCH: expected={}, actual={}", fcs, actual_size);
             return Err(ZstdError::CorruptData);
         }
     }
@@ -288,8 +278,6 @@ fn decode_compressed_block(
     // 1. Literals section
     let (literals, lit_consumed) = decode_literals_section(data, state)?;
     pos += lit_consumed;
-    #[cfg(test)]
-    eprintln!("[BLOCK] literals: {} bytes consumed, {} bytes output, remaining block data: {}", lit_consumed, literals.len(), data.len() - pos);
 
     // 2. Sequences section
     if pos >= data.len() {
@@ -300,8 +288,6 @@ fn decode_compressed_block(
 
     let (sequences, seq_consumed) = decode_sequences_section(&data[pos..], state)?;
     let _ = seq_consumed;
-    #[cfg(test)]
-    eprintln!("[BLOCK] {} sequences decoded", sequences.len());
 
     // 3. Execute sequences
     execute_sequences(output, &literals, &sequences, state)?;
@@ -409,14 +395,7 @@ fn decode_literals_section(data: &[u8], state: &mut BlockState) -> Result<(Vec<u
                 }
             };
 
-            #[cfg(test)]
-            eprintln!("[LIT] type={:?}, size_format={}, regen={}, compressed={}, streams={}, header={}",
-                lit_type, size_format, regen_size, compressed_size, num_streams, header_size);
-
             if header_size + compressed_size > data.len() {
-                #[cfg(test)]
-                eprintln!("[LIT] ERROR: header_size({}) + compressed_size({}) = {} > data.len()={}",
-                    header_size, compressed_size, header_size + compressed_size, data.len());
                 return Err(ZstdError::CorruptData);
             }
 
@@ -425,21 +404,14 @@ fn decode_literals_section(data: &[u8], state: &mut BlockState) -> Result<(Vec<u
             if lit_type == LiteralsType::Compressed {
                 // Read new Huffman tree
                 let (weights, weight_bytes) = HuffTable::read_weights(lit_data)?;
-                #[cfg(test)]
-                eprintln!("[LIT] Huffman weights ({} bytes): {:?}", weight_bytes, &weights[..weights.len().min(30)]);
                 let huff = HuffTable::build(&weights)?;
 
                 let stream_data = &lit_data[weight_bytes..];
-                #[cfg(test)]
-                eprintln!("[LIT] stream_data: {} bytes, regen_size: {}, num_streams: {}",
-                    stream_data.len(), regen_size, num_streams);
                 let literals = if num_streams == 1 {
                     huff::decompress_1stream(&huff, stream_data, regen_size)?
                 } else {
                     huff::decompress_4streams(&huff, stream_data, regen_size)?
                 };
-                #[cfg(test)]
-                eprintln!("[LIT] decoded {} literals", literals.len());
 
                 state.huff_table = Some(huff);
                 Ok((literals, header_size + compressed_size))
@@ -506,30 +478,16 @@ fn decode_sequences_section(
     let of_mode = SeqMode::from_u8((modes_byte >> 4) & 3);
     let ml_mode = SeqMode::from_u8((modes_byte >> 2) & 3);
 
-    #[cfg(test)]
-    eprintln!("[SEQ] num_sequences={}, modes_byte=0x{:02x}, ll_mode={:?}, of_mode={:?}, ml_mode={:?}", num_sequences, modes_byte, ll_mode, of_mode, ml_mode);
-
     // Build/reuse FSE tables for each symbol type
-    let pos_before_ll = pos;
     let ll_table = decode_seq_table(&data[pos..], ll_mode, &state.ll_table,
         &LL_DEFAULT_DIST, LL_DEFAULT_AL, LL_MAX_SYMBOL, LL_MAX_AL, &mut pos)?;
-    #[cfg(test)]
-    eprintln!("[SEQ] ll_table consumed {} bytes, al={}", pos - pos_before_ll, ll_table.accuracy_log);
-    let pos_before_of = pos;
     let of_table = decode_seq_table(&data[pos..], of_mode, &state.of_table,
         &OF_DEFAULT_DIST, OF_DEFAULT_AL, OF_MAX_SYMBOL, OF_MAX_AL, &mut pos)?;
-    #[cfg(test)]
-    eprintln!("[SEQ] of_table consumed {} bytes, al={}", pos - pos_before_of, of_table.accuracy_log);
-    let pos_before_ml = pos;
     let ml_table = decode_seq_table(&data[pos..], ml_mode, &state.ml_table,
         &ML_DEFAULT_DIST, ML_DEFAULT_AL, ML_MAX_SYMBOL, ML_MAX_AL, &mut pos)?;
-    #[cfg(test)]
-    eprintln!("[SEQ] ml_table consumed {} bytes, al={}", pos - pos_before_ml, ml_table.accuracy_log);
 
     // Decode sequences from backward bitstream
     let bitstream_data = &data[pos..];
-    #[cfg(test)]
-    eprintln!("[SEQ] bitstream data: {} bytes (pos={}, total={})", bitstream_data.len(), pos, data.len());
     let mut reader = BitReader::init(bitstream_data)?;
 
     // Initialize states
@@ -540,8 +498,6 @@ fn decode_sequences_section(
     let mut ll_state = reader.read_bits(ll_al)?;
     let mut of_state = reader.read_bits(of_al)?;
     let mut ml_state = reader.read_bits(ml_al)?;
-    #[cfg(test)]
-    eprintln!("[SEQ] initial states: ll={}, of={}, ml={}, remaining bits={}", ll_state, of_state, ml_state, reader.remaining());
 
     let mut sequences = Vec::with_capacity(num_sequences);
 
@@ -565,9 +521,6 @@ fn decode_sequences_section(
         let ll_extra_bits = LL_EXTRA_BITS[ll_code as usize] as u32;
         let ll_extra = reader.read_bits(ll_extra_bits)?;
         let lit_len = LL_BASELINES[ll_code as usize] + ll_extra;
-
-        #[cfg(test)]
-        eprintln!("[SEQ {i}] ll={lit_len} ml={match_len} of={offset} remaining={}", reader.remaining());
 
         sequences.push(Sequence { lit_len, match_len, offset });
 
@@ -645,12 +598,10 @@ fn execute_sequences(
 ) -> Result<(), ZstdError> {
     let mut lit_pos = 0;
 
-    for (seq_idx, seq) in sequences.iter().enumerate() {
+    for seq in sequences {
         // Copy literals
         let lit_end = lit_pos + seq.lit_len as usize;
         if lit_end > literals.len() {
-            #[cfg(test)]
-            eprintln!("[EXEC] LITERAL OVERRUN at seq {}: lit_pos={}, lit_len={}, literals.len()={}", seq_idx, lit_pos, seq.lit_len, literals.len());
             return Err(ZstdError::CorruptData);
         }
         output.extend_from_slice(&literals[lit_pos..lit_end]);
@@ -661,8 +612,6 @@ fn execute_sequences(
 
         // Copy match
         if actual_offset == 0 || actual_offset as usize > output.len() {
-            #[cfg(test)]
-            eprintln!("[EXEC] BAD OFFSET at seq {}: actual_offset={}, output.len()={}, lit_len={}, match_len={}, raw_offset={}", seq_idx, actual_offset, output.len(), seq.lit_len, seq.match_len, seq.offset);
             return Err(ZstdError::CorruptData);
         }
 

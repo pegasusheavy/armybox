@@ -350,20 +350,12 @@ fn encode_sequences_section(sequences: &[RawSequence], output: &mut Vec<u8>) -> 
     output.push(modes_byte);
 
     // Write table descriptions
-    #[cfg(test)]
-    {
-        eprintln!("[ENC-SEQ] ll_header: {} bytes, of_header: {} bytes, ml_header: {} bytes",
-            ll_info.header.len(), of_info.header.len(), ml_info.header.len());
-        eprintln!("[ENC-SEQ] ll_mode={}, of_mode={}, ml_mode={}", ll_info.mode, of_info.mode, ml_info.mode);
-    }
     output.extend_from_slice(&ll_info.header);
     output.extend_from_slice(&of_info.header);
     output.extend_from_slice(&ml_info.header);
 
     // Encode sequences into backward bitstream
     let bitstream = encode_seq_bitstream(sequences, &ll_info, &of_info, &ml_info)?;
-    #[cfg(test)]
-    eprintln!("[ENC-SEQ] bitstream: {} bytes", bitstream.len());
     output.extend_from_slice(&bitstream);
 
     Some(())
@@ -380,7 +372,6 @@ struct EncTableInfo {
 #[derive(Clone)]
 struct EncMapEntry {
     target_state: u16,
-    num_bits: u8,
 }
 
 /// Build encoding info for a sequence table
@@ -397,7 +388,7 @@ fn build_enc_table(hist: &[u32], max_sym: usize, max_al: u8) -> EncTableInfo {
 
         // Build enc_map for single symbol
         let mut enc_map = vec![Vec::new(); sym as usize + 1];
-        enc_map[sym as usize].push(EncMapEntry { target_state: 0, num_bits: 0 });
+        enc_map[sym as usize].push(EncMapEntry { target_state: 0 });
 
         return EncTableInfo {
             mode: SeqMode::Rle as u8,
@@ -411,31 +402,6 @@ fn build_enc_table(hist: &[u32], max_sym: usize, max_al: u8) -> EncTableInfo {
     let table_log = compute_table_log(hist, max_sym, max_al);
     let probs = normalize_counts(hist, max_sym, table_log);
     let header = write_table_description(&probs, table_log);
-    #[cfg(test)]
-    {
-        // Verify roundtrip of table description
-        let (probs_rt, _al_rt, consumed) = FseTable::read_table_description(
-            &header, probs.len().saturating_sub(1), max_al
-        ).unwrap();
-        if consumed != header.len() {
-            eprintln!("[ENC-TABLE] SIZE MISMATCH! table_log={}, header={} bytes, consumed={} bytes",
-                table_log, header.len(), consumed);
-        }
-        // Check probability values match
-        let mut mismatch = false;
-        for (idx, &p) in probs.iter().enumerate() {
-            let p_rt = probs_rt.get(idx).copied().unwrap_or(0);
-            if p != p_rt {
-                eprintln!("[ENC-TABLE] PROB MISMATCH at {}: wrote={}, read={}", idx, p, p_rt);
-                mismatch = true;
-            }
-        }
-        if mismatch {
-            eprintln!("[ENC-TABLE] probs_in ={:?}", probs);
-            eprintln!("[ENC-TABLE] probs_out={:?}", probs_rt);
-            eprintln!("[ENC-TABLE] header ({} bytes)={:02x?}", header.len(), header);
-        }
-    }
     let dec_table = FseTable::build(&probs, table_log).unwrap();
 
     // Build encoding map from the decoding table
@@ -484,10 +450,8 @@ fn build_enc_table(hist: &[u32], max_sym: usize, max_al: u8) -> EncTableInfo {
     for sym in 0..num_symbols {
         let states = &states_for_sym[sym];
         for &target in states {
-            let entry = &dec_table.entries[target];
             enc_map[sym].push(EncMapEntry {
                 target_state: target as u16,
-                num_bits: entry.num_bits,
             });
         }
     }
@@ -610,32 +574,20 @@ fn encode_seq_bitstream(
 
     // --- Write bitstream in forward order ---
     let mut writer = BitWriter::new();
-    #[cfg(test)]
-    let mut _total_bits = 0u64;
 
     // Init states
     writer.write_bits(init_ll as u32, ll_al as u32);
     writer.write_bits(init_of as u32, of_al as u32);
     writer.write_bits(init_ml as u32, ml_al as u32);
-    #[cfg(test)]
-    {
-        _total_bits += ll_al as u64 + of_al as u64 + ml_al as u64;
-        eprintln!("[ENC] init states: ll={} ({} bits), of={} ({} bits), ml={} ({} bits)",
-            init_ll, ll_al, init_of, of_al, init_ml, ml_al);
-    }
 
     for (i, seq) in sequences.iter().enumerate() {
         let (ll_c, of_c, ml_c) = seq_codes[i];
-        #[cfg(test)]
-        let mut _seq_bits = 0u32;
 
         // OF extra bits
         let of_nbits = of_c as u32;
         if of_nbits > 0 {
             let of_extra = seq.offset - (1u32 << of_nbits);
             writer.write_bits(of_extra, of_nbits);
-            #[cfg(test)]
-            { _seq_bits += of_nbits; }
         }
 
         // ML extra bits
@@ -643,8 +595,6 @@ fn encode_seq_bitstream(
         if ml_eb > 0 {
             let ml_extra = seq.match_len - ML_BASELINES[ml_c as usize];
             writer.write_bits(ml_extra, ml_eb);
-            #[cfg(test)]
-            { _seq_bits += ml_eb; }
         }
 
         // LL extra bits
@@ -652,8 +602,6 @@ fn encode_seq_bitstream(
         if ll_eb > 0 {
             let ll_extra = seq.lit_len - LL_BASELINES[ll_c as usize];
             writer.write_bits(ll_extra, ll_eb);
-            #[cfg(test)]
-            { _seq_bits += ll_eb; }
         }
 
         // State updates (not for last sequence)
@@ -662,26 +610,10 @@ fn encode_seq_bitstream(
             writer.write_bits(upd.ll_bits, upd.ll_nbits as u32);
             writer.write_bits(upd.ml_bits, upd.ml_nbits as u32);
             writer.write_bits(upd.of_bits, upd.of_nbits as u32);
-            #[cfg(test)]
-            {
-                _seq_bits += upd.ll_nbits as u32 + upd.ml_nbits as u32 + upd.of_nbits as u32;
-                if i < 5 || i >= n - 3 {
-                    eprintln!("[ENC] seq {}: extra={} update=({},{},{}) total_seq_bits={}",
-                        i, _seq_bits - upd.ll_nbits as u32 - upd.ml_nbits as u32 - upd.of_nbits as u32,
-                        upd.ll_nbits, upd.ml_nbits, upd.of_nbits, _seq_bits);
-                }
-            }
         }
-        #[cfg(test)]
-        { _total_bits += _seq_bits as u64; }
     }
 
-    let result = writer.finish();
-    #[cfg(test)]
-    eprintln!("[ENC] total_bits={}, bitstream_bytes={}, expected_bits_from_bytes={}",
-        _total_bits, result.len(), result.len() * 8);
-
-    Some(result)
+    Some(writer.finish())
 }
 
 /// Find a valid state index for the given symbol
@@ -733,16 +665,6 @@ fn find_source_state(
     }
 
     // Fallback: should never happen with correctly built FSE tables
-    #[cfg(test)]
-    {
-        eprintln!("[FALLBACK] find_source_state: sym={}, target={}, candidates:", sym, target_state);
-        for (i, cand) in enc_map[sym].iter().enumerate() {
-            let entry = &dec_table.entries[cand.target_state as usize];
-            eprintln!("  candidate {}: state={}, baseline={}, num_bits={}, range=[{}, {})",
-                i, cand.target_state, entry.baseline, entry.num_bits,
-                entry.baseline, entry.baseline as u32 + (1u32 << entry.num_bits));
-        }
-    }
     let first = enc_map[sym][0].target_state;
     (first, 0, 0)
 }
@@ -813,90 +735,41 @@ mod tests {
     fn test_compress_decompress_abc() {
         let input = b"ABCABCABCABCABCABCABCABCABCABC"; // 30 bytes, repeated pattern
         let compressed = compress(input, 3);
-        eprintln!("input: {} bytes, compressed: {} bytes", input.len(), compressed.len());
-        eprintln!("compressed hex: {:02x?}", compressed);
-        
-        // Try system-compatible decompress
-        let result = crate::decompress(&compressed);
-        match result {
-            Ok(decompressed) => {
-                assert_eq!(decompressed, input, "roundtrip mismatch");
-                eprintln!("ROUNDTRIP OK");
-            }
-            Err(e) => {
-                panic!("decompress failed: {:?}", e);
-            }
-        }
+        let decompressed = crate::decompress(&compressed).unwrap();
+        assert_eq!(decompressed, input);
     }
-    
+
     #[test]
     fn test_compress_decompress_zeros_1k() {
         let input = vec![0u8; 1024];
         let compressed = compress(&input, 3);
-        eprintln!("input: {} bytes, compressed: {} bytes", input.len(), compressed.len());
-        
-        let result = crate::decompress(&compressed);
-        match result {
-            Ok(decompressed) => {
-                assert_eq!(decompressed.len(), input.len(), "length mismatch");
-                assert_eq!(decompressed, input, "data mismatch");
-                eprintln!("ROUNDTRIP OK");
-            }
-            Err(e) => {
-                panic!("decompress failed: {:?}", e);
-            }
-        }
+        let decompressed = crate::decompress(&compressed).unwrap();
+        assert_eq!(decompressed, input);
     }
 
     #[test]
     fn test_compress_decompress_zeros_10k() {
         let input = vec![0u8; 10240];
         let compressed = compress(&input, 3);
-        eprintln!("input: {} bytes, compressed: {} bytes", input.len(), compressed.len());
-
-        let result = crate::decompress(&compressed);
-        match result {
-            Ok(decompressed) => {
-                assert_eq!(decompressed.len(), input.len(), "length mismatch");
-                assert_eq!(decompressed, input, "data mismatch");
-                eprintln!("ROUNDTRIP OK");
-            }
-            Err(e) => {
-                panic!("decompress failed: {:?}", e);
-            }
-        }
+        let decompressed = crate::decompress(&compressed).unwrap();
+        assert_eq!(decompressed, input);
     }
 
     #[test]
     fn test_compress_decompress_tarlike() {
         // Simulate tar-like data: some ASCII + lots of null padding
         let mut input = Vec::new();
-        // Header with filenames and metadata
         input.extend_from_slice(b"./\x00");
         input.extend_from_slice(&[0u8; 509]); // pad to 512
         input.extend_from_slice(b"./usr/bin/test.sh\x00");
         input.extend_from_slice(&[0u8; 494]); // pad to 512
-        // File content
         input.extend_from_slice(b"#!/bin/sh\necho hello\n");
         input.extend_from_slice(&[0u8; 491]); // pad to 512
-        // Two empty blocks (end of archive)
-        input.extend_from_slice(&[0u8; 1024]);
-        eprintln!("tarlike input: {} bytes", input.len());
+        input.extend_from_slice(&[0u8; 1024]); // end of archive
 
         let compressed = compress(&input, 3);
-        eprintln!("compressed: {} bytes", compressed.len());
-
-        let result = crate::decompress(&compressed);
-        match result {
-            Ok(decompressed) => {
-                assert_eq!(decompressed.len(), input.len(), "length mismatch: got {} expected {}", decompressed.len(), input.len());
-                assert_eq!(decompressed, input, "data mismatch");
-                eprintln!("TARLIKE ROUNDTRIP OK");
-            }
-            Err(e) => {
-                panic!("tarlike decompress failed: {:?}", e);
-            }
-        }
+        let decompressed = crate::decompress(&compressed).unwrap();
+        assert_eq!(decompressed, input);
     }
 
     #[test]
@@ -907,20 +780,8 @@ mod tests {
             input.extend_from_slice(format!("line {:04}\n", i).as_bytes());
             input.extend_from_slice(&[0u8; 30]);
         }
-        eprintln!("mixed input: {} bytes", input.len());
 
         let compressed = compress(&input, 3);
-        eprintln!("compressed: {} bytes", compressed.len());
-
-        let result = crate::decompress(&compressed);
-        match result {
-            Ok(decompressed) => {
-                assert_eq!(decompressed.len(), input.len(), "length mismatch");
-                assert_eq!(decompressed, input, "data mismatch");
-                eprintln!("MIXED ROUNDTRIP OK");
-            }
-            Err(e) => {
-                panic!("mixed decompress failed: {:?}", e);
-            }
-        }
+        let decompressed = crate::decompress(&compressed).unwrap();
+        assert_eq!(decompressed, input);
     }

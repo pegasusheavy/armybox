@@ -567,15 +567,10 @@ mod tests {
         // sum: 10+8+6+5+5+4+4+3+3+3+2+2+2+2+1+1+1+1+1 = 64 ✓
         let al = 6u8;
         let serialized = write_table_description(&probs_in, al);
-        eprintln!("serialized ({} bytes): {:02x?}", serialized.len(), serialized);
 
         let (probs_out, al_out, consumed) = FseTable::read_table_description(
             &serialized, 20, 9
         ).unwrap();
-
-        eprintln!("probs_in:  {:?}", probs_in);
-        eprintln!("probs_out: {:?} (len={})", probs_out, probs_out.len());
-        eprintln!("al_in: {}, al_out: {}, consumed: {}, serialized_len: {}", al, al_out, consumed, serialized.len());
 
         assert_eq!(al_out, al, "accuracy log mismatch");
         assert_eq!(consumed, serialized.len(), "bytes consumed must match serialized length");
@@ -594,14 +589,10 @@ mod tests {
         // sum: 8+4+0+0+0+3+3+2+2+2+2+1+1+1+1+1+1 = 32 ✓
         let al = 5u8;
         let serialized = write_table_description(&probs_in, al);
-        eprintln!("serialized ({} bytes): {:02x?}", serialized.len(), serialized);
 
         let (probs_out, al_out, consumed) = FseTable::read_table_description(
             &serialized, 20, 9
         ).unwrap();
-
-        eprintln!("probs_in:  {:?}", probs_in);
-        eprintln!("probs_out: {:?}", probs_out);
 
         assert_eq!(al_out, al, "accuracy log mismatch");
         assert_eq!(consumed, serialized.len(), "bytes consumed must match serialized length");
@@ -621,15 +612,10 @@ mod tests {
         // sum: 1+1+1+1+1+123 = 128 ✓ (5 probs of value 1, one of 123, rest are 0)
         let al = 7u8;
         let serialized = write_table_description(&probs_in, al);
-        eprintln!("serialized ({} bytes): {:02x?}", serialized.len(), serialized);
 
         let (probs_out, al_out, consumed) = FseTable::read_table_description(
             &serialized, 52, 9
         ).unwrap();
-
-        eprintln!("probs_in:  {:?}", probs_in);
-        eprintln!("probs_out: {:?}", probs_out);
-        eprintln!("al_in: {}, al_out: {}, consumed: {}, serialized_len: {}", al, al_out, consumed, serialized.len());
 
         assert_eq!(al_out, al, "accuracy log mismatch");
         assert_eq!(consumed, serialized.len(), "bytes consumed must match serialized length");

@@ -90,10 +90,6 @@ impl HuffTable {
         let target = 1u32 << max_bits;
         let remainder = target - weight_sum;
 
-        #[cfg(test)]
-        eprintln!("[HUFF-BUILD] weight_sum={}, max_bits={}, target={}, remainder={}, max_weight={}, num_weights={}",
-            weight_sum, max_bits, target, remainder, max_weight, weights.len());
-
         // remainder must be a power of 2 (for the implied last weight)
         if remainder == 0 || (remainder & (remainder - 1)) != 0 {
             return Err(ZstdError::CorruptData);
@@ -102,16 +98,12 @@ impl HuffTable {
         // Implied last weight: 2^(implied_w - 1) = remainder
         // So implied_w = log2(remainder) + 1
         let implied_weight = (32 - remainder.leading_zeros()) as u8; // log2(remainder) + 1
-        // Add the implied weight to the counts
-        weight_counts[implied_weight as usize] += 1;
-
         // Table size = 1 << max_bits
         let table_size = 1usize << max_bits;
         let mut table = vec![HuffDecEntry { symbol: 0, num_bits: 0 }; table_size];
 
         // Build full weight array including implied last symbol
         let implied_sym = weights.len();
-        let total_symbols = implied_sym + 1;
 
         // Build lookup table using the zstd convention:
         // Longest codes (lowest weight) get the lowest table indices.
@@ -238,8 +230,6 @@ fn decompress_fse_weights(data: &[u8]) -> Result<Vec<u8>, ZstdError> {
 
     // Read the FSE table description for weights (max symbol = 12, max AL = 6)
     let (probs, accuracy_log, header_size) = FseTable::read_table_description(data, 12, 6)?;
-    #[cfg(test)]
-    eprintln!("[HUFF-FSE] probs: {:?}, al={}, header_size={}, data_len={}", probs, accuracy_log, header_size, data.len());
     let table = FseTable::build(&probs, accuracy_log)?;
 
     // The remaining data is a backward bitstream with 2 interleaved FSE streams
@@ -255,10 +245,6 @@ fn decompress_fse_weights(data: &[u8]) -> Result<Vec<u8>, ZstdError> {
     let mut state1 = reader.read_bits(al)?;
     let mut state2 = reader.read_bits(al)?;
 
-    #[cfg(test)]
-    eprintln!("[HUFF-FSE] stream_data: {} bytes, init states: s1={}, s2={}, remaining={}",
-        stream_data.len(), state1, state2, reader.remaining());
-
     let mut weights = Vec::new();
 
     // Decode alternating between the two streams.
@@ -267,8 +253,6 @@ fn decompress_fse_weights(data: &[u8]) -> Result<Vec<u8>, ZstdError> {
     // - After update, check if bitstream is exhausted
     // - If exhausted after state1 update: push final symbol from state2, break
     // - If exhausted after state2 update: push final symbol from UPDATED state1, break
-    #[cfg(test)]
-    let mut step = 0usize;
     loop {
         // Stream 1: output symbol
         let sym1 = table.peek_symbol(state1);
@@ -276,19 +260,12 @@ fn decompress_fse_weights(data: &[u8]) -> Result<Vec<u8>, ZstdError> {
 
         let entry1 = &table.entries[state1 as usize];
         let nb1 = entry1.num_bits as u32;
-        #[cfg(test)] {
-            eprintln!("[HUFF-FSE-STEP] {}: s1={} sym={} nb={} bl={} remaining={}",
-                step, state1, sym1, nb1, entry1.baseline, reader.remaining());
-            step += 1;
-        }
 
         // Update state1 - check if enough bits first
         if reader.remaining() < nb1 {
             // Can't update state1; emit final symbol from state2 and stop
             let sym2 = table.peek_symbol(state2);
             weights.push(sym2);
-            #[cfg(test)]
-            eprintln!("[HUFF-FSE] final (s1 exhaust): s1 sym={}, s2 sym={} (s2={}), remaining={}, nb1={}", sym1, sym2, state2, reader.remaining(), nb1);
             break;
         }
         table.decode(&mut state1, &mut reader)?;
@@ -299,26 +276,16 @@ fn decompress_fse_weights(data: &[u8]) -> Result<Vec<u8>, ZstdError> {
 
         let entry2 = &table.entries[state2 as usize];
         let nb2 = entry2.num_bits as u32;
-        #[cfg(test)] {
-            eprintln!("[HUFF-FSE-STEP] {}: s2={} sym={} nb={} bl={} remaining={}",
-                step, state2, sym2, nb2, entry2.baseline, reader.remaining());
-            step += 1;
-        }
 
         // Update state2 - check if enough bits first
         if reader.remaining() < nb2 {
             // Can't update state2; emit final symbol from ALREADY-UPDATED state1
             let final_sym = table.peek_symbol(state1);
             weights.push(final_sym);
-            #[cfg(test)]
-            eprintln!("[HUFF-FSE] final (s2 exhaust): s2 sym={}, final s1 sym={} (s1={}), remaining={}, nb2={}", sym2, final_sym, state1, reader.remaining(), nb2);
             break;
         }
         table.decode(&mut state2, &mut reader)?;
     }
-
-    #[cfg(test)]
-    eprintln!("[HUFF-FSE] decoded {} weights: {:?}", weights.len(), &weights);
 
     Ok(weights)
 }
