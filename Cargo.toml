@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "crates/abp", "crates/zstd-nostd"]
+
 [package]
 name = "armybox"
 version = "0.3.0"
@@ -60,7 +63,7 @@ full = [
     "netstat", "nslookup", "ping", "route", "slattach", "sntp", "ss", "telnet",
     "tftp", "traceroute", "tunctl", "vconfig", "wget",
     # Archive utilities
-    "bzip2", "compress", "cpio", "gzip", "tar", "unzip", "xz",
+    "bzip2", "compress", "cpio", "gzip", "tar", "unzip", "xz", "zstd",
     # Misc utilities
     "ascii", "base64", "boolean", "cmp", "count", "diff", "expr",
     "factor", "getconf", "getopt", "hash", "help", "hexdump", "iconv", "mcookie",
@@ -76,6 +79,7 @@ full = [
     "sh",
     # Package manager
     "apk",
+    "abp",
 ]
 
 # Minimal useful set for basic shell use
@@ -314,6 +318,7 @@ gzip = []          # includes gunzip, zcat aliases
 tar = []
 unzip = []
 xz = []            # includes unxz, xzcat, lzma, unlzma, lzcat aliases
+zstd = ["alloc", "dep:zstd-nostd"]  # includes unzstd, zstdcat aliases
 
 # --- Misc utilities ---
 ascii = []
@@ -369,14 +374,18 @@ sh = []            # includes ash, dash aliases
 
 # --- Package manager ---
 apk = ["alloc"]    # Alpine Package Keeper (APK) package manager
+abp = ["alloc", "dep:abp"]  # Armybox Package Manager (ABP)
 
 [dependencies]
 # Core dependency - provides syscall interface
 libc = "0.2"
+abp = { version = "0.1.0", path = "crates/abp", optional = true, default-features = false, features = ["alloc"] }
+zstd-nostd = { version = "0.1.0", path = "crates/zstd-nostd", optional = true, default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 # For testing only - benchmarks are in crates/benchmarks
 tempfile = "3"
+proptest = "1"
 
 # Benchmark profile
 [profile.bench]
@@ -393,10 +402,6 @@ overflow-checks = false
 
 # Don't use panic=abort for dev profile to allow tests
 [profile.dev]
-panic = "unwind"
-
-# Test profile needs unwind for test harness
-[profile.test]
 panic = "unwind"
 
 [[bin]]

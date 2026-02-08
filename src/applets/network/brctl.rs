@@ -9,17 +9,17 @@ use super::get_arg;
 
 // Bridge ioctl commands
 #[cfg(target_os = "linux")]
-const SIOCBRADDBR: libc::c_ulong = 0x89a0;
+const SIOCBRADDBR: crate::io::IoctlReq = 0x89a0u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const SIOCBRDELBR: libc::c_ulong = 0x89a1;
+const SIOCBRDELBR: crate::io::IoctlReq = 0x89a1u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const SIOCBRADDIF: libc::c_ulong = 0x89a2;
+const SIOCBRADDIF: crate::io::IoctlReq = 0x89a2u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const SIOCBRDELIF: libc::c_ulong = 0x89a3;
+const SIOCBRDELIF: crate::io::IoctlReq = 0x89a3u32 as crate::io::IoctlReq;
 
 // Network interface ioctl
 #[cfg(target_os = "linux")]
-const SIOCGIFINDEX: libc::c_ulong = 0x8933;
+const SIOCGIFINDEX: crate::io::IoctlReq = 0x8933u32 as crate::io::IoctlReq;
 
 /// brctl - ethernet bridge administration
 ///
@@ -177,7 +177,7 @@ fn addbr(bridge: &[u8]) -> i32 {
     let len = core::cmp::min(bridge.len(), 31);
     name[..len].copy_from_slice(&bridge[..len]);
 
-    let ret = unsafe { libc::ioctl(sock, SIOCBRADDBR as libc::c_ulong, name.as_ptr()) };
+    let ret = unsafe { libc::ioctl(sock, SIOCBRADDBR as crate::io::IoctlReq, name.as_ptr()) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -203,7 +203,7 @@ fn delbr(bridge: &[u8]) -> i32 {
     let len = core::cmp::min(bridge.len(), 31);
     name[..len].copy_from_slice(&bridge[..len]);
 
-    let ret = unsafe { libc::ioctl(sock, SIOCBRDELBR as libc::c_ulong, name.as_ptr()) };
+    let ret = unsafe { libc::ioctl(sock, SIOCBRDELBR as crate::io::IoctlReq, name.as_ptr()) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -245,7 +245,7 @@ fn addif(bridge: &[u8], iface: &[u8]) -> i32 {
     }
     ifr.ifr_ifru.ifru_ifindex = if_index;
 
-    let ret = unsafe { libc::ioctl(sock, SIOCBRADDIF as libc::c_ulong, &ifr) };
+    let ret = unsafe { libc::ioctl(sock, SIOCBRADDIF as crate::io::IoctlReq, &ifr) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -287,7 +287,7 @@ fn delif(bridge: &[u8], iface: &[u8]) -> i32 {
     }
     ifr.ifr_ifru.ifru_ifindex = if_index;
 
-    let ret = unsafe { libc::ioctl(sock, SIOCBRDELIF as libc::c_ulong, &ifr) };
+    let ret = unsafe { libc::ioctl(sock, SIOCBRDELIF as crate::io::IoctlReq, &ifr) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -552,7 +552,7 @@ fn get_if_index(sock: i32, iface: &[u8]) -> Option<libc::c_int> {
         ifr.ifr_name[j] = iface[j] as libc::c_char;
     }
 
-    let ret = unsafe { libc::ioctl(sock, SIOCGIFINDEX as libc::c_ulong, &mut ifr) };
+    let ret = unsafe { libc::ioctl(sock, SIOCGIFINDEX as crate::io::IoctlReq, &mut ifr) };
     if ret < 0 {
         return None;
     }

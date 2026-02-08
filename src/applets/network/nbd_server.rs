@@ -2,6 +2,8 @@
 //!
 //! Serve block devices over the network.
 
+#![allow(dead_code)]
+
 extern crate alloc;
 use alloc::vec::Vec;
 use crate::io;

@@ -1,10 +1,6 @@
 //! System utilities
 
-#[cfg(feature = "alloc")]
-use alloc::vec::Vec;
-use crate::io;
-use crate::sys;
-use super::{get_arg, has_opt};
+use super::get_arg;
 
 // Individual utility modules (batch 1: core system info)
 #[cfg(feature = "arch")]

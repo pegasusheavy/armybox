@@ -1,0 +1,26 @@
+[package]
+name = "abp"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
+description = "ABP Package Manager - a minimal, secure package manager for armybox systems"
+repository = "https://github.com/pegasusheavy/armybox"
+homepage = "https://github.com/pegasusheavy/armybox"
+license = "MIT OR Apache-2.0"
+keywords = ["package-manager", "no_std", "embedded", "linux", "armybox"]
+categories = ["command-line-utilities", "no-std", "embedded"]
+readme = "README.md"
+
+[features]
+default = ["alloc"]
+alloc = []
+
+[dependencies]
+libc = "0.2"
+zstd-nostd = { version = "0.1.0", path = "../zstd-nostd", features = ["alloc"] }
+
+[[bin]]
+name = "abpd-gen"
+path = "src/bin/abpd_gen.rs"
+required-features = ["alloc"]

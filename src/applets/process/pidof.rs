@@ -3,7 +3,6 @@
 //! Find the PIDs of processes by exact name match.
 
 use crate::io;
-use crate::sys;
 use crate::applets::get_arg;
 
 /// pidof - find the process ID of a running program

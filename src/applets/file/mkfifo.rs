@@ -39,6 +39,9 @@ pub fn mkfifo(argc: i32, argv: *const *const u8) -> i32 {
 #[cfg(test)]
 mod tests {
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::Command;
     use std::fs;
     use std::path::PathBuf;
@@ -57,8 +60,8 @@ mod tests {
     }
 
     fn setup() -> PathBuf {
-        let id = std::process::id();
-        let dir = std::env::temp_dir().join(format!("armybox_mkfifo_test_{}", id));
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("armybox_mkfifo_test_{}_{}",  std::process::id(), counter));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -115,8 +118,9 @@ mod tests {
 
         let dir = setup();
         let fifo = dir.join("myfifo");
-        // Create the fifo first
-        unsafe { libc::mkfifo(fifo.to_str().unwrap().as_ptr() as *const i8, 0o644) };
+        // Create the fifo first (need null-terminated path for libc)
+        let fifo_cstr = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
+        unsafe { libc::mkfifo(fifo_cstr.as_ptr(), 0o644) };
 
         let output = Command::new(&armybox)
             .args(["mkfifo", fifo.to_str().unwrap()])

@@ -33,6 +33,17 @@ use alloc::vec::Vec;
 
 use core::ptr;
 
+/// Portable ioctl request type.
+///
+/// musl libc defines `ioctl(fd, request: c_int, ...)` while glibc uses
+/// `ioctl(fd, request: c_ulong, ...)`. This type alias allows ioctl
+/// request constants to compile correctly on both targets.
+#[cfg(target_env = "musl")]
+pub type IoctlReq = libc::c_int;
+/// Portable ioctl request type (c_ulong on glibc, c_int on musl).
+#[cfg(not(target_env = "musl"))]
+pub type IoctlReq = libc::c_ulong;
+
 /// Maximum path length supported (matches PATH_MAX on Linux)
 pub const PATH_MAX: usize = 4096;
 
@@ -379,11 +390,13 @@ pub fn opendir(path: &[u8]) -> *mut libc::DIR {
 }
 
 /// Read directory entry
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn readdir(dir: *mut libc::DIR) -> *mut libc::dirent {
     unsafe { libc::readdir(dir) }
 }
 
 /// Close directory
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn closedir(dir: *mut libc::DIR) -> i32 {
     unsafe { libc::closedir(dir) }
 }
@@ -613,6 +626,7 @@ pub fn kill(pid: i32, sig: i32) -> i32 {
 }
 
 /// Execute program
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn execve(path: &[u8], argv: *const *const i8, envp: *const *const i8) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
@@ -630,11 +644,13 @@ pub fn fork() -> i32 {
 }
 
 /// Wait for child process
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn wait(status: *mut i32) -> i32 {
     unsafe { libc::wait(status) }
 }
 
 /// Wait for specific process
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32 {
     unsafe { libc::waitpid(pid, status, options) }
 }
@@ -655,18 +671,12 @@ pub fn exit(code: i32) -> ! {
 
 /// Get C string length with a safety limit
 ///
-/// # Safety
-/// The caller must ensure:
-/// - `s` is a valid pointer to a null-terminated C string
-/// - The string (including null terminator) fits within allocated memory
-///
 /// This function limits scanning to 1MB to prevent runaway reads on
 /// non-terminated strings. Returns the length excluding null terminator.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn strlen(s: *const u8) -> usize {
     const MAX_STRLEN: usize = 1024 * 1024; // 1MB safety limit
     let mut len = 0;
-    // SAFETY: We read one byte at a time, checking for null terminator.
-    // The MAX_STRLEN limit prevents unbounded reads if string is not terminated.
     while len < MAX_STRLEN {
         if unsafe { *s.add(len) } == 0 {
             break;

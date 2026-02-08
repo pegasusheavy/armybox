@@ -9,15 +9,15 @@ use super::get_arg;
 
 // Loop device ioctl commands
 #[cfg(target_os = "linux")]
-const LOOP_SET_FD: libc::c_ulong = 0x4C00;
+const LOOP_SET_FD: crate::io::IoctlReq = 0x4C00u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const LOOP_CLR_FD: libc::c_ulong = 0x4C01;
+const LOOP_CLR_FD: crate::io::IoctlReq = 0x4C01u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const LOOP_SET_STATUS64: libc::c_ulong = 0x4C04;
+const LOOP_SET_STATUS64: crate::io::IoctlReq = 0x4C04u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const LOOP_GET_STATUS64: libc::c_ulong = 0x4C05;
+const LOOP_GET_STATUS64: crate::io::IoctlReq = 0x4C05u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const LOOP_CTL_GET_FREE: libc::c_ulong = 0x4C82;
+const LOOP_CTL_GET_FREE: crate::io::IoctlReq = 0x4C82u32 as crate::io::IoctlReq;
 
 // Loop flags
 #[cfg(target_os = "linux")]
@@ -170,7 +170,7 @@ fn show_loops() -> i32 {
         let fd = io::open(&path, libc::O_RDONLY, 0);
         if fd >= 0 {
             let mut info: LoopInfo64 = unsafe { core::mem::zeroed() };
-            let ret = unsafe { libc::ioctl(fd, LOOP_GET_STATUS64 as libc::c_ulong, &mut info) };
+            let ret = unsafe { libc::ioctl(fd, LOOP_GET_STATUS64 as crate::io::IoctlReq, &mut info) };
             io::close(fd);
 
             if ret >= 0 {
@@ -224,7 +224,7 @@ fn show_loop_info(device: &[u8]) -> i32 {
     }
 
     let mut info: LoopInfo64 = unsafe { core::mem::zeroed() };
-    let ret = unsafe { libc::ioctl(fd, LOOP_GET_STATUS64 as libc::c_ulong, &mut info) };
+    let ret = unsafe { libc::ioctl(fd, LOOP_GET_STATUS64 as crate::io::IoctlReq, &mut info) };
     io::close(fd);
 
     if ret < 0 {
@@ -256,7 +256,7 @@ fn find_free_loop() -> i32 {
         return 1;
     }
 
-    let num = unsafe { libc::ioctl(fd, LOOP_CTL_GET_FREE as libc::c_ulong) };
+    let num = unsafe { libc::ioctl(fd, LOOP_CTL_GET_FREE as crate::io::IoctlReq) };
     io::close(fd);
 
     if num < 0 {
@@ -288,7 +288,7 @@ fn setup_loop(device: Option<&[u8]>, file: &[u8], offset: u64, read_only: bool, 
             return 1;
         }
 
-        let num = unsafe { libc::ioctl(ctl_fd, LOOP_CTL_GET_FREE as libc::c_ulong) };
+        let num = unsafe { libc::ioctl(ctl_fd, LOOP_CTL_GET_FREE as crate::io::IoctlReq) };
         io::close(ctl_fd);
 
         if num < 0 {
@@ -328,7 +328,7 @@ fn setup_loop(device: Option<&[u8]>, file: &[u8], offset: u64, read_only: bool, 
     }
 
     // Associate the loop device with the file
-    let ret = unsafe { libc::ioctl(loop_fd, LOOP_SET_FD as libc::c_ulong, file_fd) };
+    let ret = unsafe { libc::ioctl(loop_fd, LOOP_SET_FD as crate::io::IoctlReq, file_fd) };
     if ret < 0 {
         io::write_str(2, b"losetup: failed to set up loop device\n");
         io::close(file_fd);
@@ -341,7 +341,7 @@ fn setup_loop(device: Option<&[u8]>, file: &[u8], offset: u64, read_only: bool, 
         let mut info: LoopInfo64 = unsafe { core::mem::zeroed() };
 
         // Get current status first
-        unsafe { libc::ioctl(loop_fd, LOOP_GET_STATUS64 as libc::c_ulong, &mut info) };
+        unsafe { libc::ioctl(loop_fd, LOOP_GET_STATUS64 as crate::io::IoctlReq, &mut info) };
 
         info.lo_offset = offset;
         if read_only {
@@ -355,7 +355,7 @@ fn setup_loop(device: Option<&[u8]>, file: &[u8], offset: u64, read_only: bool, 
         let len = core::cmp::min(file.len(), 63);
         info.lo_file_name[..len].copy_from_slice(&file[..len]);
 
-        let ret = unsafe { libc::ioctl(loop_fd, LOOP_SET_STATUS64 as libc::c_ulong, &info) };
+        let ret = unsafe { libc::ioctl(loop_fd, LOOP_SET_STATUS64 as crate::io::IoctlReq, &info) };
         if ret < 0 {
             io::write_str(2, b"losetup: warning: failed to set loop status\n");
         }
@@ -389,7 +389,7 @@ fn detach_loop(device: &[u8]) -> i32 {
         return 1;
     }
 
-    let ret = unsafe { libc::ioctl(fd, LOOP_CLR_FD as libc::c_ulong) };
+    let ret = unsafe { libc::ioctl(fd, LOOP_CLR_FD as crate::io::IoctlReq) };
     io::close(fd);
 
     if ret < 0 {

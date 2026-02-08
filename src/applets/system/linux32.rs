@@ -2,7 +2,6 @@
 //!
 //! Run a program in 32-bit personality mode.
 
-use crate::io;
 use crate::sys;
 use super::get_arg;
 

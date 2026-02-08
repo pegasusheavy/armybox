@@ -3,8 +3,6 @@
 //! FTP file upload utility.
 
 extern crate alloc;
-use alloc::vec::Vec;
-use alloc::vec;
 use crate::io;
 use crate::sys;
 use super::get_arg;

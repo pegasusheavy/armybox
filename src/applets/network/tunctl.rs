@@ -8,13 +8,13 @@ use super::get_arg;
 
 // TUN/TAP ioctl constants
 #[cfg(target_os = "linux")]
-const TUNSETIFF: libc::c_ulong = 0x400454ca;
+const TUNSETIFF: crate::io::IoctlReq = 0x400454cau32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const TUNSETPERSIST: libc::c_ulong = 0x400454cb;
+const TUNSETPERSIST: crate::io::IoctlReq = 0x400454cbu32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const TUNSETOWNER: libc::c_ulong = 0x400454cc;
+const TUNSETOWNER: crate::io::IoctlReq = 0x400454ccu32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const TUNSETGROUP: libc::c_ulong = 0x400454ce;
+const TUNSETGROUP: crate::io::IoctlReq = 0x400454ceu32 as crate::io::IoctlReq;
 
 // TUN/TAP flags
 #[cfg(target_os = "linux")]
@@ -128,7 +128,7 @@ pub fn tunctl(argc: i32, argv: *const *const u8) -> i32 {
     }
 
     // Create/delete the interface
-    let ret = unsafe { libc::ioctl(fd, TUNSETIFF as libc::c_ulong, &mut ifr) };
+    let ret = unsafe { libc::ioctl(fd, TUNSETIFF as crate::io::IoctlReq, &mut ifr) };
     if ret < 0 {
         io::write_str(2, b"tunctl: TUNSETIFF failed\n");
         io::close(fd);
@@ -137,7 +137,7 @@ pub fn tunctl(argc: i32, argv: *const *const u8) -> i32 {
 
     if delete {
         // Delete: set not persistent
-        let ret = unsafe { libc::ioctl(fd, TUNSETPERSIST as libc::c_ulong, 0 as libc::c_int) };
+        let ret = unsafe { libc::ioctl(fd, TUNSETPERSIST as crate::io::IoctlReq, 0 as libc::c_int) };
         if ret < 0 {
             io::write_str(2, b"tunctl: cannot delete interface\n");
             io::close(fd);
@@ -150,7 +150,7 @@ pub fn tunctl(argc: i32, argv: *const *const u8) -> i32 {
     } else {
         // Create: set owner if specified
         if let Some(u) = uid {
-            let ret = unsafe { libc::ioctl(fd, TUNSETOWNER as libc::c_ulong, u as libc::c_int) };
+            let ret = unsafe { libc::ioctl(fd, TUNSETOWNER as crate::io::IoctlReq, u as libc::c_int) };
             if ret < 0 {
                 io::write_str(2, b"tunctl: cannot set owner\n");
                 io::close(fd);
@@ -160,7 +160,7 @@ pub fn tunctl(argc: i32, argv: *const *const u8) -> i32 {
 
         // Set group if specified
         if let Some(g) = gid {
-            let ret = unsafe { libc::ioctl(fd, TUNSETGROUP as libc::c_ulong, g as libc::c_int) };
+            let ret = unsafe { libc::ioctl(fd, TUNSETGROUP as crate::io::IoctlReq, g as libc::c_int) };
             if ret < 0 {
                 io::write_str(2, b"tunctl: cannot set group\n");
                 io::close(fd);
@@ -169,7 +169,7 @@ pub fn tunctl(argc: i32, argv: *const *const u8) -> i32 {
         }
 
         // Make persistent
-        let ret = unsafe { libc::ioctl(fd, TUNSETPERSIST as libc::c_ulong, 1 as libc::c_int) };
+        let ret = unsafe { libc::ioctl(fd, TUNSETPERSIST as crate::io::IoctlReq, 1 as libc::c_int) };
         if ret < 0 {
             io::write_str(2, b"tunctl: cannot make persistent\n");
             io::close(fd);

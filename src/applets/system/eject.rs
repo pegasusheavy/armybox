@@ -7,7 +7,7 @@ use crate::sys;
 use crate::applets::get_arg;
 
 // CD-ROM ioctl commands
-const CDROMEJECT: u64 = 0x5309;
+const CDROMEJECT: crate::io::IoctlReq = 0x5309u32 as crate::io::IoctlReq;
 
 /// eject - eject removable media
 ///

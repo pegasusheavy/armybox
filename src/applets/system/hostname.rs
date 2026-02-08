@@ -10,30 +10,95 @@ use crate::applets::get_arg;
 ///
 /// # Synopsis
 /// ```text
-/// hostname [name]
+/// hostname [-F file] [name]
 /// ```
 ///
 /// # Description
 /// With no arguments, print the current hostname.
-/// With an argument, set the hostname (requires root).
+/// With `-F file`, read the hostname from the specified file.
+/// With a plain argument, set the hostname (requires root).
 ///
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
 pub fn hostname(argc: i32, argv: *const *const u8) -> i32 {
-    if argc > 1 {
-        if let Some(name) = unsafe { get_arg(argv, 1) } {
-            if unsafe { libc::sethostname(name.as_ptr() as *const i8, name.len()) } < 0 {
+    let mut i = 1;
+    while i < argc {
+        let arg = match unsafe { get_arg(argv, i) } {
+            Some(a) => a,
+            None => { i += 1; continue; }
+        };
+
+        if arg == b"-F" || arg == b"-f" || arg == b"--file" {
+            // Read hostname from file
+            i += 1;
+            if i >= argc {
+                io::write_str(2, b"hostname: option requires an argument -- 'F'\n");
+                return 1;
+            }
+            let file = match unsafe { get_arg(argv, i) } {
+                Some(f) => f,
+                None => return 1,
+            };
+            let fd = io::open(file, libc::O_RDONLY, 0);
+            if fd < 0 {
+                io::write_str(2, b"hostname: ");
+                io::write_all(2, file);
+                io::write_str(2, b": No such file or directory\n");
+                return 1;
+            }
+            let content = io::read_all(fd);
+            io::close(fd);
+            // Trim trailing whitespace/newlines
+            let name = content.trim_ascii();
+            if !name.is_empty() {
+                if unsafe { libc::sethostname(name.as_ptr() as *const i8, name.len()) } < 0 {
+                    sys::perror(b"sethostname");
+                    return 1;
+                }
+            }
+            return 0;
+        } else if arg == b"-s" || arg == b"--short" {
+            // Print short hostname (up to first dot)
+            let mut buf = [0u8; 256];
+            if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
+                let full = unsafe { io::cstr_to_slice(buf.as_ptr()) };
+                if let Some(dot) = full.iter().position(|&c| c == b'.') {
+                    io::write_all(1, &full[..dot]);
+                } else {
+                    io::write_all(1, full);
+                }
+                io::write_str(1, b"\n");
+            }
+            return 0;
+        } else if arg == b"-d" || arg == b"--domain" {
+            // Print domain name
+            let mut buf = [0u8; 256];
+            if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
+                let full = unsafe { io::cstr_to_slice(buf.as_ptr()) };
+                if let Some(dot) = full.iter().position(|&c| c == b'.') {
+                    io::write_all(1, &full[dot + 1..]);
+                }
+                io::write_str(1, b"\n");
+            }
+            return 0;
+        } else if arg[0] != b'-' {
+            // Set hostname directly
+            if unsafe { libc::sethostname(arg.as_ptr() as *const i8, arg.len()) } < 0 {
                 sys::perror(b"sethostname");
                 return 1;
             }
+            return 0;
         }
-    } else {
-        let mut buf = [0u8; 256];
-        if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
-            io::write_all(1, unsafe { io::cstr_to_slice(buf.as_ptr()) });
-            io::write_str(1, b"\n");
-        }
+
+        i += 1;
+    }
+
+    // No arguments - print current hostname
+    let mut buf = [0u8; 256];
+    if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
+        io::write_all(1, unsafe { io::cstr_to_slice(buf.as_ptr()) });
+        io::write_str(1, b"\n");
     }
     0
 }

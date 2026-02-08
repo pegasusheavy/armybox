@@ -10,7 +10,7 @@
 #[cfg(feature = "alloc")]
 use super::state::Shell;
 #[cfg(feature = "alloc")]
-use super::util::{skip_whitespace_and_comments, find_word_end, find_keyword, find_matching_done, skip_to_next_token};
+use super::util::{skip_whitespace_and_comments, find_word_end, find_keyword, find_matching_done, skip_to_next_token, is_keyword_boundary};
 #[cfg(feature = "alloc")]
 use super::expand::split_words;
 #[cfg(feature = "alloc")]
@@ -43,9 +43,10 @@ pub(super) fn execute_if(shell: &mut Shell, script: &[u8], start: usize) -> usiz
 
     pos = then_pos + 4; // skip "then"
 
-    // Find matching fi, tracking elif/else
+    // Find matching fi, tracking first elif/else at depth 1 only
     let mut depth = 1;
-    let mut else_pos: Option<usize> = None;
+    let mut first_else_pos: Option<usize> = None;
+    let mut first_else_is_elif = false;
     let mut fi_pos: Option<usize> = None;
     let mut scan = pos;
 
@@ -55,22 +56,24 @@ pub(super) fn execute_if(shell: &mut Shell, script: &[u8], start: usize) -> usiz
 
         let word_end = find_word_end(script, scan);
         let word = &script[scan..word_end];
+        let at_boundary = is_keyword_boundary(script, word_end);
 
-        if word == b"if" {
+        if word == b"if" && at_boundary {
             depth += 1;
             scan = word_end;
-        } else if word == b"fi" {
+        } else if word == b"fi" && at_boundary {
             depth -= 1;
             if depth == 0 {
                 fi_pos = Some(scan);
             }
             scan = word_end;
-        } else if word == b"else" && depth == 1 {
-            else_pos = Some(scan);
+        } else if word == b"else" && depth == 1 && at_boundary && first_else_pos.is_none() {
+            first_else_pos = Some(scan);
+            first_else_is_elif = false;
             scan = word_end;
-        } else if word == b"elif" && depth == 1 {
-            // Treat elif as else + nested if
-            else_pos = Some(scan);
+        } else if word == b"elif" && depth == 1 && at_boundary && first_else_pos.is_none() {
+            first_else_pos = Some(scan);
+            first_else_is_elif = true;
             scan = word_end;
         } else {
             scan = skip_to_next_token(script, scan);
@@ -85,19 +88,19 @@ pub(super) fn execute_if(shell: &mut Shell, script: &[u8], start: usize) -> usiz
 
     if condition_result {
         // Execute then branch
-        let end = else_pos.unwrap_or(fi_pos);
+        let end = first_else_pos.unwrap_or(fi_pos);
         let then_body = &script[pos..end];
         super::execute_script(shell, then_body);
-    } else if let Some(else_start) = else_pos {
-        // Execute else branch
-        let else_body = &script[else_start + 4..fi_pos]; // skip "else"
-
-        // Check if it's elif
-        let trimmed = else_body.trim_ascii();
-        if trimmed.starts_with(b"if ") || trimmed == b"if" {
-            // It's elif - recursively handle
-            super::execute_script(shell, trimmed);
+    } else if let Some(else_start) = first_else_pos {
+        if first_else_is_elif {
+            // elif: reconstruct as "if <rest> fi" and execute recursively
+            // The content from elif to fi is: "elif cond; then body [elif|else ...] fi"
+            // We treat it as: "if cond; then body [elif|else ...] fi"
+            let elif_body = &script[else_start + 2..fi_pos + 2]; // skip "el", keep "if...fi"
+            super::execute_script(shell, elif_body.trim_ascii());
         } else {
+            // else: execute the body between "else" and "fi"
+            let else_body = &script[else_start + 4..fi_pos]; // skip "else"
             super::execute_script(shell, else_body);
         }
     }
@@ -201,12 +204,13 @@ pub(super) fn execute_for(shell: &mut Shell, script: &[u8], start: usize) -> usi
 
     pos = skip_whitespace_and_comments(script, pos);
 
-    // Check for "in"
-    if !script[pos..].starts_with(b"in") {
+    // Check for "in" keyword
+    let in_end = find_word_end(script, pos);
+    if &script[pos..in_end] != b"in" || !is_keyword_boundary(script, in_end) {
         io::write_str(2, b"sh: syntax error: expected 'in'\n");
         return script.len();
     }
-    pos += 2;
+    pos = in_end;
 
     // Get word list (until "do" or newline/semicolon)
     let do_pos = find_keyword(script, pos, b"do");
@@ -240,6 +244,35 @@ pub(super) fn execute_for(shell: &mut Shell, script: &[u8], start: usize) -> usi
     done_pos + 4
 }
 
+/// Find matching esac for a case statement, tracking nested case/esac depth
+#[cfg(feature = "alloc")]
+fn find_matching_esac(script: &[u8], start: usize) -> Option<usize> {
+    let mut pos = start;
+    let mut depth = 1;
+
+    while pos < script.len() && depth > 0 {
+        pos = skip_whitespace_and_comments(script, pos);
+        if pos >= script.len() {
+            return None;
+        }
+
+        let word_end = find_word_end(script, pos);
+        let word = &script[pos..word_end];
+
+        if word == b"case" && is_keyword_boundary(script, word_end) {
+            depth += 1;
+        } else if word == b"esac" && is_keyword_boundary(script, word_end) {
+            depth -= 1;
+            if depth == 0 {
+                return Some(pos);
+            }
+        }
+
+        pos = skip_to_next_token(script, pos);
+    }
+    None
+}
+
 /// Execute case/in/esac
 ///
 /// Matches a word against patterns and executes the corresponding commands.
@@ -259,14 +292,15 @@ pub(super) fn execute_case(shell: &mut Shell, script: &[u8], start: usize) -> us
     pos = skip_whitespace_and_comments(script, pos);
 
     // Expect "in"
-    if !script[pos..].starts_with(b"in") {
+    let word_end = find_word_end(script, pos);
+    if &script[pos..word_end] != b"in" || !is_keyword_boundary(script, word_end) {
         io::write_str(2, b"sh: syntax error: expected 'in'\n");
         return script.len();
     }
-    pos += 2;
+    pos = word_end;
 
-    // Find esac
-    let esac_pos = find_keyword(script, pos, b"esac");
+    // Find matching esac (with depth tracking)
+    let esac_pos = find_matching_esac(script, pos);
     if esac_pos.is_none() {
         io::write_str(2, b"sh: syntax error: expected 'esac'\n");
         return script.len();
@@ -302,7 +336,7 @@ pub(super) fn execute_case(shell: &mut Shell, script: &[u8], start: usize) -> us
         }
 
         pos = end_pos;
-        if script[pos..].starts_with(b";;") {
+        if pos < script.len() && script[pos..].starts_with(b";;") {
             pos += 2;
         }
     }

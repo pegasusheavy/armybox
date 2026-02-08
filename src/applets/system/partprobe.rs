@@ -7,7 +7,7 @@ use crate::sys;
 use super::get_arg;
 
 // BLKRRPART ioctl - reread partition table
-const BLKRRPART: u64 = 0x125f;
+const BLKRRPART: crate::io::IoctlReq = 0x125fu32 as crate::io::IoctlReq;
 
 /// partprobe - inform the kernel of partition table changes
 ///

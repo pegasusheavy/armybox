@@ -7,8 +7,6 @@ use super::get_arg;
 
 #[cfg(all(feature = "init", feature = "alloc"))]
 use alloc::vec::Vec;
-#[cfg(all(feature = "init", feature = "alloc"))]
-use alloc::string::String;
 
 // Inittab action types
 #[cfg(feature = "init")]
@@ -101,7 +99,7 @@ fn run_command(cmd: &[u8], wait_for: bool) -> i32 {
 #[cfg(feature = "init")]
 fn mount_if_needed(source: &[u8], target: &[u8], fstype: &[u8]) {
     // Check if already mounted by trying to stat the target
-    let mut stat_buf: libc::stat = unsafe { core::mem::zeroed() };
+    let _stat_buf: libc::stat = unsafe { core::mem::zeroed() };
 
     // Create null-terminated strings
     let mut target_buf = [0u8; 256];
@@ -458,10 +456,7 @@ pub fn getty(argc: i32, argv: *const *const u8) -> i32 {
     // Make this the controlling terminal
     unsafe {
         libc::setsid();
-        #[cfg(target_env = "musl")]
-        libc::ioctl(fd, libc::TIOCSCTTY as libc::c_int, 0);
-        #[cfg(not(target_env = "musl"))]
-        libc::ioctl(fd, libc::TIOCSCTTY as libc::c_ulong, 0);
+        libc::ioctl(fd, libc::TIOCSCTTY as crate::io::IoctlReq, 0);
     }
 
     // Redirect stdin/stdout/stderr to tty

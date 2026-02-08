@@ -504,7 +504,7 @@ pub fn screen_new_session(session_name: Option<&[u8]>) -> i32 {
 
         // Set up slave as controlling terminal
         unsafe { libc::setsid() };
-        unsafe { libc::ioctl(slave_fd, libc::TIOCSCTTY as libc::c_ulong, 0) };
+        unsafe { libc::ioctl(slave_fd, libc::TIOCSCTTY as crate::io::IoctlReq, 0) };
 
         // Redirect stdio to slave
         io::dup2(slave_fd, 0);

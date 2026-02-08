@@ -91,7 +91,7 @@ mod network;
 
 #[cfg(any(
     feature = "tar", feature = "gzip", feature = "bzip2", feature = "xz",
-    feature = "cpio", feature = "unzip", feature = "compress"
+    feature = "cpio", feature = "unzip", feature = "compress", feature = "zstd"
 ))]
 mod archive;
 
@@ -107,7 +107,7 @@ mod init;
 #[cfg(feature = "sh")]
 mod shell;
 
-#[cfg(feature = "apk")]
+#[cfg(any(feature = "apk", feature = "abp"))]
 mod package;
 
 use crate::io;
@@ -732,6 +732,12 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     if name == b"unlzma" { return Some(archive::unlzma); }
     #[cfg(feature = "xz")]
     if name == b"lzcat" { return Some(archive::lzcat); }
+    #[cfg(feature = "zstd")]
+    if name == b"zstd" { return Some(archive::zstd); }
+    #[cfg(feature = "zstd")]
+    if name == b"unzstd" { return Some(archive::unzstd); }
+    #[cfg(feature = "zstd")]
+    if name == b"zstdcat" { return Some(archive::zstdcat); }
 
     // Editors
     #[cfg(feature = "vi")]
@@ -773,6 +779,10 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     #[cfg(feature = "apk")]
     if name == b"apk" { return Some(package::apk); }
 
+    // ABP package manager (feature gated)
+    #[cfg(feature = "abp")]
+    if name == b"abp" { return Some(package::abp); }
+
     None
 }
 
@@ -780,6 +790,8 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
 pub fn list_applets() {
     io::write_str(1, b"Currently defined applets:\n");
 
+    #[cfg(feature = "abp")]
+    io::write_str(1, b"abp\n");
     #[cfg(feature = "acpi")]
     io::write_str(1, b"acpi\n");
     #[cfg(feature = "apk")]
@@ -1324,6 +1336,8 @@ pub fn list_applets() {
     io::write_str(1, b"unshare\n");
     #[cfg(feature = "xz")]
     io::write_str(1, b"unxz\n");
+    #[cfg(feature = "zstd")]
+    io::write_str(1, b"unzstd\n");
     #[cfg(feature = "unzip")]
     io::write_str(1, b"unzip\n");
     #[cfg(feature = "uptime")]
@@ -1374,6 +1388,10 @@ pub fn list_applets() {
     io::write_str(1, b"yes\n");
     #[cfg(feature = "gzip")]
     io::write_str(1, b"zcat\n");
+    #[cfg(feature = "zstd")]
+    io::write_str(1, b"zstd\n");
+    #[cfg(feature = "zstd")]
+    io::write_str(1, b"zstdcat\n");
     #[cfg(feature = "test")]
     io::write_str(1, b"[\n");
 }

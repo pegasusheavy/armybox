@@ -1,0 +1,805 @@
+.\" armybox-applets(7) man page
+.\" Copyright (c) 2026 Pegasus Heavy Industries LLC
+.\" Licensed under MIT OR Apache-2.0
+.\"
+.TH ARMYBOX-APPLETS 7 "2026-02-08" "armybox 0.3.0" "ArmyBox Manual"
+.\"
+.SH NAME
+armybox-applets \- complete list of armybox applets with descriptions
+.\"
+.SH DESCRIPTION
+This page lists every applet provided by
+.BR armybox (1),
+organized by category.
+Each applet can be invoked either through a symlink or via
+.BI "armybox " APPLET
+.IR ARGS .\|.\|.
+.PP
+Applets marked with \fB[P]\fR are defined by POSIX.1-2017.
+Applets marked with \fB[L]\fR are Linux-specific extensions.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH FILE UTILITIES
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR basename " \fB[P]\fR"
+Strip directory and suffix from filenames.
+.TP
+.BR cat " \fB[P]\fR"
+Concatenate files and print on standard output.
+.TP
+.BR cd " \fB[P]\fR"
+Change the working directory.
+.TP
+.BR chattr " \fB[L]\fR"
+Change file attributes on a Linux ext2/ext3/ext4 filesystem.
+.TP
+.BR chgrp " \fB[P]\fR"
+Change group ownership of files.
+.TP
+.BR chmod " \fB[P]\fR"
+Change file mode bits.
+Supports both symbolic and octal modes.
+.TP
+.BR chown " \fB[P]\fR"
+Change file owner and group.
+.TP
+.BR cp " \fB[P]\fR"
+Copy files and directories.
+.TP
+.BR dd " \fB[P]\fR"
+Convert and copy a file.
+.TP
+.BR dirname " \fB[P]\fR"
+Strip last component from filenames.
+.TP
+.BR file
+Determine file type.
+.TP
+.BR find " \fB[P]\fR"
+Search for files in a directory hierarchy.
+.TP
+.BR fstype " \fB[L]\fR"
+Print the filesystem type of a block device.
+.TP
+.BR install
+Copy files and set attributes.
+.TP
+.BR link " \fB[P]\fR"
+Create a hard link to a file.
+.TP
+.BR ln " \fB[P]\fR"
+Make links between files.
+.TP
+.BR ls " \fB[P]\fR"
+List directory contents.
+.TP
+.BR lsattr " \fB[L]\fR"
+List file attributes on a Linux ext2/ext3/ext4 filesystem.
+.TP
+.BR makedevs " \fB[L]\fR"
+Create a range of special files as specified in a device table.
+.TP
+.BR mkdir " \fB[P]\fR"
+Make directories.
+.TP
+.BR mkfifo " \fB[P]\fR"
+Make FIFOs (named pipes).
+.TP
+.BR mknod " \fB[P]\fR"
+Make block or character special files.
+.TP
+.BR mktemp
+Create a temporary file or directory.
+.TP
+.BR mv " \fB[P]\fR"
+Move (rename) files.
+.TP
+.BR patch " \fB[P]\fR"
+Apply a diff file to an original.
+.TP
+.BR pwd " \fB[P]\fR"
+Print name of current working directory.
+.TP
+.BR readlink
+Print resolved symbolic links or canonical filenames.
+.TP
+.BR realpath
+Print the resolved absolute pathname.
+.TP
+.BR rm " \fB[P]\fR"
+Remove files or directories.
+.TP
+.BR rmdir " \fB[P]\fR"
+Remove empty directories.
+.TP
+.BR setfattr " \fB[L]\fR"
+Set extended attributes of filesystem objects.
+.TP
+.BR shred
+Overwrite a file to hide its contents, and optionally delete it.
+.TP
+.BR split " \fB[P]\fR"
+Split a file into pieces.
+.TP
+.BR stat
+Display file or filesystem status.
+.TP
+.BR sync " \fB[P]\fR"
+Synchronize cached writes to persistent storage.
+.TP
+.BR touch " \fB[P]\fR"
+Change file timestamps.
+.TP
+.BR truncate
+Shrink or extend the size of a file to the specified size.
+.TP
+.BR unlink " \fB[P]\fR"
+Remove a directory entry.
+.TP
+.BR xargs " \fB[P]\fR"
+Build and execute command lines from standard input.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH TEXT PROCESSING
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR awk " \fB[P]\fR"
+Pattern scanning and text processing language.
+.TP
+.BR comm " \fB[P]\fR"
+Compare two sorted files line by line.
+.TP
+.BR cut " \fB[P]\fR"
+Remove sections from each line of files.
+.TP
+.BR dos2unix
+Convert DOS/Mac line endings to Unix.
+.TP
+.BR echo " \fB[P]\fR"
+Display a line of text.
+.TP
+.BR expand " \fB[P]\fR"
+Convert tabs to spaces.
+.TP
+.BR fmt
+Simple optimal text formatter.
+.TP
+.BR fold " \fB[P]\fR"
+Wrap each input line to fit in specified width.
+.TP
+.BR grep ", " egrep ", " fgrep " \fB[P]\fR"
+Print lines matching a pattern.
+.BR egrep
+is equivalent to
+.BR "grep \-E" ;
+.BR fgrep
+is equivalent to
+.BR "grep \-F" .
+.TP
+.BR head " \fB[P]\fR"
+Output the first part of files.
+.TP
+.BR nl " \fB[P]\fR"
+Number lines of files.
+.TP
+.BR paste " \fB[P]\fR"
+Merge lines of files.
+.TP
+.BR printf " \fB[P]\fR"
+Format and print data.
+.TP
+.BR rev
+Reverse lines characterwise.
+.TP
+.BR sed " \fB[P]\fR"
+Stream editor for filtering and transforming text.
+.TP
+.BR seq
+Print a sequence of numbers.
+.TP
+.BR sort " \fB[P]\fR"
+Sort lines of text files.
+.TP
+.BR strings
+Print the sequences of printable characters in files.
+.TP
+.BR tac
+Concatenate and print files in reverse.
+.TP
+.BR tail " \fB[P]\fR"
+Output the last part of files.
+.TP
+.BR tee " \fB[P]\fR"
+Read from standard input and write to standard output and files.
+.TP
+.BR tr " \fB[P]\fR"
+Translate or delete characters.
+.TP
+.BR unexpand " \fB[P]\fR"
+Convert spaces to tabs.
+.TP
+.BR uniq " \fB[P]\fR"
+Report or omit repeated lines.
+.TP
+.BR unix2dos
+Convert Unix line endings to DOS/Mac.
+.TP
+.BR wc " \fB[P]\fR"
+Print newline, word, and byte counts for each file.
+.TP
+.BR yes
+Output a string repeatedly until killed.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH SYSTEM UTILITIES
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR acpi " \fB[L]\fR"
+Show battery status and other ACPI information.
+.TP
+.BR arch
+Print machine hardware name (equivalent to
+.BR "uname \-m" ).
+.TP
+.BR blkdiscard " \fB[L]\fR"
+Discard the content of sectors on a block device.
+.TP
+.BR blkid " \fB[L]\fR"
+Locate/print block device attributes.
+.TP
+.BR blockdev " \fB[L]\fR"
+Call block device ioctls from the command line.
+.TP
+.BR cal " \fB[P]\fR"
+Display a calendar.
+.TP
+.BR chroot
+Run command or shell with special root directory.
+.TP
+.BR chvt " \fB[L]\fR"
+Change foreground virtual terminal.
+.TP
+.BR date " \fB[P]\fR"
+Print or set the system date and time.
+.TP
+.BR deallocvt " \fB[L]\fR"
+Deallocate unused virtual terminals.
+.TP
+.BR devmem " \fB[L]\fR"
+Read/write from physical address.
+.TP
+.BR df " \fB[P]\fR"
+Report filesystem disk space usage.
+.TP
+.BR dmesg " \fB[L]\fR"
+Print or control the kernel ring buffer.
+.TP
+.BR dnsdomainname
+Show the system's DNS domain name.
+.TP
+.BR du " \fB[P]\fR"
+Estimate file space usage.
+.TP
+.BR eject " \fB[L]\fR"
+Eject removable media.
+.TP
+.BR env " \fB[P]\fR"
+Run a program in a modified environment.
+.TP
+.BR fallocate " \fB[L]\fR"
+Preallocate or deallocate space to a file.
+.TP
+.BR fgconsole " \fB[L]\fR"
+Print the number of the active VT.
+.TP
+.BR flock
+Manage file locks from shell scripts.
+.TP
+.BR free " \fB[L]\fR"
+Display amount of free and used memory in the system.
+.TP
+.BR freeramdisk " \fB[L]\fR"
+Free all memory used by the specified ramdisk.
+.TP
+.BR fsfreeze " \fB[L]\fR"
+Suspend access to a filesystem.
+.TP
+.BR fsync
+Synchronize a file's in-core state with storage device.
+.TP
+.BR groups " \fB[P]\fR"
+Print the groups a user is in.
+.TP
+.BR halt ", " reboot ", " poweroff
+Halt, reboot, or power off the machine.
+.TP
+.BR hostid " \fB[P]\fR"
+Print the numeric identifier for the current host.
+.TP
+.BR hostname " \fB[P]\fR"
+Show or set the system's hostname.
+.TP
+.BR hwclock " \fB[L]\fR"
+Query or set the hardware clock (RTC).
+.TP
+.BR id " \fB[P]\fR"
+Print real and effective user and group IDs.
+.TP
+.BR insmod ", " rmmod ", " modprobe " \fB[L]\fR"
+Insert, remove, or auto-load kernel modules.
+.TP
+.BR logger " \fB[P]\fR"
+Make entries in the system log.
+.TP
+.BR login
+Begin a session on the system.
+.TP
+.BR logname " \fB[P]\fR"
+Print user's login name.
+.TP
+.BR losetup " \fB[L]\fR"
+Set up and control loop devices.
+.TP
+.BR lsmod " \fB[L]\fR"
+Show the status of kernel modules.
+.TP
+.BR lspci " \fB[L]\fR"
+List all PCI devices.
+.TP
+.BR lsusb " \fB[L]\fR"
+List USB devices.
+.TP
+.BR mkswap " \fB[L]\fR"
+Set up a Linux swap area.
+.TP
+.BR modinfo " \fB[L]\fR"
+Show information about a Linux kernel module.
+.TP
+.BR mount ", " umount
+Mount or unmount filesystems.
+.TP
+.BR mountpoint " \fB[L]\fR"
+Test whether a directory is a mountpoint.
+.TP
+.BR nologin
+Politely refuse a login.
+.TP
+.BR nproc " \fB[P]\fR"
+Print the number of processing units available.
+.TP
+.BR openvt " \fB[L]\fR"
+Start a program on a new virtual terminal.
+.TP
+.BR partprobe " \fB[L]\fR"
+Inform the OS of partition table changes.
+.TP
+.BR pivot_root " \fB[L]\fR"
+Change the root filesystem.
+.TP
+.BR printenv " \fB[P]\fR"
+Print all or part of environment.
+.TP
+.BR readahead " \fB[L]\fR"
+Initiate readahead on files.
+.TP
+.BR rfkill " \fB[L]\fR"
+Tool for enabling and disabling wireless devices.
+.TP
+.BR rtcwake " \fB[L]\fR"
+Enter a system sleep state until specified wakeup time.
+.TP
+.BR shuf
+Generate random permutations.
+.TP
+.BR sleep " \fB[P]\fR"
+Delay for a specified amount of time.
+.TP
+.BR su
+Run a command with substitute user and group ID.
+.TP
+.BR swapon ", " swapoff " \fB[L]\fR"
+Enable/disable devices and files for paging and swapping.
+.TP
+.BR sysctl " \fB[L]\fR"
+Configure kernel parameters at runtime.
+.TP
+.BR tty " \fB[P]\fR"
+Print the file name of the terminal connected to standard input.
+.TP
+.BR ulimit " \fB[P]\fR"
+Get and set user limits.
+.TP
+.BR uname " \fB[P]\fR"
+Print system information.
+.TP
+.BR uptime
+Tell how long the system has been running.
+.TP
+.BR usleep
+Sleep for the specified number of microseconds.
+.TP
+.BR vmstat " \fB[L]\fR"
+Report virtual memory statistics.
+.TP
+.BR w
+Show who is logged on and what they are doing.
+.TP
+.BR watch
+Execute a program periodically, showing output fullscreen.
+.TP
+.BR who ", " whoami ", " users " \fB[P]\fR"
+Show who is logged in, print effective userid, list logged-in users.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH PROCESS MANAGEMENT
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR chrt " \fB[L]\fR"
+Manipulate the real-time scheduling attributes of a process.
+.TP
+.BR ionice " \fB[L]\fR"
+Set or get process I/O scheduling class and priority.
+.TP
+.BR iorenice " \fB[L]\fR"
+Change I/O scheduling class and priority of a running process.
+.TP
+.BR iotop " \fB[L]\fR"
+Simple top-like I/O monitor.
+.TP
+.BR kill " \fB[P]\fR"
+Send a signal to a process.
+.TP
+.BR killall
+Kill processes by name.
+.TP
+.BR killall5 " \fB[L]\fR"
+Send a signal to all processes.
+.TP
+.BR nice " \fB[P]\fR"
+Run a program with modified scheduling priority.
+.TP
+.BR nohup " \fB[P]\fR"
+Run a command immune to hangups.
+.TP
+.BR nsenter " \fB[L]\fR"
+Run a program in existing Linux namespaces.
+.TP
+.BR pgrep ", " pkill " \fB[P]\fR"
+Look up or signal processes based on name and attributes.
+.TP
+.BR pidof " \fB[L]\fR"
+Find the process ID of a running program.
+.TP
+.BR pmap " \fB[L]\fR"
+Report memory map of a process.
+.TP
+.BR prlimit " \fB[L]\fR"
+Get and set a process's resource limits.
+.TP
+.BR ps " \fB[P]\fR"
+Report a snapshot of the current processes.
+.TP
+.BR pwdx " \fB[L]\fR"
+Report current working directory of a process.
+.TP
+.BR renice " \fB[P]\fR"
+Alter priority of running processes.
+.TP
+.BR setsid
+Run a program in a new session.
+.TP
+.BR taskset " \fB[L]\fR"
+Set or retrieve a process's CPU affinity.
+.TP
+.BR timeout
+Start a command and kill it if still running after a duration.
+.TP
+.BR top " \fB[L]\fR"
+Display Linux processes.
+.TP
+.BR uclampset " \fB[L]\fR"
+Set or get utilization clamping attributes of a process.
+.TP
+.BR unshare " \fB[L]\fR"
+Run a program in new Linux namespaces.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH NETWORKING
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR arp " \fB[L]\fR"
+Manipulate the system ARP cache.
+.TP
+.BR arping " \fB[L]\fR"
+Send ARP requests to a neighbour host.
+.TP
+.BR brctl " \fB[L]\fR"
+Ethernet bridge administration.
+.TP
+.BR ether\-wake " \fB[L]\fR"
+Send a Wake-on-LAN magic packet.
+.TP
+.BR ftpget ", " ftpput
+Retrieve or upload files via FTP.
+.TP
+.BR host
+DNS lookup utility.
+.TP
+.BR httpd
+A small HTTP server.
+.TP
+.BR ifconfig " \fB[L]\fR"
+Configure a network interface.
+.TP
+.BR ifup ", " ifdown " \fB[L]\fR"
+Bring a network interface up or down.
+.TP
+.BR ip ", " ipaddr ", " iplink ", " ipneigh ", " iproute ", " iprule " \fB[L]\fR"
+Show and manipulate routing, devices, policy routing, and tunnels.
+.TP
+.BR ipcalc
+Calculate IP network settings from an address and netmask.
+.TP
+.BR microcom
+A minimalistic terminal emulator for serial communication.
+.TP
+.BR nameif " \fB[L]\fR"
+Name network interfaces based on MAC addresses.
+.TP
+.BR nbd\-client ", " nbd\-server " \fB[L]\fR"
+Connect to / serve a network block device.
+.TP
+.BR nc ", " netcat
+Arbitrary TCP and UDP connections and listens.
+.TP
+.BR netstat " \fB[P]\fR"
+Print network connections, routing tables, interface statistics.
+.TP
+.BR nslookup
+Query Internet name servers interactively.
+.TP
+.BR ping ", " ping6
+Send ICMP ECHO_REQUEST to network hosts.
+.TP
+.BR route " \fB[L]\fR"
+Show and manipulate the IP routing table.
+.TP
+.BR slattach " \fB[L]\fR"
+Attach a network interface to a serial line.
+.TP
+.BR sntp
+Simple Network Time Protocol client.
+.TP
+.BR ss " \fB[L]\fR"
+Socket statistics (netstat replacement).
+.TP
+.BR telnet
+User interface to the TELNET protocol.
+.TP
+.BR tftp
+Trivial file transfer protocol client.
+.TP
+.BR traceroute ", " traceroute6
+Trace the route to a network host.
+.TP
+.BR tunctl " \fB[L]\fR"
+Create or delete TUN/TAP interfaces.
+.TP
+.BR vconfig " \fB[L]\fR"
+VLAN (802.1Q) configuration.
+.TP
+.BR wget
+Non-interactive network downloader.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH ARCHIVE & COMPRESSION
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR bzip2 ", " bunzip2 ", " bzcat " \fB[P]\fR"
+Block-sorting file compressor.
+.TP
+.BR compress ", " uncompress " \fB[P]\fR"
+Compress/expand data using adaptive Lempel-Ziv coding.
+.TP
+.BR cpio " \fB[P]\fR"
+Copy files to and from archives.
+.TP
+.BR gzip ", " gunzip ", " zcat " \fB[P]\fR"
+Compress or expand files using Lempel-Ziv coding (LZ77).
+.TP
+.BR lzma ", " unlzma ", " lzcat
+LZMA compression utility.
+.TP
+.BR tar " \fB[P]\fR"
+Manipulate tape archives.
+.TP
+.BR unzip
+Extract files from ZIP archives.
+.TP
+.BR xz ", " unxz ", " xzcat
+XZ compression utility.
+.TP
+.BR zstd ", " unzstd ", " zstdcat
+Zstandard compression utility.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH SHELL & SCRIPTING
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR sh ", " ash ", " dash " \fB[P]\fR"
+POSIX-compliant command interpreter (shell).
+All three names invoke the same shell implementation.
+.TP
+.BR expr " \fB[P]\fR"
+Evaluate expressions.
+.TP
+.BR getopt
+Parse command options.
+.TP
+.BR test ", " \fB[\fR " \fB[P]\fR"
+Evaluate conditional expression.
+.TP
+.BR time " \fB[P]\fR"
+Time a simple command.
+.TP
+.BR true ", " false ", " : " \fB[P]\fR"
+Return success (true/:) or failure (false) exit status.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH EDITORS
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR vi ", " view
+Screen-oriented (visual) text editor.
+.B view
+opens files in read-only mode.
+Supports normal mode, insert mode, command mode, search, yank, and paste.
+.TP
+.BR hexedit
+View and edit binary files in hexadecimal.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH INIT SYSTEM
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR init ", " linuxrc
+System initialization process (PID\ 1).
+See
+.BR armybox-init (8).
+.TP
+.BR getty
+Open a terminal and set its mode.
+.TP
+.BR oneit
+Simple init replacement that runs a single process.
+.TP
+.BR runlevel " \fB[L]\fR"
+Print previous and current SysV runlevel.
+.TP
+.BR sulogin
+Single-user login.
+.TP
+.BR switch_root " \fB[L]\fR"
+Switch to another filesystem as the root.
+Used in initramfs.
+.TP
+.BR telinit
+Change SysV runlevel.
+.TP
+.BR watchdog " \fB[L]\fR"
+Periodically write to a watchdog device.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH MISCELLANEOUS
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR ascii
+Print the ASCII character table.
+.TP
+.BR base32 ", " base64
+Base32/Base64 encode or decode data and print to standard output.
+.TP
+.BR cksum ", " crc32 " \fB[P]\fR"
+Checksum and count the bytes in a file.
+.TP
+.BR clear ", " reset
+Clear the terminal screen / reset the terminal.
+.TP
+.BR cmp " \fB[P]\fR"
+Compare two files byte by byte.
+.TP
+.BR count
+Count lines, words, and bytes from stdin (compact wc variant).
+.TP
+.BR diff " \fB[P]\fR"
+Compare files line by line.
+.TP
+.BR factor
+Print prime factors of numbers.
+.TP
+.BR getconf " \fB[P]\fR"
+Get system configuration values.
+.TP
+.BR hd ", " hexdump ", " od ", " xxd " \fB[P]\fR"
+Display files in hexadecimal, octal, decimal, or ASCII.
+.TP
+.BR help
+Display armybox applet help information.
+.TP
+.BR iconv " \fB[P]\fR"
+Convert text between character encodings.
+.TP
+.BR mcookie
+Generate random 128-bit hexadecimal numbers.
+.TP
+.BR md5sum ", " sha1sum ", " sha224sum ", " sha256sum ", " sha384sum ", " sha512sum ", " sha3sum
+Compute and check message digests.
+.TP
+.BR mesg " \fB[P]\fR"
+Display or set permission to receive messages from other users.
+.TP
+.BR mkpasswd
+Generate a password hash.
+.TP
+.BR pwgen
+Generate pronounceable passwords.
+.TP
+.BR readelf
+Display information about ELF files.
+.TP
+.BR screen ", " tmux
+Terminal multiplexer.
+.TP
+.BR toybox
+BusyBox/Toybox compatibility alias.
+.TP
+.BR ts
+Timestamp standard input.
+.TP
+.BR tsort " \fB[P]\fR"
+Topological sort.
+.TP
+.BR unicode
+Look up Unicode character names and codepoints.
+.TP
+.BR uuencode ", " uudecode " \fB[P]\fR"
+Encode/decode a binary file for transmission via uucp.
+.TP
+.BR uuidgen
+Create a new UUID.
+.TP
+.BR which " \fB[P]\fR"
+Locate a command.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH PACKAGE MANAGEMENT
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR abp
+ArmyBox Package manager.
+Install, remove, and query ABP packages.
+.TP
+.BR apk
+Alpine Package Keeper compatibility layer.
+.\"
+.\" ═══════════════════════════════════════════════════════════════════════════
+.SH GPIO & I2C (HARDWARE)
+.\" ═══════════════════════════════════════════════════════════════════════════
+.TP
+.BR gpiodetect ", " gpiofind ", " gpioget ", " gpioinfo ", " gpioset " \fB[L]\fR"
+GPIO character device userspace tools.
+.TP
+.BR i2cdetect ", " i2cdump ", " i2cget ", " i2cset ", " i2ctransfer " \fB[L]\fR"
+I2C bus userspace tools.
+.\"
+.SH SEE ALSO
+.BR armybox (1),
+.BR armybox-init (8)
+.PP
+.UR https://pubs.opengroup.org/onlinepubs/9699919799/utilities/contents.html
+POSIX.1-2017 Shell & Utilities
+.UE
+.\"
+.SH AUTHORS
+Pegasus Heavy Industries LLC.

@@ -7,20 +7,20 @@ use crate::sys;
 use crate::applets::get_arg;
 
 // Block device ioctls
-const BLKGETSIZE64: u64 = 0x80081272;  // Get size in bytes
-const BLKGETSIZE: u64 = 0x1260;        // Get size in 512-byte sectors
-const BLKFLSBUF: u64 = 0x1261;         // Flush buffers
-const BLKRRPART: u64 = 0x125f;         // Reread partition table
-const BLKROSET: u64 = 0x125d;          // Set read-only
-const BLKROGET: u64 = 0x125e;          // Get read-only
-const BLKSSZGET: u64 = 0x1268;         // Get logical sector size
-const BLKBSZGET: u64 = 0x80081270;     // Get block size
-const BLKBSZSET: u64 = 0x40081271;     // Set block size
-const BLKPBSZGET: u64 = 0x127b;        // Get physical sector size
-const BLKIOMIN: u64 = 0x1278;          // Get minimum I/O size
-const BLKIOOPT: u64 = 0x1279;          // Get optimal I/O size
-const BLKALIGNOFF: u64 = 0x127a;       // Get alignment offset
-const BLKDISCARDZEROES: u64 = 0x127c;  // Get discard zeroes data
+const BLKGETSIZE64: crate::io::IoctlReq = 0x80081272u32 as crate::io::IoctlReq;  // Get size in bytes
+const BLKGETSIZE: crate::io::IoctlReq = 0x1260u32 as crate::io::IoctlReq;        // Get size in 512-byte sectors
+const BLKFLSBUF: crate::io::IoctlReq = 0x1261u32 as crate::io::IoctlReq;         // Flush buffers
+const BLKRRPART: crate::io::IoctlReq = 0x125fu32 as crate::io::IoctlReq;         // Reread partition table
+const BLKROSET: crate::io::IoctlReq = 0x125du32 as crate::io::IoctlReq;          // Set read-only
+const BLKROGET: crate::io::IoctlReq = 0x125eu32 as crate::io::IoctlReq;          // Get read-only
+const BLKSSZGET: crate::io::IoctlReq = 0x1268u32 as crate::io::IoctlReq;         // Get logical sector size
+const BLKBSZGET: crate::io::IoctlReq = 0x80081270u32 as crate::io::IoctlReq;     // Get block size
+const BLKBSZSET: crate::io::IoctlReq = 0x40081271u32 as crate::io::IoctlReq;     // Set block size
+const BLKPBSZGET: crate::io::IoctlReq = 0x127bu32 as crate::io::IoctlReq;        // Get physical sector size
+const BLKIOMIN: crate::io::IoctlReq = 0x1278u32 as crate::io::IoctlReq;          // Get minimum I/O size
+const BLKIOOPT: crate::io::IoctlReq = 0x1279u32 as crate::io::IoctlReq;          // Get optimal I/O size
+const BLKALIGNOFF: crate::io::IoctlReq = 0x127au32 as crate::io::IoctlReq;       // Get alignment offset
+const BLKDISCARDZEROES: crate::io::IoctlReq = 0x127cu32 as crate::io::IoctlReq;  // Get discard zeroes data
 
 /// blockdev - call block device ioctls from the command line
 ///
@@ -292,8 +292,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(output.status.code(), Some(1));
-        let stderr = std::string::String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("usage"));
+        let stdout = std::string::String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("Usage"));
     }
 
     #[test]

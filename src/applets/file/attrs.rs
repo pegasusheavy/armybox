@@ -1,6 +1,8 @@
-//! File attribute utilities for Linux filesystems
+//! File attribute and filesystem utilities
 //!
-//! Implements chattr/lsattr for ext2/ext3/ext4 file attributes.
+//! Implements chattr/lsattr for ext2/ext3/ext4 file attributes,
+//! setfattr for extended attributes, fstype for filesystem detection,
+//! and makedevs for device node creation.
 
 use crate::io;
 use super::get_arg;
@@ -19,8 +21,8 @@ const EXT4_TOPDIR_FL: u32 = 0x00020000; // Top of directory hierarchies
 const EXT4_EXTENTS_FL: u32 = 0x00080000; // Inode uses extents
 
 // ioctl numbers for ext2 attributes
-const FS_IOC_GETFLAGS: libc::c_ulong = 0x80086601;
-const FS_IOC_SETFLAGS: libc::c_ulong = 0x40086602;
+const FS_IOC_GETFLAGS: crate::io::IoctlReq = 0x80086601u32 as crate::io::IoctlReq;
+const FS_IOC_SETFLAGS: crate::io::IoctlReq = 0x40086602u32 as crate::io::IoctlReq;
 
 /// chattr - change file attributes on a Linux file system
 ///
@@ -110,7 +112,7 @@ pub fn chattr(argc: i32, argv: *const *const u8) -> i32 {
         // Get current flags
         let mut flags: u32 = 0;
         let ret = unsafe {
-            libc::ioctl(fd, FS_IOC_GETFLAGS as libc::c_ulong, &mut flags as *mut u32)
+            libc::ioctl(fd, FS_IOC_GETFLAGS as crate::io::IoctlReq, &mut flags as *mut u32)
         };
 
         if ret < 0 {
@@ -132,7 +134,7 @@ pub fn chattr(argc: i32, argv: *const *const u8) -> i32 {
 
         // Set new flags
         let ret = unsafe {
-            libc::ioctl(fd, FS_IOC_SETFLAGS as libc::c_ulong, &flags as *const u32)
+            libc::ioctl(fd, FS_IOC_SETFLAGS as crate::io::IoctlReq, &flags as *const u32)
         };
 
         if ret < 0 {
@@ -221,7 +223,7 @@ fn list_attrs(path: &[u8], long_format: bool) {
 
     let mut flags: u32 = 0;
     let ret = unsafe {
-        libc::ioctl(fd, FS_IOC_GETFLAGS as libc::c_ulong, &mut flags as *mut u32)
+        libc::ioctl(fd, FS_IOC_GETFLAGS as crate::io::IoctlReq, &mut flags as *mut u32)
     };
     io::close(fd);
 
@@ -742,7 +744,7 @@ mod tests {
     }
 
     #[test]
-    fn test_chattr_stub() {
+    fn test_chattr_no_args() {
         let armybox = get_armybox_path();
         if !armybox.exists() { return; }
 
@@ -751,11 +753,14 @@ mod tests {
             .output()
             .unwrap();
 
-        assert_eq!(output.status.code(), Some(0));
+        // Returns 1 for usage error (no arguments)
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = std::string::String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Usage"));
     }
 
     #[test]
-    fn test_lsattr_stub() {
+    fn test_lsattr_basic() {
         let armybox = get_armybox_path();
         if !armybox.exists() { return; }
 
@@ -768,7 +773,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fstype_output() {
+    fn test_fstype_no_args() {
         let armybox = get_armybox_path();
         if !armybox.exists() { return; }
 
@@ -777,13 +782,14 @@ mod tests {
             .output()
             .unwrap();
 
-        assert_eq!(output.status.code(), Some(0));
-        let stdout = std::string::String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("ext4"));
+        // Returns 1 for usage error (no device specified)
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = std::string::String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Usage"));
     }
 
     #[test]
-    fn test_makedevs_stub() {
+    fn test_makedevs_no_args() {
         let armybox = get_armybox_path();
         if !armybox.exists() { return; }
 
@@ -792,11 +798,14 @@ mod tests {
             .output()
             .unwrap();
 
-        assert_eq!(output.status.code(), Some(0));
+        // Returns 1 for usage error (no arguments)
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = std::string::String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Usage"));
     }
 
     #[test]
-    fn test_setfattr_stub() {
+    fn test_setfattr_no_args() {
         let armybox = get_armybox_path();
         if !armybox.exists() { return; }
 
@@ -805,6 +814,9 @@ mod tests {
             .output()
             .unwrap();
 
-        assert_eq!(output.status.code(), Some(0));
+        // Returns 1 for usage error (no arguments)
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = std::string::String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Usage"));
     }
 }

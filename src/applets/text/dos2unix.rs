@@ -50,6 +50,9 @@ pub fn dos2unix(argc: i32, argv: *const *const u8) -> i32 {
 #[cfg(test)]
 mod tests {
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::Command;
     use std::fs;
     use std::path::PathBuf;
@@ -67,8 +70,8 @@ mod tests {
     }
 
     fn setup() -> PathBuf {
-        let id = std::process::id();
-        let dir = std::env::temp_dir().join(format!("armybox_dos2unix_test_{}", id));
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("armybox_dos2unix_test_{}_{}",  std::process::id(), counter));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

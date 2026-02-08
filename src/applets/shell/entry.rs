@@ -26,6 +26,10 @@ pub fn sh(argc: i32, argv: *const *const u8) -> i32 {
         let mut script_file: Option<&[u8]> = None;
         let mut command_string: Option<&[u8]> = None;
         let mut login_shell = false;
+        let mut script_args: Vec<&[u8]> = Vec::new();
+
+        // Get $0 (the shell name itself)
+        let shell_name = unsafe { get_arg(argv, 0) }.unwrap_or(b"sh");
 
         // Parse arguments
         let mut i = 1;
@@ -35,36 +39,63 @@ pub fn sh(argc: i32, argv: *const *const u8) -> i32 {
                 None => { i += 1; continue; }
             };
 
+            // If we already found a script file, everything else is a
+            // positional parameter for that script ($1, $2, ...)
+            if script_file.is_some() {
+                script_args.push(arg);
+                i += 1;
+                continue;
+            }
+
             if arg == b"-c" {
                 // Execute command string
                 if i + 1 < argc {
                     command_string = unsafe { get_arg(argv, i + 1) };
                     i += 1;
                 }
+                // After -c "cmd", the next arg (if any) becomes $0,
+                // and remaining args become $1, $2, ...
+                i += 1;
+                if command_string.is_some() {
+                    // Collect remaining args as positional params for -c
+                    while i < argc {
+                        if let Some(a) = unsafe { get_arg(argv, i) } {
+                            script_args.push(a);
+                        }
+                        i += 1;
+                    }
+                }
+                break;
             } else if arg == b"-l" || arg == b"--login" {
                 login_shell = true;
-            } else if arg[0] != b'-' {
-                // Script file
+            } else if arg == b"-s" || arg == b"-i" || arg == b"-e"
+                || arg == b"-x" || arg == b"-v" || arg == b"-n"
+            {
+                // Known flags, skip
+            } else if !arg.is_empty() && arg[0] == b'-' {
+                // Unknown flag, skip
+            } else {
+                // First non-option argument is the script file
                 script_file = Some(arg);
+                // All subsequent args are positional params — handled above
             }
             i += 1;
-        }
-
-        // If -l, source profile
-        if login_shell {
-            let profile = b"/etc/profile";
-            let fd = io::open(profile, libc::O_RDONLY, 0);
-            if fd >= 0 {
-                let content = io::read_all(fd);
-                io::close(fd);
-                let mut shell = Shell::new(false);
-                execute_script(&mut shell, &content);
-            }
         }
 
         if let Some(cmd) = command_string {
             // Execute -c command
             let mut shell = Shell::new(false);
+            if login_shell {
+                source_profile(&mut shell);
+            }
+            // For -c: if there are extra args, first is $0, rest are $1..
+            if !script_args.is_empty() {
+                let dollar0 = script_args[0];
+                let params: Vec<&[u8]> = script_args[1..].to_vec();
+                shell.set_positional_params(dollar0, &params);
+            } else {
+                shell.set_positional_params(shell_name, &[]);
+            }
             execute_script(&mut shell, cmd);
             return shell.last_status;
         }
@@ -82,6 +113,11 @@ pub fn sh(argc: i32, argv: *const *const u8) -> i32 {
             io::close(fd);
 
             let mut shell = Shell::new(false);
+            if login_shell {
+                source_profile(&mut shell);
+            }
+            // $0 = script file, $1.. = remaining args
+            shell.set_positional_params(file, &script_args);
             execute_script(&mut shell, &content);
             return shell.last_status;
         }
@@ -89,6 +125,12 @@ pub fn sh(argc: i32, argv: *const *const u8) -> i32 {
         // Interactive mode
         let interactive = io::isatty(0);
         let mut shell = Shell::new(interactive);
+        shell.set_positional_params(shell_name, &[]);
+
+        // Source profile for login shells or interactive sessions
+        if login_shell || interactive {
+            source_profile(&mut shell);
+        }
 
         if interactive {
             io::write_str(1, b"ArmyBox sh\n");
@@ -115,6 +157,20 @@ pub fn ash(argc: i32, argv: *const *const u8) -> i32 {
 /// Dash shell entry point (alias for sh)
 pub fn dash(argc: i32, argv: *const *const u8) -> i32 {
     sh(argc, argv)
+}
+
+/// Source /etc/profile if it exists
+///
+/// This loads the system-wide shell profile, setting up variables and aliases.
+#[cfg(feature = "alloc")]
+fn source_profile(shell: &mut Shell) {
+    let profile = b"/etc/profile";
+    let fd = io::open(profile, libc::O_RDONLY, 0);
+    if fd >= 0 {
+        let content = io::read_all(fd);
+        io::close(fd);
+        execute_script(shell, &content);
+    }
 }
 
 /// Minimal shell for no-alloc builds

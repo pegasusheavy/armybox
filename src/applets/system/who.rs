@@ -386,7 +386,7 @@ fn get_idle_time(line: &[u8]) -> i64 {
 fn format_time(timestamp: i64) {
     // Convert timestamp to broken-down time
     let tm = unsafe {
-        let t = timestamp as libc::time_t;
+        let t = timestamp as i64;
         libc::localtime(&t)
     };
 

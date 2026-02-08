@@ -1,0 +1,231 @@
+.\" armybox-init(8) man page
+.\" Copyright (c) 2026 Pegasus Heavy Industries LLC
+.\" Licensed under MIT OR Apache-2.0
+.\"
+.TH ARMYBOX-INIT 8 "2026-02-08" "armybox 0.3.0" "ArmyBox Manual"
+.\"
+.SH NAME
+armybox init \- system initialization process (PID\ 1)
+.\"
+.SH SYNOPSIS
+.B init
+.br
+.B linuxrc
+.\"
+.SH DESCRIPTION
+.B init
+is the first process started by the Linux kernel after mounting the root
+filesystem.
+It runs as PID\ 1 and is responsible for:
+.IP \(bu 2
+Executing system startup scripts
+.IP \(bu 2
+Spawning login terminals (via
+.BR getty (8))
+.IP \(bu 2
+Adopting orphaned processes
+.IP \(bu 2
+Handling system shutdown and reboot
+.PP
+The
+.B armybox
+init system is a lightweight, BusyBox-compatible init implementation
+that reads its configuration from
+.BR /etc/inittab .
+.PP
+When invoked as
+.BR linuxrc ,
+init performs the same role but is intended for use within an initramfs,
+where it can perform early setup before pivoting to the real root filesystem.
+.\"
+.SH STARTUP SEQUENCE
+.TP
+.B 1.
+Set up signal handlers and become session leader.
+.TP
+.B 2.
+If
+.I /etc/inittab
+exists, parse it and execute entries with the
+.B sysinit
+action.
+.TP
+.B 3.
+Execute entries with the
+.B wait
+action (blocking until each completes).
+.TP
+.B 4.
+Execute entries with the
+.B once
+action (non-blocking).
+.TP
+.B 5.
+For each
+.B respawn
+entry, fork and exec the specified process.
+If a respawned process exits, init will restart it after a brief delay.
+.TP
+.B 6.
+Enter the main loop: wait for child processes and respawn them as needed.
+.\"
+.SH SHUTDOWN SEQUENCE
+When init receives
+.B SIGTERM
+(sent by
+.BR reboot (8),
+.BR halt (8),
+or
+.BR poweroff (8)):
+.TP
+.B 1.
+Execute entries with the
+.B shutdown
+action.
+.TP
+.B 2.
+Send
+.B SIGTERM
+to all processes.
+.TP
+.B 3.
+Wait briefly, then send
+.B SIGKILL
+to remaining processes.
+.TP
+.B 4.
+Unmount filesystems and halt/reboot/power off.
+.\"
+.SH INITTAB FORMAT
+.I /etc/inittab
+consists of lines in the format:
+.PP
+.RS
+.IB id : runlevels : action : process
+.RE
+.PP
+Fields:
+.TP
+.I id
+A unique identifier for the entry (1\(en4 characters).
+Typically the tty name (e.g.,
+.BR tty1 ,
+.BR ttyS0 ).
+.TP
+.I runlevels
+Ignored by armybox (compatibility field).
+.TP
+.I action
+One of:
+.RS
+.TP
+.B sysinit
+Run during system initialization, before any other entries.
+.TP
+.B wait
+Run once and wait for completion.
+.TP
+.B once
+Run once without waiting.
+.TP
+.B respawn
+Start the process and restart it whenever it exits.
+.TP
+.B askfirst
+Like
+.BR respawn ,
+but print \(lqPlease press Enter to activate this console\(rq
+and wait for a keypress before starting.
+.TP
+.B shutdown
+Run during system shutdown.
+.TP
+.B restart
+Run when init receives
+.BR SIGHUP .
+.TP
+.B ctrlaltdel
+Run when Ctrl+Alt+Delete is pressed.
+.RE
+.TP
+.I process
+The command to execute, including arguments.
+.\"
+.SH EXAMPLE INITTAB
+.PP
+.nf
+# System initialization
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mount -t devtmpfs devtmpfs /dev
+::sysinit:/bin/mkdir -p /dev/pts /dev/shm
+::sysinit:/bin/mount -t devpts devpts /dev/pts
+::sysinit:/bin/mount -t tmpfs tmpfs /dev/shm
+::sysinit:/bin/mount -o remount,rw /
+::sysinit:/bin/hostname -F /etc/hostname
+
+# Run system startup script
+::sysinit:/etc/init.d/rcS
+
+# Virtual console TTYs
+tty1::respawn:/sbin/getty 38400 tty1
+tty2::respawn:/sbin/getty 38400 tty2
+
+# Serial console
+ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100
+
+# Ctrl-Alt-Delete
+::ctrlaltdel:/sbin/reboot
+
+# Shutdown
+::shutdown:/etc/init.d/rcK
+::shutdown:/bin/umount -a -r
+.fi
+.\"
+.SH SIGNALS
+.TP
+.B SIGHUP
+Re-read
+.I /etc/inittab
+and execute
+.B restart
+entries.
+.TP
+.B SIGTERM
+Begin the shutdown sequence.
+.TP
+.B SIGUSR1
+Close and re-open the console device.
+.\"
+.SH FILES
+.TP
+.I /etc/inittab
+Init configuration file.
+See
+.BR inittab (5).
+.TP
+.I /etc/init.d/rcS
+System startup script (typically invoked via
+.B sysinit
+action).
+.TP
+.I /etc/init.d/rcK
+System shutdown script (typically invoked via
+.B shutdown
+action).
+.TP
+.I /dev/console
+Default console device.
+.\"
+.SH SEE ALSO
+.BR armybox (1),
+.BR inittab (5),
+.BR getty (8),
+.BR halt (8),
+.BR reboot (8),
+.BR poweroff (8),
+.BR switch_root (8),
+.BR sulogin (8)
+.\"
+.SH AUTHORS
+Pegasus Heavy Industries LLC.

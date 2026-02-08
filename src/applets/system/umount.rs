@@ -2,7 +2,6 @@
 //!
 //! Unmount a mounted filesystem.
 
-use crate::io;
 use crate::sys;
 use crate::applets::get_arg;
 

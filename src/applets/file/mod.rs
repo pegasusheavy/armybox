@@ -2,9 +2,7 @@
 //!
 //! POSIX.1-2017 compliant file manipulation utilities.
 
-use crate::io;
-use crate::sys;
-use super::{get_arg, has_opt, is_opt};
+use super::get_arg;
 
 // Individual utility modules
 #[cfg(feature = "basename")]
@@ -72,7 +70,7 @@ mod stat;
     feature = "makedevs",
     feature = "setfattr"
 ))]
-mod stubs;
+mod attrs;
 #[cfg(feature = "sync")]
 mod sync_cmd;
 #[cfg(feature = "touch")]
@@ -144,15 +142,15 @@ pub use split::split;
 #[cfg(feature = "stat")]
 pub use stat::stat;
 #[cfg(feature = "chattr")]
-pub use stubs::chattr;
+pub use attrs::chattr;
 #[cfg(feature = "lsattr")]
-pub use stubs::lsattr;
+pub use attrs::lsattr;
 #[cfg(feature = "fstype")]
-pub use stubs::fstype;
+pub use attrs::fstype;
 #[cfg(feature = "makedevs")]
-pub use stubs::makedevs;
+pub use attrs::makedevs;
 #[cfg(feature = "setfattr")]
-pub use stubs::setfattr;
+pub use attrs::setfattr;
 #[cfg(feature = "sync")]
 pub use sync_cmd::sync_cmd;
 #[cfg(feature = "touch")]

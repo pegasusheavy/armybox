@@ -5,9 +5,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 use alloc::vec;
-use alloc::string::String;
 use crate::io;
-use crate::sys;
 use super::get_arg;
 
 /// Read a file into a Vec
@@ -497,13 +495,13 @@ impl LzmaEncoder {
         if dist < 4 {
             dist
         } else {
-            let mut bsr = 31 - dist.leading_zeros();
+            let bsr = 31 - dist.leading_zeros();
             ((bsr << 1) + ((dist >> (bsr - 1)) & 1)) as u32
         }
     }
 
     fn encode_literal(&mut self, rc: &mut RangeEncoder, prev_byte: u8, byte: u8, pos: usize, match_byte: u8) {
-        let pos_state = pos & ((1 << self.lp) - 1);
+        let _pos_state = pos & ((1 << self.lp) - 1);
         let lit_state = ((pos & ((1 << self.lp) - 1)) << self.lc as usize) | ((prev_byte >> (8 - self.lc)) as usize);
         let probs = &mut self.literal[lit_state * 0x300..][..0x300];
 

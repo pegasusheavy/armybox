@@ -2,9 +2,7 @@
 //!
 //! Process management, monitoring, and control utilities.
 
-use crate::io;
-use crate::sys;
-use super::{get_arg, has_opt};
+use super::get_arg;
 
 // Process management and monitoring
 #[cfg(feature = "kill")]

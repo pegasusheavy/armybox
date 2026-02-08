@@ -18,6 +18,8 @@ mod tar;
 mod unzip;
 #[cfg(feature = "xz")]
 mod xz;
+#[cfg(feature = "zstd")]
+mod zstd_cmd;
 
 // Re-export all utilities
 #[cfg(feature = "bzip2")]
@@ -34,6 +36,8 @@ pub use tar::tar;
 pub use unzip::unzip;
 #[cfg(feature = "xz")]
 pub use xz::{xz, unxz, xzcat, lzma, unlzma, lzcat};
+#[cfg(feature = "zstd")]
+pub use zstd_cmd::{zstd, unzstd, zstdcat};
 
 // Shared helper functions used by multiple archive utilities
 
