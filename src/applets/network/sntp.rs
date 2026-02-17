@@ -198,7 +198,7 @@ pub fn sntp(argc: i32, argv: *const *const u8) -> i32 {
 
     // Format time
     let mut tm: libc::tm = unsafe { core::mem::zeroed() };
-    let time_t = unix_sec as libc::time_t;
+    let time_t = unix_sec as i64;
     unsafe { libc::gmtime_r(&time_t, &mut tm) };
 
     let mut buf = [0u8; 16];
@@ -222,7 +222,7 @@ pub fn sntp(argc: i32, argv: *const *const u8) -> i32 {
     // Set system time if requested
     if set_time {
         let new_tv = libc::timeval {
-            tv_sec: unix_sec as libc::time_t,
+            tv_sec: unix_sec as i64,
             tv_usec: unix_usec as libc::suseconds_t,
         };
 

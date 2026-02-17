@@ -20,9 +20,9 @@ const N_PPP: libc::c_int = 3;       // PPP (same as SLIP6 on some systems)
 
 // TTY ioctl for setting line discipline
 #[cfg(target_os = "linux")]
-const TIOCSETD: libc::c_ulong = 0x5423;
+const TIOCSETD: crate::io::IoctlReq = 0x5423u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const TIOCGETD: libc::c_ulong = 0x5424;
+const TIOCGETD: crate::io::IoctlReq = 0x5424u32 as crate::io::IoctlReq;
 
 /// slattach - attach a network interface to a serial line
 ///
@@ -188,7 +188,7 @@ pub fn slattach(argc: i32, argv: *const *const u8) -> i32 {
     }
 
     // Set line discipline
-    let ret = unsafe { libc::ioctl(fd, TIOCSETD as libc::c_ulong, &protocol) };
+    let ret = unsafe { libc::ioctl(fd, TIOCSETD as crate::io::IoctlReq, &protocol) };
     if ret < 0 {
         io::write_str(2, b"slattach: cannot set line discipline\n");
         io::close(fd);

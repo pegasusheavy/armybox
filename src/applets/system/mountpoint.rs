@@ -60,6 +60,9 @@ pub fn mountpoint(argc: i32, argv: *const *const u8) -> i32 {
 #[cfg(test)]
 mod tests {
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::Command;
     use std::path::PathBuf;
 
@@ -127,8 +130,8 @@ mod tests {
         if !armybox.exists() { return; }
 
         // Create a temp directory
-        let pid = std::process::id();
-        let test_dir = std::env::temp_dir().join(format!("armybox_mountpoint_test_{}", pid));
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_dir = std::env::temp_dir().join(format!("armybox_mountpoint_test_{}_{}",  std::process::id(), counter));
         let _ = std::fs::create_dir_all(&test_dir);
 
         let output = Command::new(&armybox)

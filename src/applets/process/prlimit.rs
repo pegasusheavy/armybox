@@ -58,7 +58,7 @@ pub fn prlimit(argc: i32, argv: *const *const u8) -> i32 {
         let mut rlim: libc::rlimit = unsafe { core::mem::zeroed() };
 
         let result = if pid == 0 {
-            unsafe { libc::getrlimit(*resource as u32, &mut rlim) }
+            unsafe { libc::getrlimit((*resource) as _, &mut rlim) }
         } else {
             // prlimit syscall for other processes
             unsafe {
@@ -104,6 +104,9 @@ pub fn prlimit(argc: i32, argv: *const *const u8) -> i32 {
 #[cfg(test)]
 mod tests {
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::Command;
     use std::path::PathBuf;
 

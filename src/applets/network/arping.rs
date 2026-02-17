@@ -313,7 +313,7 @@ fn get_interface_info(name: &[u8]) -> Option<([u8; 6], u32, i32)> {
 
     // Get interface index
     let if_index = unsafe {
-        if libc::ioctl(sock, libc::SIOCGIFINDEX, &mut ifr) < 0 {
+        if libc::ioctl(sock, libc::SIOCGIFINDEX as crate::io::IoctlReq, &mut ifr) < 0 {
             libc::close(sock);
             return None;
         }
@@ -322,7 +322,7 @@ fn get_interface_info(name: &[u8]) -> Option<([u8; 6], u32, i32)> {
 
     // Get MAC address
     let mac = unsafe {
-        if libc::ioctl(sock, libc::SIOCGIFHWADDR, &mut ifr) < 0 {
+        if libc::ioctl(sock, libc::SIOCGIFHWADDR as crate::io::IoctlReq, &mut ifr) < 0 {
             libc::close(sock);
             return None;
         }
@@ -334,7 +334,7 @@ fn get_interface_info(name: &[u8]) -> Option<([u8; 6], u32, i32)> {
 
     // Get IP address
     let ip = unsafe {
-        if libc::ioctl(sock, libc::SIOCGIFADDR, &mut ifr) < 0 {
+        if libc::ioctl(sock, libc::SIOCGIFADDR as crate::io::IoctlReq, &mut ifr) < 0 {
             libc::close(sock);
             return None;
         }

@@ -3,7 +3,6 @@
 //! Extract and display information from kernel modules.
 
 use crate::io;
-use crate::sys;
 use super::get_arg;
 
 /// modinfo - show information about a kernel module

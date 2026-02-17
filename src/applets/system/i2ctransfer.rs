@@ -2,6 +2,8 @@
 //!
 //! Execute I2C message transfers.
 
+#![allow(dead_code)]
+
 extern crate alloc;
 use alloc::vec::Vec;
 use alloc::vec;
@@ -10,7 +12,7 @@ use crate::sys;
 use super::get_arg;
 
 // I2C ioctl commands
-const I2C_RDWR: libc::c_ulong = 0x0707;
+const I2C_RDWR: crate::io::IoctlReq = 0x0707u32 as crate::io::IoctlReq;
 const I2C_M_RD: u16 = 0x0001;
 const I2C_M_TEN: u16 = 0x0010;
 const I2C_M_RECV_LEN: u16 = 0x0400;

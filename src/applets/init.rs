@@ -5,22 +5,27 @@
 use crate::io;
 use super::get_arg;
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "init", feature = "alloc"))]
 use alloc::vec::Vec;
-#[cfg(feature = "alloc")]
-use alloc::string::String;
 
 // Inittab action types
+#[cfg(feature = "init")]
 const ACTION_SYSINIT: u8 = 1;
+#[cfg(feature = "init")]
 const ACTION_RESPAWN: u8 = 2;
+#[cfg(feature = "init")]
 const ACTION_ONCE: u8 = 3;
+#[cfg(feature = "init")]
 const ACTION_WAIT: u8 = 4;
+#[cfg(feature = "init")]
 const ACTION_SHUTDOWN: u8 = 5;
+#[cfg(feature = "init")]
 const ACTION_CTRLALTDEL: u8 = 6;
+#[cfg(feature = "init")]
 const ACTION_RESTART: u8 = 7;
 
 /// Entry in inittab
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "init", feature = "alloc"))]
 struct InittabEntry {
     id: Vec<u8>,
     action: u8,
@@ -29,6 +34,7 @@ struct InittabEntry {
 }
 
 /// Parse action string to action type
+#[cfg(feature = "init")]
 fn parse_action(action: &[u8]) -> u8 {
     if action == b"sysinit" { ACTION_SYSINIT }
     else if action == b"respawn" { ACTION_RESPAWN }
@@ -41,6 +47,7 @@ fn parse_action(action: &[u8]) -> u8 {
 }
 
 /// Run a command by forking and execing /bin/sh -c "command"
+#[cfg(feature = "init")]
 fn run_command(cmd: &[u8], wait_for: bool) -> i32 {
     let pid = io::fork();
     if pid < 0 {
@@ -89,9 +96,10 @@ fn run_command(cmd: &[u8], wait_for: bool) -> i32 {
 }
 
 /// Mount a filesystem if not already mounted
+#[cfg(feature = "init")]
 fn mount_if_needed(source: &[u8], target: &[u8], fstype: &[u8]) {
     // Check if already mounted by trying to stat the target
-    let mut stat_buf: libc::stat = unsafe { core::mem::zeroed() };
+    let _stat_buf: libc::stat = unsafe { core::mem::zeroed() };
 
     // Create null-terminated strings
     let mut target_buf = [0u8; 256];
@@ -125,7 +133,7 @@ fn mount_if_needed(source: &[u8], target: &[u8], fstype: &[u8]) {
 }
 
 /// Basic init for systems without alloc feature
-#[cfg(not(feature = "alloc"))]
+#[cfg(all(feature = "init", not(feature = "alloc")))]
 pub fn init(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(1, b"ArmyBox init starting...\n");
 
@@ -169,7 +177,7 @@ pub fn init(_argc: i32, _argv: *const *const u8) -> i32 {
 }
 
 /// Full init with inittab parsing (requires alloc)
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "init", feature = "alloc"))]
 pub fn init(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(1, b"ArmyBox init starting...\n");
 
@@ -285,7 +293,7 @@ pub fn init(_argc: i32, _argv: *const *const u8) -> i32 {
 }
 
 /// Parse /etc/inittab
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "init", feature = "alloc"))]
 fn parse_inittab() -> Vec<InittabEntry> {
     let mut entries = Vec::new();
 
@@ -335,6 +343,7 @@ fn parse_inittab() -> Vec<InittabEntry> {
 }
 
 /// Trim whitespace from slice
+#[cfg(all(feature = "init", feature = "alloc"))]
 fn trim(s: &[u8]) -> &[u8] {
     let start = s.iter().position(|&c| c != b' ' && c != b'\t' && c != b'\r').unwrap_or(s.len());
     let end = s.iter().rposition(|&c| c != b' ' && c != b'\t' && c != b'\r').map(|i| i + 1).unwrap_or(start);
@@ -342,12 +351,12 @@ fn trim(s: &[u8]) -> &[u8] {
 }
 
 /// Helper trait to join byte slices
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "init", feature = "alloc"))]
 trait JoinBytes {
     fn join(&self, sep: &u8) -> Vec<u8>;
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "init", feature = "alloc"))]
 impl JoinBytes for [&[u8]] {
     fn join(&self, sep: &u8) -> Vec<u8> {
         let mut result = Vec::new();
@@ -361,6 +370,7 @@ impl JoinBytes for [&[u8]] {
     }
 }
 
+#[cfg(feature = "telinit")]
 pub fn telinit(argc: i32, argv: *const *const u8) -> i32 {
     // Send signal to init
     if argc < 2 {
@@ -378,6 +388,7 @@ pub fn telinit(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
+#[cfg(feature = "runlevel")]
 pub fn runlevel(_argc: i32, _argv: *const *const u8) -> i32 {
     // Return current runlevel
     // Format: "previous current"
@@ -385,6 +396,7 @@ pub fn runlevel(_argc: i32, _argv: *const *const u8) -> i32 {
     0
 }
 
+#[cfg(feature = "getty")]
 pub fn getty(argc: i32, argv: *const *const u8) -> i32 {
     // getty [OPTIONS] BAUD_RATE TTY
     // Minimal implementation: open tty, spawn login or shell
@@ -444,10 +456,7 @@ pub fn getty(argc: i32, argv: *const *const u8) -> i32 {
     // Make this the controlling terminal
     unsafe {
         libc::setsid();
-        #[cfg(target_env = "musl")]
-        libc::ioctl(fd, libc::TIOCSCTTY as libc::c_int, 0);
-        #[cfg(not(target_env = "musl"))]
-        libc::ioctl(fd, libc::TIOCSCTTY as libc::c_ulong, 0);
+        libc::ioctl(fd, libc::TIOCSCTTY as crate::io::IoctlReq, 0);
     }
 
     // Redirect stdin/stdout/stderr to tty
@@ -479,6 +488,7 @@ pub fn getty(argc: i32, argv: *const *const u8) -> i32 {
     1
 }
 
+#[cfg(feature = "sulogin")]
 pub fn sulogin(_argc: i32, _argv: *const *const u8) -> i32 {
     // Single-user login - just spawn a root shell
     io::write_str(1, b"Entering single-user mode...\n");
@@ -502,6 +512,7 @@ pub fn sulogin(_argc: i32, _argv: *const *const u8) -> i32 {
     1
 }
 
+#[cfg(feature = "oneit")]
 pub fn oneit(argc: i32, argv: *const *const u8) -> i32 {
     // Run a single command as init
     if argc < 2 {
@@ -510,7 +521,7 @@ pub fn oneit(argc: i32, argv: *const *const u8) -> i32 {
     }
 
     // Build argv for the command
-    #[cfg(feature = "alloc")]
+    #[cfg(all(feature = "oneit", feature = "alloc"))]
     {
         let mut args: Vec<*const i8> = Vec::new();
         for i in 1..argc {
@@ -531,7 +542,7 @@ pub fn oneit(argc: i32, argv: *const *const u8) -> i32 {
         }
     }
 
-    #[cfg(not(feature = "alloc"))]
+    #[cfg(all(feature = "oneit", not(feature = "alloc")))]
     {
         io::write_str(2, b"oneit: requires alloc feature\n");
     }
@@ -539,6 +550,7 @@ pub fn oneit(argc: i32, argv: *const *const u8) -> i32 {
     1
 }
 
+#[cfg(feature = "switch_root")]
 pub fn switch_root(argc: i32, argv: *const *const u8) -> i32 {
     // switch_root NEW_ROOT NEW_INIT [ARGS]
     if argc < 3 {
@@ -602,6 +614,7 @@ pub fn switch_root(argc: i32, argv: *const *const u8) -> i32 {
     1
 }
 
+#[cfg(feature = "watchdog")]
 pub fn watchdog(argc: i32, argv: *const *const u8) -> i32 {
     // watchdog [-t TIMEOUT] [-T SHUTDOWN_TIMEOUT] DEV
     let device = if argc >= 2 {

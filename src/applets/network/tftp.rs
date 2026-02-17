@@ -3,7 +3,6 @@
 //! Simple TFTP client for file transfers.
 
 use crate::io;
-use crate::sys;
 use super::get_arg;
 
 // TFTP opcodes

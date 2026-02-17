@@ -23,7 +23,7 @@ use super::parser::{parse_assignment_value, tokenize, Command, Token};
 #[cfg(feature = "alloc")]
 use super::state::Shell;
 #[cfg(feature = "alloc")]
-use super::util::{find_word_end, skip_whitespace_and_comments};
+use super::util::{find_word_end, skip_whitespace_and_comments, is_keyword_boundary};
 
 /// Execute a script (multiple lines/statements)
 #[cfg(feature = "alloc")]
@@ -42,24 +42,27 @@ pub(super) fn execute_statement(shell: &mut Shell, script: &[u8], start: usize) 
         return pos;
     }
 
-    // Check for control structures
+    // Check for control structures (keyword must be at a word boundary)
     let word_end = find_word_end(script, pos);
     let first_word = &script[pos..word_end];
+    let at_boundary = is_keyword_boundary(script, word_end);
 
-    if first_word == b"if" {
-        return execute_if(shell, script, pos);
-    }
-    if first_word == b"while" {
-        return execute_while(shell, script, pos);
-    }
-    if first_word == b"until" {
-        return execute_until(shell, script, pos);
-    }
-    if first_word == b"for" {
-        return execute_for(shell, script, pos);
-    }
-    if first_word == b"case" {
-        return execute_case(shell, script, pos);
+    if at_boundary {
+        if first_word == b"if" {
+            return execute_if(shell, script, pos);
+        }
+        if first_word == b"while" {
+            return execute_while(shell, script, pos);
+        }
+        if first_word == b"until" {
+            return execute_until(shell, script, pos);
+        }
+        if first_word == b"for" {
+            return execute_for(shell, script, pos);
+        }
+        if first_word == b"case" {
+            return execute_case(shell, script, pos);
+        }
     }
 
     // Regular command or pipeline
@@ -153,10 +156,43 @@ pub(super) fn execute_line(shell: &mut Shell, line: &[u8]) {
         }
     }
 
-    // Parse into pipeline
+    // Check for alias expansion on the first word
     let tokens = tokenize(shell, line);
     if tokens.is_empty() {
         return;
+    }
+
+    // If the first token is a word that matches an alias, expand it
+    if let Some(Token::Word(first)) = tokens.first() {
+        if let Some(alias_value) = shell.aliases.get(first.as_slice()) {
+            // Build a new line with the alias value replacing the first word
+            let mut new_line = alias_value.clone();
+            // Append remaining tokens as-is from the original line
+            // Find where the first word ends in the original line
+            let mut skip = 0;
+            while skip < line.len() && (line[skip] == b' ' || line[skip] == b'\t') {
+                skip += 1;
+            }
+            // Skip past the first word
+            while skip < line.len()
+                && line[skip] != b' '
+                && line[skip] != b'\t'
+                && line[skip] != b'\n'
+                && line[skip] != b';'
+                && line[skip] != b'|'
+                && line[skip] != b'&'
+                && line[skip] != b'>'
+                && line[skip] != b'<'
+            {
+                skip += 1;
+            }
+            // Append the rest of the original line
+            if skip < line.len() {
+                new_line.extend_from_slice(&line[skip..]);
+            }
+            execute_line(shell, &new_line);
+            return;
+        }
     }
 
     execute_pipeline(shell, &tokens);
@@ -283,7 +319,86 @@ pub(super) fn execute_simple_pipeline(shell: &mut Shell, tokens: &[Token]) {
 
     // Single command - check for builtins
     if commands.len() == 1 && !commands[0].background {
-        if execute_builtin(shell, &commands[0]) {
+        let cmd = &commands[0];
+        let has_redirects = cmd.stdout_file.is_some()
+            || cmd.stdin_file.is_some()
+            || cmd.stderr_file.is_some();
+
+        if has_redirects {
+            // Set up redirections for the builtin, then restore
+            let saved_stdout = if cmd.stdout_file.is_some() { io::dup(1) } else { -1 };
+            let saved_stdin = if cmd.stdin_file.is_some() { io::dup(0) } else { -1 };
+            let saved_stderr = if cmd.stderr_file.is_some() { io::dup(2) } else { -1 };
+
+            let mut redirect_ok = true;
+
+            if let Some(ref f) = cmd.stdin_file {
+                let fd = io::open(f, libc::O_RDONLY, 0);
+                if fd < 0 {
+                    io::write_str(2, b"sh: ");
+                    io::write_all(2, f);
+                    io::write_str(2, b": No such file or directory\n");
+                    redirect_ok = false;
+                    shell.last_status = 1;
+                } else {
+                    io::dup2(fd, 0);
+                    io::close(fd);
+                }
+            }
+
+            if redirect_ok {
+                if let Some(ref f) = cmd.stdout_file {
+                    let flags = if cmd.stdout_append {
+                        libc::O_WRONLY | libc::O_CREAT | libc::O_APPEND
+                    } else {
+                        libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC
+                    };
+                    let fd = io::open(f, flags, 0o644);
+                    if fd < 0 {
+                        io::write_str(2, b"sh: cannot create ");
+                        io::write_all(2, f);
+                        io::write_str(2, b"\n");
+                        redirect_ok = false;
+                        shell.last_status = 1;
+                    } else {
+                        io::dup2(fd, 1);
+                        io::close(fd);
+                    }
+                }
+            }
+
+            if redirect_ok {
+                if let Some(ref f) = cmd.stderr_file {
+                    let fd = io::open(f, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
+                    if fd >= 0 {
+                        io::dup2(fd, 2);
+                        io::close(fd);
+                    }
+                }
+            }
+
+            if redirect_ok {
+                execute_builtin(shell, cmd);
+            }
+
+            // Restore original fds
+            if saved_stdout >= 0 {
+                io::dup2(saved_stdout, 1);
+                io::close(saved_stdout);
+            }
+            if saved_stdin >= 0 {
+                io::dup2(saved_stdin, 0);
+                io::close(saved_stdin);
+            }
+            if saved_stderr >= 0 {
+                io::dup2(saved_stderr, 2);
+                io::close(saved_stderr);
+            }
+
+            return;
+        }
+
+        if execute_builtin(shell, cmd) {
             return;
         }
     }

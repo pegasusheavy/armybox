@@ -40,6 +40,21 @@ pub(super) fn find_word_end(script: &[u8], start: usize) -> usize {
     pos
 }
 
+/// Check if a position is a valid keyword boundary
+///
+/// A keyword is only valid if it's followed by whitespace, a command separator,
+/// an operator, end-of-input, or a comment. Characters like `=`, `/`, `-` indicate
+/// the word is part of a larger token (e.g. `if=/dev/urandom` in `dd if=...`).
+#[cfg(feature = "alloc")]
+pub(super) fn is_keyword_boundary(script: &[u8], pos: usize) -> bool {
+    if pos >= script.len() {
+        return true;
+    }
+    let c = script[pos];
+    matches!(c, b' ' | b'\t' | b'\n' | b'\r' | b';' | b'|' | b'&'
+             | b'<' | b'>' | b'(' | b')' | b'#')
+}
+
 /// Find a keyword at word boundary
 #[cfg(feature = "alloc")]
 pub(super) fn find_keyword(script: &[u8], start: usize, keyword: &[u8]) -> Option<usize> {
@@ -51,7 +66,7 @@ pub(super) fn find_keyword(script: &[u8], start: usize, keyword: &[u8]) -> Optio
         }
 
         let word_end = find_word_end(script, pos);
-        if &script[pos..word_end] == keyword {
+        if &script[pos..word_end] == keyword && is_keyword_boundary(script, word_end) {
             return Some(pos);
         }
 
@@ -75,9 +90,11 @@ pub(super) fn find_matching_done(script: &[u8], start: usize) -> Option<usize> {
         let word_end = find_word_end(script, pos);
         let word = &script[pos..word_end];
 
-        if word == b"while" || word == b"for" || word == b"until" {
+        if (word == b"while" || word == b"for" || word == b"until")
+            && is_keyword_boundary(script, word_end)
+        {
             depth += 1;
-        } else if word == b"done" {
+        } else if word == b"done" && is_keyword_boundary(script, word_end) {
             depth -= 1;
             if depth == 0 {
                 return Some(pos);

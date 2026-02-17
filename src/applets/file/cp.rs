@@ -22,7 +22,7 @@ use crate::applets::{get_arg, has_opt};
 /// # Options
 /// - `-f`: Force - remove existing destination files if needed
 /// - `-i`: Interactive - prompt before overwrite (not implemented)
-/// - `-p`: Preserve - preserve file attributes (not implemented)
+/// - `-p`: Preserve - preserve file mode, ownership, and timestamps
 /// - `-R`, `-r`: Recursive - copy directories recursively
 ///
 /// # Exit Status
@@ -32,7 +32,7 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
     let mut recursive = false;
     let mut force = false;
     let mut _interactive = false;
-    let mut _preserve = false;
+    let mut preserve = false;
     let mut files_start = 1;
 
     // Parse options
@@ -42,7 +42,7 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
                 if has_opt(arg, b'r') || has_opt(arg, b'R') { recursive = true; }
                 if has_opt(arg, b'f') { force = true; }
                 if has_opt(arg, b'i') { _interactive = true; }
-                if has_opt(arg, b'p') { _preserve = true; }
+                if has_opt(arg, b'p') { preserve = true; }
                 files_start = i + 1;
             } else {
                 break;
@@ -83,9 +83,9 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
                 // Copy into directory
                 let mut dest_path = [0u8; 4096];
                 let dest_len = build_dest_path(dest, src, &mut dest_path);
-                copy_item(src, &dest_path[..dest_len], recursive, force)
+                copy_item(src, &dest_path[..dest_len], recursive, force, preserve)
             } else {
-                copy_item(src, dest, recursive, force)
+                copy_item(src, dest, recursive, force, preserve)
             };
 
             if result != 0 {
@@ -141,7 +141,7 @@ fn build_dest_path(dest_dir: &[u8], src: &[u8], buf: &mut [u8]) -> usize {
 }
 
 /// Copy a file or directory
-fn copy_item(src: &[u8], dest: &[u8], recursive: bool, force: bool) -> i32 {
+fn copy_item(src: &[u8], dest: &[u8], recursive: bool, force: bool, preserve: bool) -> i32 {
     let mut st: libc::stat = unsafe { core::mem::zeroed() };
     if io::stat(src, &mut st) < 0 {
         sys::perror(src);
@@ -155,26 +155,41 @@ fn copy_item(src: &[u8], dest: &[u8], recursive: bool, force: bool) -> i32 {
             io::write_str(2, b"'\n");
             return 1;
         }
-        copy_directory(src, dest, force)
+        copy_directory(src, dest, force, preserve)
     } else {
-        copy_file(src, dest, force)
+        copy_file_opts(src, dest, force, preserve)
     }
 }
 
 /// Copy a single file
 pub(crate) fn copy_file(src: &[u8], dest: &[u8], force: bool) -> i32 {
+    copy_file_opts(src, dest, force, false)
+}
+
+/// Copy a single file with optional attribute preservation
+fn copy_file_opts(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
     let src_fd = io::open(src, libc::O_RDONLY, 0);
     if src_fd < 0 {
         sys::perror(src);
         return 1;
     }
 
+    // Get source stats for preserve mode
+    let mut src_st: libc::stat = unsafe { core::mem::zeroed() };
+    let has_stat = io::stat(src, &mut src_st) == 0;
+
     // If force and dest exists, try to remove it first
     if force {
         let _ = io::unlink(dest);
     }
 
-    let dest_fd = io::open(dest, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
+    let create_mode = if preserve && has_stat {
+        src_st.st_mode & 0o7777
+    } else {
+        0o644
+    };
+
+    let dest_fd = io::open(dest, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, create_mode);
     if dest_fd < 0 {
         io::close(src_fd);
         sys::perror(dest);
@@ -195,11 +210,42 @@ pub(crate) fn copy_file(src: &[u8], dest: &[u8], force: bool) -> i32 {
 
     io::close(src_fd);
     io::close(dest_fd);
+
+    // Preserve attributes
+    if preserve && has_stat {
+        // Preserve mode
+        io::chmod(dest, src_st.st_mode & 0o7777);
+
+        // Preserve ownership (may fail if not root)
+        unsafe {
+            libc::chown(
+                dest.as_ptr() as *const i8,
+                src_st.st_uid,
+                src_st.st_gid,
+            );
+        }
+
+        // Preserve timestamps
+        let times = [
+            libc::timeval {
+                tv_sec: src_st.st_atime,
+                tv_usec: 0,
+            },
+            libc::timeval {
+                tv_sec: src_st.st_mtime,
+                tv_usec: 0,
+            },
+        ];
+        unsafe {
+            libc::utimes(dest.as_ptr() as *const i8, times.as_ptr());
+        }
+    }
+
     0
 }
 
 /// Copy a directory recursively
-fn copy_directory(src: &[u8], dest: &[u8], force: bool) -> i32 {
+fn copy_directory(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
     // Create destination directory
     if io::mkdir(dest, 0o755) < 0 {
         // Check if it already exists
@@ -243,7 +289,7 @@ fn copy_directory(src: &[u8], dest: &[u8], force: bool) -> i32 {
                 dest_path[dest_len] = b'/'; dest_len += 1;
                 for &c in name { dest_path[dest_len] = c; dest_len += 1; }
 
-                if copy_item(&src_path[..src_len], &dest_path[..dest_len], true, force) != 0 {
+                if copy_item(&src_path[..src_len], &dest_path[..dest_len], true, force, preserve) != 0 {
                     exit_code = 1;
                 }
             }
@@ -253,6 +299,25 @@ fn copy_directory(src: &[u8], dest: &[u8], force: bool) -> i32 {
     }
 
     io::close(fd);
+
+    // Preserve directory attributes
+    if preserve {
+        let mut src_st: libc::stat = unsafe { core::mem::zeroed() };
+        if io::stat(src, &mut src_st) == 0 {
+            io::chmod(dest, src_st.st_mode & 0o7777);
+            unsafe {
+                libc::chown(dest.as_ptr() as *const i8, src_st.st_uid, src_st.st_gid);
+            }
+            let times = [
+                libc::timeval { tv_sec: src_st.st_atime, tv_usec: 0 },
+                libc::timeval { tv_sec: src_st.st_mtime, tv_usec: 0 },
+            ];
+            unsafe {
+                libc::utimes(dest.as_ptr() as *const i8, times.as_ptr());
+            }
+        }
+    }
+
     exit_code
 }
 
@@ -261,6 +326,9 @@ mod tests {
     //! Unit tests for cp utility
 
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::Command;
     use std::fs;
     use std::path::PathBuf;
@@ -275,7 +343,8 @@ mod tests {
     }
 
     fn setup() -> PathBuf {
-        let dir = std::env::temp_dir().join("armybox_cp_test");
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("armybox_cp_test_{}_{}",  std::process::id(), counter));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

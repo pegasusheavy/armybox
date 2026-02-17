@@ -2,8 +2,10 @@
 //!
 //! Connect to NBD servers.
 
+// Allow dead code for NBD protocol constants - defined for completeness
+#![allow(dead_code)]
+
 extern crate alloc;
-use alloc::vec::Vec;
 use crate::io;
 use crate::sys;
 use super::get_arg;
@@ -35,17 +37,17 @@ const NBD_REP_FLAG_ERROR: u32 = 1 << 31;
 const NBD_REP_ERR_UNSUP: u32 = NBD_REP_FLAG_ERROR | 1;
 
 // NBD ioctls
-const NBD_SET_SOCK: libc::c_ulong = 0xab00;
-const NBD_SET_BLKSIZE: libc::c_ulong = 0xab01;
-const NBD_SET_SIZE: libc::c_ulong = 0xab02;
-const NBD_DO_IT: libc::c_ulong = 0xab03;
-const NBD_CLEAR_SOCK: libc::c_ulong = 0xab04;
-const NBD_CLEAR_QUE: libc::c_ulong = 0xab05;
-const NBD_PRINT_DEBUG: libc::c_ulong = 0xab06;
-const NBD_SET_SIZE_BLOCKS: libc::c_ulong = 0xab07;
-const NBD_DISCONNECT: libc::c_ulong = 0xab08;
-const NBD_SET_TIMEOUT: libc::c_ulong = 0xab09;
-const NBD_SET_FLAGS: libc::c_ulong = 0xab0a;
+const NBD_SET_SOCK: crate::io::IoctlReq = 0xab00u32 as crate::io::IoctlReq;
+const NBD_SET_BLKSIZE: crate::io::IoctlReq = 0xab01u32 as crate::io::IoctlReq;
+const NBD_SET_SIZE: crate::io::IoctlReq = 0xab02u32 as crate::io::IoctlReq;
+const NBD_DO_IT: crate::io::IoctlReq = 0xab03u32 as crate::io::IoctlReq;
+const NBD_CLEAR_SOCK: crate::io::IoctlReq = 0xab04u32 as crate::io::IoctlReq;
+const NBD_CLEAR_QUE: crate::io::IoctlReq = 0xab05u32 as crate::io::IoctlReq;
+const NBD_PRINT_DEBUG: crate::io::IoctlReq = 0xab06u32 as crate::io::IoctlReq;
+const NBD_SET_SIZE_BLOCKS: crate::io::IoctlReq = 0xab07u32 as crate::io::IoctlReq;
+const NBD_DISCONNECT: crate::io::IoctlReq = 0xab08u32 as crate::io::IoctlReq;
+const NBD_SET_TIMEOUT: crate::io::IoctlReq = 0xab09u32 as crate::io::IoctlReq;
+const NBD_SET_FLAGS: crate::io::IoctlReq = 0xab0au32 as crate::io::IoctlReq;
 
 // NBD flags
 const NBD_FLAG_HAS_FLAGS: u16 = 1 << 0;
@@ -203,7 +205,7 @@ pub fn nbd_client(argc: i32, argv: *const *const u8) -> i32 {
 
     // Configure NBD device
     unsafe {
-        if libc::ioctl(nbd_fd, NBD_SET_BLKSIZE, block_size as libc::c_ulong) < 0 {
+        if libc::ioctl(nbd_fd, NBD_SET_BLKSIZE, block_size as crate::io::IoctlReq) < 0 {
             io::write_str(2, b"nbd-client: NBD_SET_BLKSIZE failed\n");
             io::close(nbd_fd);
             io::close(sock_fd);
@@ -211,7 +213,7 @@ pub fn nbd_client(argc: i32, argv: *const *const u8) -> i32 {
         }
 
         let size_blocks = size / block_size as u64;
-        if libc::ioctl(nbd_fd, NBD_SET_SIZE_BLOCKS, size_blocks as libc::c_ulong) < 0 {
+        if libc::ioctl(nbd_fd, NBD_SET_SIZE_BLOCKS, size_blocks as crate::io::IoctlReq) < 0 {
             io::write_str(2, b"nbd-client: NBD_SET_SIZE_BLOCKS failed\n");
             io::close(nbd_fd);
             io::close(sock_fd);
@@ -226,10 +228,10 @@ pub fn nbd_client(argc: i32, argv: *const *const u8) -> i32 {
         }
 
         if timeout > 0 {
-            libc::ioctl(nbd_fd, NBD_SET_TIMEOUT, timeout as libc::c_ulong);
+            libc::ioctl(nbd_fd, NBD_SET_TIMEOUT, timeout as crate::io::IoctlReq);
         }
 
-        if libc::ioctl(nbd_fd, NBD_SET_FLAGS, flags as libc::c_ulong) < 0 {
+        if libc::ioctl(nbd_fd, NBD_SET_FLAGS, flags as crate::io::IoctlReq) < 0 {
             // Non-fatal, older kernels may not support this
         }
 

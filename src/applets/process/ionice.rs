@@ -54,19 +54,19 @@ pub fn ionice(argc: i32, argv: *const *const u8) -> i32 {
     while i < argc {
         if let Some(arg) = unsafe { get_arg(argv, i ) } {
             if arg == b"-c" && i + 1 < argc {
-                if let Some(c) = unsafe { get_arg(argv, (i + 1) ) } {
+                if let Some(c) = unsafe { get_arg(argv, i + 1 ) } {
                     class = sys::parse_i64(c).unwrap_or(2) as i32;
                 }
                 i += 2;
                 continue;
             } else if arg == b"-n" && i + 1 < argc {
-                if let Some(n) = unsafe { get_arg(argv, (i + 1) ) } {
+                if let Some(n) = unsafe { get_arg(argv, i + 1 ) } {
                     level = sys::parse_i64(n).unwrap_or(4) as i32;
                 }
                 i += 2;
                 continue;
             } else if arg == b"-p" && i + 1 < argc {
-                if let Some(p) = unsafe { get_arg(argv, (i + 1) ) } {
+                if let Some(p) = unsafe { get_arg(argv, i + 1 ) } {
                     pid = sys::parse_i64(p).unwrap_or(0) as i32;
                 }
                 i += 2;

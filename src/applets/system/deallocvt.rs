@@ -7,7 +7,7 @@ use crate::sys;
 use super::get_arg;
 
 // VT ioctl
-const VT_DISALLOCATE: u64 = 0x5608;
+const VT_DISALLOCATE: crate::io::IoctlReq = 0x5608u32 as crate::io::IoctlReq;
 
 /// deallocvt - deallocate unused virtual terminals
 ///

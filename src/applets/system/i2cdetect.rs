@@ -7,8 +7,8 @@ use crate::sys;
 use super::get_arg;
 
 // I2C ioctl commands
-const I2C_SLAVE: u64 = 0x0703;
-const I2C_SMBUS: u64 = 0x0720;
+const I2C_SLAVE: crate::io::IoctlReq = 0x0703u32 as crate::io::IoctlReq;
+const I2C_SMBUS: crate::io::IoctlReq = 0x0720u32 as crate::io::IoctlReq;
 
 /// i2cdetect - detect I2C devices
 ///

@@ -2,101 +2,428 @@
 //!
 //! GNU coreutils compatible implementation.
 
+extern crate alloc;
+
+use alloc::vec::Vec;
+use alloc::ffi::CString;
 use crate::io;
+use crate::sys;
 use crate::applets::get_arg;
 
 /// xargs - build and execute command lines from standard input
 ///
 /// # Synopsis
 /// ```text
-/// xargs [command [initial-args]]
+/// xargs [OPTIONS] [COMMAND [INITIAL-ARGS]]
 /// ```
 ///
 /// # Description
 /// Read items from the standard input and execute a command with
 /// those items as arguments.
 ///
+/// # Options
+/// - `-0, --null`: Input items are separated by a null character
+/// - `-d DELIM`: Input items are separated by DELIM character
+/// - `-I REPLSTR`: Replace REPLSTR with input items in arguments
+/// - `-n MAXARGS`: Use at most MAXARGS arguments per command line
+/// - `-P MAXPROCS`: Run up to MAXPROCS processes at a time
+/// - `-r, --no-run-if-empty`: Don't run command if input is empty
+/// - `-t, --verbose`: Print command before executing
+/// - `-x`: Exit if command line length exceeds limit
+///
 /// # Exit Status
-/// - 0: Success
-/// - >0: An error occurred
+/// - 0: All commands succeeded
+/// - 123: Any command returned 1-125
+/// - 124: Command exited with status 255
+/// - 125: Command was killed by a signal
+/// - 126: Command cannot be run
+/// - 127: Command not found
+/// - 1: Other error
 pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
-    #[cfg(feature = "alloc")]
-    {
-        use alloc::vec::Vec;
-        use alloc::ffi::CString;
+    let mut null_delimiter = false;
+    let mut delimiter = b'\n';
+    let mut replace_str: Option<&[u8]> = None;
+    let mut max_args: Option<usize> = None;
+    let mut max_procs: usize = 1;
+    let mut no_run_if_empty = false;
+    let mut verbose = false;
+    let mut exit_on_limit = false;
+    let mut cmd_start = 1;
 
-        // Read lines from stdin
-        let mut buf = [0u8; 4096];
-        let n = io::read(0, &mut buf);
-        if n <= 0 { return 0; }
-
-        // Parse arguments
-        let cmd = if argc > 1 {
-            unsafe { get_arg(argv, 1).unwrap() }
-        } else {
-            b"echo"
-        };
-
-        // Build argument list
-        let lines: Vec<&[u8]> = buf[..n as usize]
-            .split(|&c| c == b'\n')
-            .filter(|l| !l.is_empty())
-            .collect();
-
-        for line in lines {
-            let pid = unsafe { libc::fork() };
-            if pid == 0 {
-                let mut args: Vec<CString> = Vec::new();
-
-                // Command
-                let mut v = Vec::with_capacity(cmd.len() + 1);
-                v.extend_from_slice(cmd);
-                v.push(0);
-                if let Ok(cs) = CString::from_vec_with_nul(v) {
-                    args.push(cs);
+    // Parse options
+    let mut i = 1;
+    while i < argc {
+        if let Some(arg) = unsafe { get_arg(argv, i) } {
+            if arg == b"-0" || arg == b"--null" {
+                null_delimiter = true;
+                delimiter = 0;
+                cmd_start = i + 1;
+            } else if arg == b"-d" {
+                i += 1;
+                if let Some(d) = unsafe { get_arg(argv, i) } {
+                    if !d.is_empty() {
+                        delimiter = d[0];
+                    }
                 }
-
-                // Original args
-                for i in 2..argc {
-                    if let Some(arg) = unsafe { get_arg(argv, i) } {
-                        let mut v = Vec::with_capacity(arg.len() + 1);
-                        v.extend_from_slice(arg);
-                        v.push(0);
-                        if let Ok(cs) = CString::from_vec_with_nul(v) {
-                            args.push(cs);
+                cmd_start = i + 1;
+            } else if arg == b"-I" || arg == b"-i" {
+                i += 1;
+                replace_str = unsafe { get_arg(argv, i) };
+                cmd_start = i + 1;
+            } else if arg.starts_with(b"-I") && arg.len() > 2 {
+                // Handle -I{} format (no space)
+                replace_str = Some(&arg[2..]);
+                cmd_start = i + 1;
+            } else if arg == b"-n" {
+                i += 1;
+                if let Some(n) = unsafe { get_arg(argv, i) } {
+                    max_args = sys::parse_u64(n).map(|v| v as usize);
+                }
+                cmd_start = i + 1;
+            } else if arg.starts_with(b"-n") && arg.len() > 2 {
+                // Handle -nN format (no space)
+                max_args = sys::parse_u64(&arg[2..]).map(|v| v as usize);
+                cmd_start = i + 1;
+            } else if arg == b"-P" {
+                i += 1;
+                if let Some(p) = unsafe { get_arg(argv, i) } {
+                    max_procs = sys::parse_u64(p).unwrap_or(1) as usize;
+                }
+                cmd_start = i + 1;
+            } else if arg.starts_with(b"-P") && arg.len() > 2 {
+                // Handle -PN format (no space)
+                max_procs = sys::parse_u64(&arg[2..]).unwrap_or(1) as usize;
+                cmd_start = i + 1;
+            } else if arg == b"-r" || arg == b"--no-run-if-empty" {
+                no_run_if_empty = true;
+                cmd_start = i + 1;
+            } else if arg == b"-t" || arg == b"--verbose" {
+                verbose = true;
+                cmd_start = i + 1;
+            } else if arg == b"-x" {
+                exit_on_limit = true;
+                cmd_start = i + 1;
+            } else if arg == b"-h" || arg == b"--help" {
+                print_help();
+                return 0;
+            } else if arg == b"--" {
+                cmd_start = i + 1;
+                break;
+            } else if !arg.starts_with(b"-") {
+                cmd_start = i;
+                break;
+            } else {
+                // Check for combined short options like -r0
+                let mut valid = true;
+                for &c in &arg[1..] {
+                    match c {
+                        b'0' => {
+                            null_delimiter = true;
+                            delimiter = 0;
+                        }
+                        b'r' => no_run_if_empty = true,
+                        b't' => verbose = true,
+                        b'x' => exit_on_limit = true,
+                        _ => {
+                            valid = false;
+                            break;
                         }
                     }
                 }
-
-                // Line as argument
-                let mut v = Vec::with_capacity(line.len() + 1);
-                v.extend_from_slice(line);
-                v.push(0);
-                if let Ok(cs) = CString::from_vec_with_nul(v) {
-                    args.push(cs);
+                if valid {
+                    cmd_start = i + 1;
+                } else {
+                    cmd_start = i;
+                    break;
                 }
+            }
+        }
+        i += 1;
+    }
 
-                let ptrs: Vec<*const i8> = args.iter()
-                    .map(|s: &CString| s.as_ptr())
-                    .chain(core::iter::once(core::ptr::null()))
-                    .collect();
+    // Get command and initial args
+    let command = if cmd_start < argc {
+        unsafe { get_arg(argv, cmd_start).unwrap_or(b"echo") }
+    } else {
+        b"echo"
+    };
 
-                unsafe { libc::execvp(ptrs[0], ptrs.as_ptr()) };
-                unsafe { libc::_exit(127) };
-            } else if pid > 0 {
-                let mut status = 0;
-                unsafe { libc::waitpid(pid, &mut status, 0) };
+    let mut initial_args: Vec<&[u8]> = Vec::new();
+    for j in (cmd_start + 1)..argc {
+        if let Some(arg) = unsafe { get_arg(argv, j) } {
+            initial_args.push(arg);
+        }
+    }
+
+    // Read input
+    let input = io::read_all(0);
+
+    // Split input into items
+    let items: Vec<&[u8]> = if null_delimiter {
+        input.split(|&c| c == 0)
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else {
+        input.split(|&c| c == delimiter)
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
+
+    // Handle empty input
+    if items.is_empty() {
+        if no_run_if_empty {
+            return 0;
+        }
+        // With no input and no -r, xargs still runs command once with initial args
+        if replace_str.is_none() && max_args.is_none() {
+            return run_command(command, &initial_args, verbose);
+        }
+        return 0;
+    }
+
+    // Track exit status
+    let mut exit_status = 0;
+    let mut running_pids: Vec<libc::pid_t> = Vec::new();
+
+    if let Some(repl) = replace_str {
+        // Replace mode: run command once per item, replacing REPLSTR in args
+        for item in &items {
+            // Wait if we've reached max parallel processes
+            while running_pids.len() >= max_procs && max_procs > 0 {
+                let status = wait_for_any(&mut running_pids);
+                exit_status = update_exit_status(exit_status, status);
+            }
+
+            let args = build_replace_args(&initial_args, repl, item);
+            let args_refs: Vec<&[u8]> = args.iter().map(|v| v.as_slice()).collect();
+
+            if max_procs > 1 {
+                // Run in parallel
+                if let Some(pid) = fork_and_run(command, &args_refs, verbose) {
+                    running_pids.push(pid);
+                }
+            } else {
+                let status = run_command(command, &args_refs, verbose);
+                exit_status = update_exit_status(exit_status, status);
+            }
+        }
+    } else {
+        // Normal mode: batch items into command invocations
+        let batch_size = max_args.unwrap_or(items.len());
+
+        for chunk in items.chunks(batch_size) {
+            // Wait if we've reached max parallel processes
+            while running_pids.len() >= max_procs && max_procs > 0 {
+                let status = wait_for_any(&mut running_pids);
+                exit_status = update_exit_status(exit_status, status);
+            }
+
+            let mut args = initial_args.clone();
+            args.extend(chunk.iter().copied());
+
+            if max_procs > 1 {
+                // Run in parallel
+                if let Some(pid) = fork_and_run(command, &args, verbose) {
+                    running_pids.push(pid);
+                }
+            } else {
+                let status = run_command(command, &args, verbose);
+                exit_status = update_exit_status(exit_status, status);
             }
         }
     }
 
-    #[cfg(not(feature = "alloc"))]
-    {
-        io::write_str(2, b"xargs: requires alloc feature\n");
+    // Wait for remaining processes
+    while !running_pids.is_empty() {
+        let status = wait_for_any(&mut running_pids);
+        exit_status = update_exit_status(exit_status, status);
+    }
+
+    exit_status
+}
+
+/// Build args with replacement
+fn build_replace_args(args: &[&[u8]], repl: &[u8], item: &[u8]) -> Vec<Vec<u8>> {
+    args.iter().map(|arg| {
+        if let Some(pos) = find_subsequence(arg, repl) {
+            // Replace REPLSTR with item
+            let mut new_arg = Vec::new();
+            new_arg.extend_from_slice(&arg[..pos]);
+            new_arg.extend_from_slice(item);
+            new_arg.extend_from_slice(&arg[pos + repl.len()..]);
+            new_arg
+        } else {
+            arg.to_vec()
+        }
+    }).collect()
+}
+
+/// Find subsequence in slice
+fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|window| window == needle)
+}
+
+/// Run a command synchronously
+fn run_command(cmd: &[u8], args: &[&[u8]], verbose: bool) -> i32 {
+    if verbose {
+        print_command(cmd, args);
+    }
+
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        io::write_str(2, b"xargs: fork failed\n");
         return 1;
     }
 
-    0
+    if pid == 0 {
+        exec_command(cmd, args);
+    }
+
+    // Parent - wait for child
+    let mut status: libc::c_int = 0;
+    unsafe { libc::waitpid(pid, &mut status, 0); }
+
+    get_exit_code(status)
+}
+
+/// Fork and run command, returning PID
+fn fork_and_run(cmd: &[u8], args: &[&[u8]], verbose: bool) -> Option<libc::pid_t> {
+    if verbose {
+        print_command(cmd, args);
+    }
+
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        io::write_str(2, b"xargs: fork failed\n");
+        return None;
+    }
+
+    if pid == 0 {
+        exec_command(cmd, args);
+    }
+
+    Some(pid)
+}
+
+/// Exec a command (in child process)
+fn exec_command(cmd: &[u8], args: &[&[u8]]) -> ! {
+    let mut cstrings: Vec<CString> = Vec::new();
+
+    // Command
+    let mut v = Vec::with_capacity(cmd.len() + 1);
+    v.extend_from_slice(cmd);
+    v.push(0);
+    if let Ok(cs) = CString::from_vec_with_nul(v) {
+        cstrings.push(cs);
+    }
+
+    // Args
+    for arg in args {
+        let mut v = Vec::with_capacity(arg.len() + 1);
+        v.extend_from_slice(arg);
+        v.push(0);
+        if let Ok(cs) = CString::from_vec_with_nul(v) {
+            cstrings.push(cs);
+        }
+    }
+
+    let ptrs: Vec<*const i8> = cstrings.iter()
+        .map(|s| s.as_ptr())
+        .chain(core::iter::once(core::ptr::null()))
+        .collect();
+
+    unsafe { libc::execvp(ptrs[0], ptrs.as_ptr()); }
+
+    // exec failed
+    io::write_str(2, b"xargs: ");
+    io::write_all(2, cmd);
+    io::write_str(2, b": ");
+
+    let errno = unsafe { *libc::__errno_location() };
+    if errno == libc::ENOENT {
+        io::write_str(2, b"command not found\n");
+        unsafe { libc::_exit(127); }
+    } else if errno == libc::EACCES {
+        io::write_str(2, b"permission denied\n");
+        unsafe { libc::_exit(126); }
+    } else {
+        io::write_str(2, b"cannot run command\n");
+        unsafe { libc::_exit(126); }
+    }
+}
+
+/// Wait for any child process
+fn wait_for_any(pids: &mut Vec<libc::pid_t>) -> i32 {
+    let mut status: libc::c_int = 0;
+    let pid = unsafe { libc::wait(&mut status) };
+
+    if pid > 0 {
+        if let Some(idx) = pids.iter().position(|&p| p == pid) {
+            pids.remove(idx);
+        }
+    }
+
+    get_exit_code(status)
+}
+
+/// Get exit code from wait status
+fn get_exit_code(status: libc::c_int) -> i32 {
+    if libc::WIFEXITED(status) {
+        libc::WEXITSTATUS(status)
+    } else if libc::WIFSIGNALED(status) {
+        125 // killed by signal
+    } else {
+        1
+    }
+}
+
+/// Update exit status according to xargs rules
+fn update_exit_status(current: i32, new: i32) -> i32 {
+    match new {
+        0 => current,
+        255 => 124,
+        126 | 127 => new,
+        1..=125 if current == 0 => 123,
+        _ => if current == 0 { new } else { current },
+    }
+}
+
+/// Print command for verbose mode
+fn print_command(cmd: &[u8], args: &[&[u8]]) {
+    io::write_all(2, cmd);
+    for arg in args {
+        io::write_str(2, b" ");
+        // Quote if contains spaces
+        let needs_quote = arg.iter().any(|&c| c == b' ' || c == b'\t');
+        if needs_quote {
+            io::write_str(2, b"'");
+        }
+        io::write_all(2, arg);
+        if needs_quote {
+            io::write_str(2, b"'");
+        }
+    }
+    io::write_str(2, b"\n");
+}
+
+fn print_help() {
+    io::write_str(1, b"Usage: xargs [OPTIONS] [COMMAND [INITIAL-ARGS]]\n\n");
+    io::write_str(1, b"Build and execute command lines from standard input.\n\n");
+    io::write_str(1, b"Options:\n");
+    io::write_str(1, b"  -0, --null           Items separated by null, not newline\n");
+    io::write_str(1, b"  -d DELIM             Items separated by DELIM\n");
+    io::write_str(1, b"  -I REPLSTR           Replace REPLSTR in args with input item\n");
+    io::write_str(1, b"  -n MAXARGS           Use at most MAXARGS per command line\n");
+    io::write_str(1, b"  -P MAXPROCS          Run up to MAXPROCS processes in parallel\n");
+    io::write_str(1, b"  -r, --no-run-if-empty  Don't run if input is empty\n");
+    io::write_str(1, b"  -t, --verbose        Print command before executing\n");
+    io::write_str(1, b"  -x                   Exit if command line too long\n");
+    io::write_str(1, b"  -h, --help           Show this help\n\n");
+    io::write_str(1, b"Examples:\n");
+    io::write_str(1, b"  find . -name '*.txt' | xargs grep 'pattern'\n");
+    io::write_str(1, b"  find . -print0 | xargs -0 rm\n");
+    io::write_str(1, b"  echo 'a b c' | xargs -n1 echo\n");
+    io::write_str(1, b"  ls | xargs -I{} mv {} {}.bak\n");
 }
 
 #[cfg(test)]
@@ -148,7 +475,7 @@ mod tests {
         if !armybox.exists() { return; }
 
         let mut child = Command::new(&armybox)
-            .args(["xargs", "echo"])
+            .args(["xargs", "-r", "echo"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -161,15 +488,17 @@ mod tests {
 
         let output = child.wait_with_output().unwrap();
         assert_eq!(output.status.code(), Some(0));
+        // With -r, no output when input is empty
+        assert!(output.stdout.is_empty());
     }
 
     #[test]
-    fn test_xargs_default_echo() {
+    fn test_xargs_n1() {
         let armybox = get_armybox_path();
         if !armybox.exists() { return; }
 
         let mut child = Command::new(&armybox)
-            .args(["xargs"])
+            .args(["xargs", "-n1", "echo"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -177,12 +506,78 @@ mod tests {
 
         {
             let stdin = child.stdin.as_mut().unwrap();
-            stdin.write_all(b"test\n").unwrap();
+            stdin.write_all(b"a\nb\nc\n").unwrap();
         }
 
         let output = child.wait_with_output().unwrap();
         assert_eq!(output.status.code(), Some(0));
         let stdout = std::string::String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("test"));
+        // Each item on its own line
+        let lines: Vec<&str> = stdout.lines().collect();
+        assert_eq!(lines.len(), 3);
+    }
+
+    #[test]
+    fn test_xargs_null() {
+        let armybox = get_armybox_path();
+        if !armybox.exists() { return; }
+
+        let mut child = Command::new(&armybox)
+            .args(["xargs", "-0", "echo"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        {
+            let stdin = child.stdin.as_mut().unwrap();
+            stdin.write_all(b"hello\0world\0").unwrap();
+        }
+
+        let output = child.wait_with_output().unwrap();
+        assert_eq!(output.status.code(), Some(0));
+        let stdout = std::string::String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("hello"));
+        assert!(stdout.contains("world"));
+    }
+
+    #[test]
+    fn test_xargs_replace() {
+        let armybox = get_armybox_path();
+        if !armybox.exists() { return; }
+
+        let mut child = Command::new(&armybox)
+            .args(["xargs", "-I{}", "echo", "item:{}"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        {
+            let stdin = child.stdin.as_mut().unwrap();
+            stdin.write_all(b"foo\nbar\n").unwrap();
+        }
+
+        let output = child.wait_with_output().unwrap();
+        assert_eq!(output.status.code(), Some(0));
+        let stdout = std::string::String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("item:foo"));
+        assert!(stdout.contains("item:bar"));
+    }
+
+    #[test]
+    fn test_xargs_help() {
+        let armybox = get_armybox_path();
+        if !armybox.exists() { return; }
+
+        let output = Command::new(&armybox)
+            .args(["xargs", "--help"])
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(0));
+        let stdout = std::string::String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("Usage"));
+        assert!(stdout.contains("-I REPLSTR"));
     }
 }

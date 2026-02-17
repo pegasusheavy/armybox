@@ -213,8 +213,32 @@ pub(super) fn execute_builtin(shell: &mut Shell, cmd: &Command) -> bool {
     }
 
     if name == b"shift" {
-        // shift - in scripts this shifts positional parameters
-        shell.last_status = 0;
+        // shift [n] - shift positional parameters left by n (default 1)
+        let n = if cmd.args.len() > 1 {
+            let mut val = 0usize;
+            for &c in cmd.args[1].iter() {
+                if c >= b'0' && c <= b'9' {
+                    val = val * 10 + (c - b'0') as usize;
+                }
+            }
+            if val == 0 { 1 } else { val }
+        } else {
+            1
+        };
+
+        // $0 is at index 0 and is NOT shifted; we shift $1, $2, ...
+        let param_count = shell.param_count();
+        if n > param_count {
+            shell.last_status = 1;
+        } else {
+            // Remove n items starting at index 1
+            for _ in 0..n {
+                if shell.positional_params.len() > 1 {
+                    shell.positional_params.remove(1);
+                }
+            }
+            shell.last_status = 0;
+        }
         return true;
     }
 
@@ -224,6 +248,95 @@ pub(super) fn execute_builtin(shell: &mut Shell, cmd: &Command) -> bool {
         } else {
             0
         };
+        return true;
+    }
+
+    if name == b"eval" {
+        if cmd.args.len() > 1 {
+            // Concatenate all args with spaces
+            let mut line = Vec::new();
+            for (i, arg) in cmd.args[1..].iter().enumerate() {
+                if i > 0 { line.push(b' '); }
+                line.extend_from_slice(arg);
+            }
+            execute_script(shell, &line);
+        }
+        return true;
+    }
+
+    if name == b"alias" {
+        if cmd.args.len() == 1 {
+            // Print all aliases
+            for (name, value) in &shell.aliases {
+                io::write_all(1, name);
+                io::write_str(1, b"='");
+                io::write_all(1, value);
+                io::write_str(1, b"'\n");
+            }
+        } else {
+            for arg in &cmd.args[1..] {
+                if let Some(eq_pos) = arg.iter().position(|&c| c == b'=') {
+                    let alias_name = &arg[..eq_pos];
+                    let alias_value = &arg[eq_pos + 1..];
+                    shell.aliases.insert(alias_name.to_vec(), alias_value.to_vec());
+                } else {
+                    // Print specific alias
+                    if let Some(value) = shell.aliases.get(arg.as_slice()) {
+                        io::write_all(1, arg);
+                        io::write_str(1, b"='");
+                        io::write_all(1, value);
+                        io::write_str(1, b"'\n");
+                    } else {
+                        io::write_str(2, b"sh: alias: ");
+                        io::write_all(2, arg);
+                        io::write_str(2, b": not found\n");
+                        shell.last_status = 1;
+                        return true;
+                    }
+                }
+            }
+        }
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"unalias" {
+        if cmd.args.len() > 1 {
+            if cmd.args[1] == b"-a" {
+                shell.aliases.clear();
+            } else {
+                for arg in &cmd.args[1..] {
+                    shell.aliases.remove(arg.as_slice());
+                }
+            }
+        }
+        shell.last_status = 0;
+        return true;
+    }
+
+    if name == b"type" {
+        if cmd.args.len() > 1 {
+            let target = &cmd.args[1];
+            // Check builtins
+            let builtins: &[&[u8]] = &[
+                b"exit", b"cd", b"pwd", b"export", b"unset", b"echo", b"test",
+                b"[", b"true", b"false", b":", b"source", b".", b"read", b"exec",
+                b"set", b"shift", b"return", b"eval", b"alias", b"unalias", b"type",
+            ];
+            if builtins.iter().any(|b| *b == target.as_slice()) {
+                io::write_all(1, target);
+                io::write_str(1, b" is a shell builtin\n");
+            } else if shell.aliases.contains_key(target.as_slice()) {
+                io::write_all(1, target);
+                io::write_str(1, b" is an alias for '");
+                io::write_all(1, shell.aliases.get(target.as_slice()).unwrap());
+                io::write_str(1, b"'\n");
+            } else {
+                io::write_all(1, target);
+                io::write_str(1, b" is an external command\n");
+            }
+        }
+        shell.last_status = 0;
         return true;
     }
 

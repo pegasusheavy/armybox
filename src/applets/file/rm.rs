@@ -204,6 +204,9 @@ mod tests {
     //! Unit tests for rm utility
 
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::Command;
     use std::fs;
     use std::path::PathBuf;
@@ -218,7 +221,8 @@ mod tests {
     }
 
     fn setup() -> PathBuf {
-        let dir = std::env::temp_dir().join("armybox_rm_test");
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("armybox_rm_test_{}_{}",  std::process::id(), counter));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

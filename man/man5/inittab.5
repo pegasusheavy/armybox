@@ -1,0 +1,175 @@
+.\" inittab(5) man page
+.\" Copyright (c) 2026 Pegasus Heavy Industries LLC
+.\" Licensed under MIT OR Apache-2.0
+.\"
+.TH INITTAB 5 "2026-02-08" "armybox 0.3.0" "ArmyBox Manual"
+.\"
+.SH NAME
+inittab \- configuration file for armybox init
+.\"
+.SH DESCRIPTION
+The
+.I /etc/inittab
+file describes which processes are started at bootup and during normal
+operation by
+.BR armybox-init (8).
+.PP
+Each line has the format:
+.PP
+.RS
+.IB id : runlevels : action : process
+.RE
+.PP
+Lines beginning with
+.B #
+are comments.
+Blank lines are ignored.
+.\"
+.SH FIELDS
+.TP
+.I id
+A short identifier for this entry, up to 4 characters.
+Conventionally, this is the terminal name without the
+.I /dev/
+prefix (e.g.,
+.BR tty1 ,
+.BR ttyS0 ).
+The
+.I id
+field may be empty for entries that don't refer to a specific terminal.
+.TP
+.I runlevels
+This field is present for compatibility with System V init but is
+.B ignored
+by armybox init.
+It may be left empty.
+.TP
+.I action
+Determines when and how the
+.I process
+is executed.
+Valid actions:
+.RS
+.TP 14
+.B sysinit
+Executed during system boot, before any
+.B wait
+or
+.B respawn
+entries.
+All
+.B sysinit
+entries are run sequentially in order.
+.TP
+.B wait
+Executed once during boot (after
+.BR sysinit ).
+Init waits for the process to complete before continuing.
+.TP
+.B once
+Executed once during boot, but init does not wait for it to complete.
+.TP
+.B respawn
+The process is started and monitored.
+If it exits, init restarts it after a short delay.
+This is the standard action for
+.BR getty (8)
+processes.
+.TP
+.B askfirst
+Like
+.BR respawn ,
+but before starting the process, init prints the message:
+.RS
+.PP
+.B "Please press Enter to activate this console."
+.PP
+and waits for the user to press Enter.
+Useful for consoles that may not be connected.
+.RE
+.TP
+.B shutdown
+Executed during system shutdown (when init receives SIGTERM).
+.TP
+.B restart
+Executed when init receives
+.BR SIGHUP .
+Typically used to re-exec init itself.
+.TP
+.B ctrlaltdel
+Executed when the Ctrl+Alt+Delete key combination is pressed.
+Typically runs
+.BR reboot (8).
+.RE
+.TP
+.I process
+The command line to execute, including any arguments.
+The process is run via
+.BR /bin/sh\ \-c
+if it contains shell metacharacters; otherwise it is executed directly.
+.\"
+.SH EXAMPLES
+A minimal inittab for a serial console system:
+.PP
+.nf
+# Mount essential filesystems
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mount -t devtmpfs devtmpfs /dev
+
+# Serial console login
+ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100
+
+# Reboot on Ctrl-Alt-Delete
+::ctrlaltdel:/sbin/reboot
+
+# Clean shutdown
+::shutdown:/bin/umount -a -r
+.fi
+.PP
+A more complete inittab with multiple consoles:
+.PP
+.nf
+# System initialization
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mount -t devtmpfs devtmpfs /dev
+::sysinit:/bin/mkdir -p /dev/pts /dev/shm
+::sysinit:/bin/mount -t devpts devpts /dev/pts
+::sysinit:/bin/mount -t tmpfs tmpfs /dev/shm
+::sysinit:/bin/mount -o remount,rw /
+::sysinit:/bin/hostname -F /etc/hostname
+::sysinit:/sbin/sysctl -p
+
+# Run startup scripts
+::wait:/etc/init.d/rcS
+
+# Virtual consoles
+tty1::respawn:/sbin/getty 38400 tty1
+tty2::respawn:/sbin/getty 38400 tty2
+tty3::respawn:/sbin/getty 38400 tty3
+
+# Serial console
+ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100
+
+# Ctrl-Alt-Delete handler
+::ctrlaltdel:/sbin/reboot
+
+# Shutdown tasks
+::shutdown:/etc/init.d/rcK
+::shutdown:/bin/umount -a -r
+::shutdown:/sbin/swapoff -a
+.fi
+.\"
+.SH FILES
+.TP
+.I /etc/inittab
+The configuration file itself.
+.\"
+.SH SEE ALSO
+.BR armybox-init (8),
+.BR getty (8),
+.BR armybox (1)
+.\"
+.SH AUTHORS
+Pegasus Heavy Industries LLC.

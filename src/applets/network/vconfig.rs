@@ -8,9 +8,9 @@ use super::get_arg;
 
 // VLAN ioctl commands
 #[cfg(target_os = "linux")]
-const SIOCGIFVLAN: libc::c_ulong = 0x8982;
+const SIOCGIFVLAN: crate::io::IoctlReq = 0x8982u32 as crate::io::IoctlReq;
 #[cfg(target_os = "linux")]
-const SIOCSIFVLAN: libc::c_ulong = 0x8983;
+const SIOCSIFVLAN: crate::io::IoctlReq = 0x8983u32 as crate::io::IoctlReq;
 
 // VLAN command codes
 #[cfg(target_os = "linux")]
@@ -236,7 +236,7 @@ fn add_vlan(iface: &[u8], vid: u16) -> i32 {
 
     args.u.vid = vid as libc::c_short;
 
-    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as libc::c_ulong, &args) };
+    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as crate::io::IoctlReq, &args) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -271,7 +271,7 @@ fn rem_vlan(vlan_iface: &[u8]) -> i32 {
         args.device1[j] = vlan_iface[j] as libc::c_char;
     }
 
-    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as libc::c_ulong, &args) };
+    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as crate::io::IoctlReq, &args) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -305,7 +305,7 @@ fn set_vlan_flag(vlan_iface: &[u8], flag: libc::c_int, value: libc::c_int) -> i3
     args.u.flag = flag as libc::c_uint;
     args.vlan_qos = value as libc::c_short;
 
-    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as libc::c_ulong, &args) };
+    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as crate::io::IoctlReq, &args) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -339,7 +339,7 @@ fn set_egress_map(vlan_iface: &[u8], skb_prio: u32, vlan_qos: u16) -> i32 {
     args.u.skb_priority = skb_prio;
     args.vlan_qos = vlan_qos as libc::c_short;
 
-    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as libc::c_ulong, &args) };
+    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as crate::io::IoctlReq, &args) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -373,7 +373,7 @@ fn set_ingress_map(vlan_iface: &[u8], skb_prio: u32, vlan_qos: u16) -> i32 {
     args.u.skb_priority = skb_prio;
     args.vlan_qos = vlan_qos as libc::c_short;
 
-    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as libc::c_ulong, &args) };
+    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as crate::io::IoctlReq, &args) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {
@@ -414,7 +414,7 @@ fn set_name_type(name_type: &[u8]) -> i32 {
     args.cmd = SET_VLAN_NAME_TYPE_CMD;
     args.u.name_type = type_val as libc::c_uint;
 
-    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as libc::c_ulong, &args) };
+    let ret = unsafe { libc::ioctl(sock, SIOCSIFVLAN as crate::io::IoctlReq, &args) };
     unsafe { libc::close(sock) };
 
     if ret < 0 {

@@ -298,7 +298,7 @@ fn lzw_compress(data: &[u8], max_bits: u8) -> Vec<u8> {
         insert_code(&mut dict, vec![i as u8], i);
     }
 
-    let mut emit_code = |code: u16, output: &mut Vec<u8>, bit_buffer: &mut u32, bits_in_buffer: &mut u8, current_bits: u8| {
+    let emit_code = |code: u16, output: &mut Vec<u8>, bit_buffer: &mut u32, bits_in_buffer: &mut u8, current_bits: u8| {
         *bit_buffer |= (code as u32) << *bits_in_buffer;
         *bits_in_buffer += current_bits;
         while *bits_in_buffer >= 8 {

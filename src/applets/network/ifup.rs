@@ -4,7 +4,6 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
-use alloc::vec;
 use crate::io;
 use super::get_arg;
 

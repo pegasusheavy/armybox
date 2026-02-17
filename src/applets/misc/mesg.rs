@@ -2,7 +2,6 @@
 //!
 //! Display or set write permission for terminal.
 
-use crate::io;
 use super::get_arg;
 
 /// mesg - control write access to terminal

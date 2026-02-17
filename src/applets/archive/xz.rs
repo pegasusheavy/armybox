@@ -5,9 +5,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 use alloc::vec;
-use alloc::string::String;
 use crate::io;
-use crate::sys;
 use super::get_arg;
 
 /// Read a file into a Vec
@@ -497,13 +495,13 @@ impl LzmaEncoder {
         if dist < 4 {
             dist
         } else {
-            let mut bsr = 31 - dist.leading_zeros();
+            let bsr = 31 - dist.leading_zeros();
             ((bsr << 1) + ((dist >> (bsr - 1)) & 1)) as u32
         }
     }
 
     fn encode_literal(&mut self, rc: &mut RangeEncoder, prev_byte: u8, byte: u8, pos: usize, match_byte: u8) {
-        let pos_state = pos & ((1 << self.lp) - 1);
+        let _pos_state = pos & ((1 << self.lp) - 1);
         let lit_state = ((pos & ((1 << self.lp) - 1)) << self.lc as usize) | ((prev_byte >> (8 - self.lc)) as usize);
         let probs = &mut self.literal[lit_state * 0x300..][..0x300];
 
@@ -539,7 +537,7 @@ impl LzmaEncoder {
 
         self.len_enc.encode(rc, len, pos_state);
 
-        let len_cat = if len < 4 { len - 2 } else { 3 };
+        let len_cat = if len < 6 { len - 2 } else { 3 };
         let pos_slot = Self::get_pos_slot(dist);
         encode_tree(rc, &mut self.pos_slot[len_cat], 6, pos_slot);
 
@@ -549,18 +547,19 @@ impl LzmaEncoder {
             let pos_reduced = dist - base;
 
             if pos_slot < END_POS_MODEL_INDEX as u32 {
-                encode_tree_reverse(rc, &mut self.pos_special[(base - pos_slot - 1) as usize..], footer_bits, pos_reduced);
+                // Index into pos_special: base - pos_slot (not base - pos_slot - 1)
+                encode_tree_reverse(rc, &mut self.pos_special[(base - pos_slot) as usize..], footer_bits, pos_reduced);
             } else {
                 rc.encode_direct(pos_reduced >> NUM_ALIGN_BITS, footer_bits - NUM_ALIGN_BITS);
                 encode_tree_reverse(rc, &mut self.pos_align, NUM_ALIGN_BITS, pos_reduced & ((1 << NUM_ALIGN_BITS) - 1));
             }
         }
 
-        // Update reps
+        // Update reps (store as 1-based: 1 = 1 byte back, to match decoder)
         self.reps[3] = self.reps[2];
         self.reps[2] = self.reps[1];
         self.reps[1] = self.reps[0];
-        self.reps[0] = dist;
+        self.reps[0] = dist + 1;
         self.state = state_update_match(self.state);
     }
 
@@ -613,14 +612,12 @@ fn find_match(data: &[u8], pos: usize, dict_size: usize, reps: &[u32; 4]) -> (us
     let mut best_rep = 4usize;
 
     for (rep_idx, &rep_dist) in reps.iter().enumerate() {
-        if rep_dist == 0 {
+        // rep_dist is 1-based: 1 = 1 byte back, 2 = 2 bytes back, etc.
+        // 0 means no match stored yet
+        if rep_dist == 0 || rep_dist as usize > pos {
             continue;
         }
-        let start = pos as isize - rep_dist as isize;
-        if start < 0 {
-            continue;
-        }
-        let start = start as usize;
+        let start = pos - rep_dist as usize;
 
         let mut len = 0;
         while len < max_len && data[pos + len] == data[start + len] {
@@ -648,7 +645,8 @@ fn find_match(data: &[u8], pos: usize, dict_size: usize, reps: &[u32; 4]) -> (us
         }
 
         if len >= MATCH_LEN_MIN && len > best_len {
-            let dist = (pos - search_pos) as u32;
+            // LZMA distance: 0 = 1 byte back, so dist = actual_distance - 1
+            let dist = (pos - search_pos - 1) as u32;
             best_len = len;
             best_dist = dist;
             best_rep = 4; // Not a rep match
@@ -843,7 +841,8 @@ impl LzmaDecoder {
         let mut dist = (2 | (pos_slot & 1)) << num_direct_bits;
 
         if pos_slot < END_POS_MODEL_INDEX as u32 {
-            let base_idx = (dist - pos_slot - 1) as usize;
+            // Index into pos_special: dist - pos_slot (not dist - pos_slot - 1)
+            let base_idx = (dist - pos_slot) as usize;
             if base_idx + (1 << num_direct_bits) > self.pos_special.len() {
                 return None;
             }
@@ -1180,11 +1179,11 @@ fn xz_compress(data: &[u8], check_type: u8, dict_size: u32) -> Vec<u8> {
     block_header.push(dict_prop);
 
     // Pad to multiple of 4
-    while (block_header.len() + 1) % 4 != 0 {
+    while block_header.len() % 4 != 0 {
         block_header.push(0x00);
     }
 
-    // Set block header size
+    // Set block header size: (actual_size / 4) - 1
     block_header[0] = ((block_header.len() / 4) as u8) - 1;
 
     // Block header CRC
@@ -1340,6 +1339,7 @@ fn xz_decompress(data: &[u8]) -> Option<Vec<u8>> {
         }
 
         pos += block_header_size + 4;
+        let comp_start = pos;  // Remember where compressed data starts
 
         // Find compressed data end (scan for end marker or use known size)
         // For simplicity, we'll look for the LZMA2 end marker
@@ -1378,9 +1378,9 @@ fn xz_decompress(data: &[u8]) -> Option<Vec<u8>> {
         let block_output = lzma2_decode(lzma2_data, dict_size)?;
         output.extend_from_slice(&block_output);
 
-        // Skip padding and check
+        // Skip padding (compressed data + padding must be multiple of 4 bytes)
         pos = comp_end;
-        while pos < data.len() && (pos - comp_end) % 4 != 0 {
+        while pos < data.len() && (pos - comp_start) % 4 != 0 {
             pos += 1;
         }
 

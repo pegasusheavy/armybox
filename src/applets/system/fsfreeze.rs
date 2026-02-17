@@ -7,8 +7,8 @@ use crate::sys;
 use super::get_arg;
 
 // Filesystem freeze ioctls
-const FIFREEZE: u64 = 0xC0045877;
-const FITHAW: u64 = 0xC0045878;
+const FIFREEZE: crate::io::IoctlReq = 0xC0045877u32 as crate::io::IoctlReq;
+const FITHAW: crate::io::IoctlReq = 0xC0045878u32 as crate::io::IoctlReq;
 
 /// fsfreeze - suspend access to a filesystem
 ///

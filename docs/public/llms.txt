@@ -1,0 +1,60 @@
+# Armybox
+
+> A memory-safe `#[no_std]` BusyBox/Toybox clone written in Rust.
+
+Armybox is a multi-call binary providing 293 Unix utilities in a single, incredibly small executable. Built entirely with `#[no_std]` Rust, it delivers 100% Toybox compatibility plus 55 additional applets in just 108 KB (54 KB with UPX compression). Armybox is ideal for embedded systems, minimal containers (FROM scratch), rescue environments, space-constrained systems, and Android devices.
+
+## Links
+
+- [Documentation](https://pegasusheavy.github.io/armybox/)
+- [GitHub Repository](https://github.com/pegasusheavy/armybox)
+- [Crates.io Package](https://crates.io/crates/armybox)
+- [API Docs (docs.rs)](https://docs.rs/armybox)
+
+## Key Features
+
+- 293 applets -- 100% Toybox compatible plus 55 additional utilities
+- Multi-call binary -- single executable providing all utilities
+- Pure Rust 2024 -- memory-safe implementation using the latest Rust edition
+- Incredibly tiny -- 108 KB stripped, ~54 KB with UPX compression (~380 bytes per applet)
+- True `#[no_std]` -- no standard library dependency, only `libc` and `alloc`
+- Android-native -- first-class Android/Bionic support, works on Android 5.0+
+- Embedded-ready -- works on systems without full std support
+- Cross-platform -- builds for Linux (glibc/musl), Android, x86_64, ARM64, ARM32
+- POSIX.1-2017 compliant -- core utilities follow the POSIX standard
+- Includes POSIX shell (sh/ash/dash), vi editor, terminal multiplexer (screen/tmux), and init system
+- Full networking suite -- wget, httpd, ip, netcat, ping, traceroute, and more
+- Archive and compression -- tar, gzip, bzip2, xz, zip support
+- Docker-friendly -- perfect for FROM scratch container images
+
+## Installation
+
+```bash
+# Clone and build
+git clone https://github.com/pegasusheavy/armybox
+cd armybox
+cargo build --release
+
+# Install symlinks
+sudo ./target/release/armybox --install /usr/local/bin
+
+# Compress with UPX (optional)
+upx --best target/release/armybox
+```
+
+## Quick Start
+
+```bash
+# Direct invocation
+./armybox ls -la
+./armybox cat file.txt
+./armybox sh           # Start POSIX shell
+./armybox vi file.txt  # Edit with vi
+
+# List all available applets
+./armybox --list
+
+# After installing symlinks, use utilities directly
+ls -la
+cat file.txt
+```

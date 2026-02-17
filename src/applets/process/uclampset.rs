@@ -2,6 +2,8 @@
 //!
 //! Set or retrieve utilization clamping attributes.
 
+#![allow(dead_code)]
+
 extern crate alloc;
 use alloc::vec::Vec;
 use crate::io;
@@ -266,14 +268,14 @@ fn show_uclamp(pid: i32) -> i32 {
 
 // Syscall wrappers
 #[cfg(target_os = "linux")]
-unsafe fn sched_getattr(pid: i32, attr: *mut SchedAttr, size: u32, flags: u32) -> i32 {
+unsafe fn sched_getattr(pid: i32, attr: *mut SchedAttr, size: u32, flags: u32) -> i32 { unsafe {
     libc::syscall(libc::SYS_sched_getattr, pid, attr, size, flags) as i32
-}
+}}
 
 #[cfg(target_os = "linux")]
-unsafe fn sched_setattr(pid: i32, attr: *const SchedAttr, flags: u32) -> i32 {
+unsafe fn sched_setattr(pid: i32, attr: *const SchedAttr, flags: u32) -> i32 { unsafe {
     libc::syscall(libc::SYS_sched_setattr, pid, attr, flags) as i32
-}
+}}
 
 fn print_usage() {
     io::write_str(1, b"Usage: uclampset [options] command [args]\n");

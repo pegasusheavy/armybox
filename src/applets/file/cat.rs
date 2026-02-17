@@ -86,6 +86,9 @@ mod tests {
     //! `RUSTFLAGS="-C linker=gcc -C link-arg=-lc" cargo build --release`
 
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::{Command, Stdio};
     use std::io::Write;
     use std::fs;
@@ -105,7 +108,8 @@ mod tests {
     }
 
     fn setup() -> PathBuf {
-        let dir = std::env::temp_dir().join("armybox_cat_test");
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("armybox_cat_test_{}_{}",  std::process::id(), counter));
         let _ = fs::create_dir_all(&dir);
         fs::write(dir.join("file1.txt"), "hello\n").unwrap();
         fs::write(dir.join("file2.txt"), "world\n").unwrap();

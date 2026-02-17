@@ -7,8 +7,8 @@ use crate::sys;
 use super::get_arg;
 
 // BLKDISCARD ioctl
-const BLKDISCARD: u64 = 0x1277;
-const BLKGETSIZE64: u64 = 0x80081272;
+const BLKDISCARD: crate::io::IoctlReq = 0x1277u32 as crate::io::IoctlReq;
+const BLKGETSIZE64: crate::io::IoctlReq = 0x80081272u32 as crate::io::IoctlReq;
 
 /// blkdiscard - discard device sectors
 ///

@@ -4,6 +4,7 @@
 
 #![no_std]
 #![no_main]
+#![allow(clippy::not_unsafe_ptr_arg_deref)] // main() takes raw pointer argv from C
 
 extern crate armybox;
 

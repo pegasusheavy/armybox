@@ -4,7 +4,6 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
-use alloc::vec;
 use crate::io;
 use crate::sys;
 use super::get_arg;
@@ -189,7 +188,7 @@ pub fn httpd(argc: i32, argv: *const *const u8) -> i32 {
 }
 
 #[cfg(target_os = "linux")]
-fn handle_request(fd: i32, verbose: bool) {
+fn handle_request(fd: i32, _verbose: bool) {
     let mut buf = [0u8; 4096];
     let n = io::read(fd, &mut buf);
     if n <= 0 {

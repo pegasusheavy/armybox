@@ -469,7 +469,7 @@ fn apply_hunk(lines: &mut Vec<Vec<u8>>, hunk: &Hunk, offset: i64) -> Result<i64,
     }
 
     // Apply the hunk
-    let mut pos = actual_start;
+    let _pos = actual_start;
     let mut removals = 0;
     let mut additions = 0;
 
@@ -562,6 +562,9 @@ impl Clone for Hunk {
 #[cfg(test)]
 mod tests {
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::Command;
     use std::fs;
     use std::path::PathBuf;
@@ -579,8 +582,8 @@ mod tests {
     }
 
     fn setup() -> PathBuf {
-        let id = std::process::id();
-        let dir = std::env::temp_dir().join(format!("armybox_patch_test_{}", id));
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("armybox_patch_test_{}_{}",  std::process::id(), counter));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

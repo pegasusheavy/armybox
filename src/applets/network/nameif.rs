@@ -140,7 +140,7 @@ fn rename_interface_by_mac(new_name: &[u8], target_mac: &[u8], _use_syslog: bool
     copy_iface_name(unsafe { &mut *new_name_ptr }, new_name);
 
     // SIOCSIFNAME = 0x8923
-    const SIOCSIFNAME: libc::c_ulong = 0x8923;
+    const SIOCSIFNAME: crate::io::IoctlReq = 0x8923u32 as crate::io::IoctlReq;
 
     let result = if unsafe { libc::ioctl(fd, SIOCSIFNAME, &ifr) } < 0 {
         io::write_str(2, b"nameif: cannot rename ");

@@ -3,7 +3,6 @@
 //! Find process IDs matching a pattern.
 
 use crate::io;
-use crate::sys;
 use crate::applets::get_arg;
 
 /// pgrep - look up processes based on name

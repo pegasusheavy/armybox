@@ -1,0 +1,20 @@
+[package]
+name = "zstd-nostd"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
+description = "Pure Rust no_std Zstandard (zstd) compression and decompression"
+repository = "https://github.com/pegasusheavy/armybox"
+homepage = "https://github.com/pegasusheavy/armybox"
+license = "MIT OR Apache-2.0"
+keywords = ["zstd", "zstandard", "compression", "no_std", "embedded"]
+categories = ["compression", "no-std", "embedded"]
+readme = "README.md"
+
+[features]
+default = ["alloc"]
+alloc = []
+
+[dev-dependencies]
+ruzstd = "0.8.2"

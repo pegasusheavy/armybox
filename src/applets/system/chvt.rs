@@ -7,8 +7,8 @@ use crate::sys;
 use crate::applets::get_arg;
 
 // VT_ACTIVATE ioctl
-const VT_ACTIVATE: u64 = 0x5606;
-const VT_WAITACTIVE: u64 = 0x5607;
+const VT_ACTIVATE: crate::io::IoctlReq = 0x5606u32 as crate::io::IoctlReq;
+const VT_WAITACTIVE: crate::io::IoctlReq = 0x5607u32 as crate::io::IoctlReq;
 
 /// chvt - change foreground virtual terminal
 ///

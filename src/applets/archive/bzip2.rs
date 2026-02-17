@@ -345,17 +345,18 @@ fn compress_block(data: &[u8], writer: &mut BitWriter) {
     // Write origin pointer (24 bits)
     writer.write_bits(origin_ptr as u32, 24);
 
-    // Step 3: Move-to-front transform
-    let mtf_data = mtf_encode(&bwt_data);
-
-    // Step 4: Zero-run-length encoding
-    let zrle_data = zrle_encode(&mtf_data);
-
-    // Build symbol map
+    // Build symbol map BEFORE MTF (MTF needs to use the same symbol ordering)
     let mut used = [false; 256];
     for &b in &bwt_data {
         used[b as usize] = true;
     }
+    let symbol_map: Vec<u8> = (0u8..=255).filter(|&b| used[b as usize]).collect();
+
+    // Step 3: Move-to-front transform (using symbol map)
+    let mtf_data = mtf_encode_with_map(&bwt_data, &symbol_map);
+
+    // Step 4: Zero-run-length encoding
+    let zrle_data = zrle_encode(&mtf_data);
 
     // Write symbol map (16 groups of 16)
     let mut map_l1 = 0u16;
@@ -387,8 +388,9 @@ fn compress_block(data: &[u8], writer: &mut BitWriter) {
     // For simplicity, use a single Huffman table with fixed codes
     // Real bzip2 uses multiple tables selected by selectors
 
-    // Count symbols for Huffman coding
-    let num_symbols = used.iter().filter(|&&x| x).count() + 2; // +2 for RUNA/RUNB and EOB
+    // Count symbols for Huffman coding: unique bytes + RUNA + RUNB + EOB
+    // But RUNA/RUNB replace the first symbol, so it's: symbol_map.len() + 2
+    let num_symbols = symbol_map.len() + 2;
 
     // Number of Huffman groups (1-6)
     let num_groups = core::cmp::min(6, core::cmp::max(2, (zrle_data.len() / 50) + 1));
@@ -404,11 +406,21 @@ fn compress_block(data: &[u8], writer: &mut BitWriter) {
     }
 
     // Write Huffman table (simplified: all symbols have same length)
-    let code_len = 5u8;
+    // Calculate code length needed to represent all symbols
+    let code_len = {
+        let mut len = 1u8;
+        let mut max_val = 2usize; // 2^1 = 2
+        while max_val < num_symbols {
+            len += 1;
+            max_val <<= 1;
+        }
+        len.max(1).min(20) // bzip2 allows 1-20 bits
+    };
+
     for _ in 0..num_groups {
         writer.write_bits(code_len as u32, 5);
         for _ in 0..num_symbols {
-            writer.write_bits(0, 1); // delta = 0
+            writer.write_bits(0, 1); // delta = 0, keep same length
         }
     }
 
@@ -514,11 +526,16 @@ fn decompress_block(reader: &mut BitReader) -> Vec<u8> {
     let mut group_count = 0;
 
     loop {
-        if selector_idx >= selectors.len() {
+        // Use current selector, or last one if we've run out
+        let effective_selector = if selector_idx < selectors.len() {
+            selectors[selector_idx] as usize
+        } else if !selectors.is_empty() {
+            selectors[selectors.len() - 1] as usize
+        } else {
             break;
-        }
+        };
 
-        let decoder = &decoders[selectors[selector_idx] as usize];
+        let decoder = &decoders[effective_selector];
         let symbol = decoder.decode(reader);
 
         if symbol == num_symbols - 1 {
@@ -653,20 +670,24 @@ fn bwt_inverse(data: &[u8], origin: usize) -> Vec<u8> {
         count2[b as usize] += 1;
     }
 
-    // Reconstruct original
+    // Build sorted data (first column F)
+    let mut sorted_data = data.to_vec();
+    sorted_data.sort();
+
+    // Reconstruct original by reading from F and following FL transform
     let mut output = Vec::with_capacity(n);
     let mut idx = origin;
     for _ in 0..n {
-        output.push(data[idx]);
+        output.push(sorted_data[idx]);
         idx = transform[idx];
     }
 
     output
 }
 
-// Move-to-front encoding
-fn mtf_encode(data: &[u8]) -> Vec<u8> {
-    let mut mtf: Vec<u8> = (0..=255).collect();
+// Move-to-front encoding with symbol map (for encoder)
+fn mtf_encode_with_map(data: &[u8], symbol_map: &[u8]) -> Vec<u8> {
+    let mut mtf: Vec<u8> = symbol_map.to_vec();
     let mut output = Vec::with_capacity(data.len());
 
     for &byte in data {
@@ -703,6 +724,8 @@ fn mtf_decode(data: &[u8], symbol_map: &[u8]) -> Vec<u8> {
 }
 
 // Zero-run-length encoding (RUNA=0, RUNB=1)
+// Uses bijective base-2 numeration: digits are 1 (RUNA) and 2 (RUNB)
+// run = sum of (digit * 2^position) where digit is 1 for RUNA, 2 for RUNB
 fn zrle_encode(data: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
     let mut i = 0;
@@ -714,15 +737,16 @@ fn zrle_encode(data: &[u8]) -> Vec<u8> {
             while i + run < data.len() && data[i + run] == 0 {
                 run += 1;
             }
-            // Encode run as RUNA/RUNB sequence
-            let mut n = run + 1;
-            while n > 1 {
-                if n & 1 != 0 {
-                    output.push(0); // RUNA
+            // Encode run using bijective base-2
+            let mut n = run;
+            while n > 0 {
+                if n % 2 == 1 {
+                    output.push(0); // RUNA = digit 1
+                    n = (n - 1) / 2;
                 } else {
-                    output.push(1); // RUNB
+                    output.push(1); // RUNB = digit 2
+                    n = (n - 2) / 2;
                 }
-                n = (n - 1) >> 1;
             }
             i += run;
         } else {

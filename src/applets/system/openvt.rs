@@ -7,9 +7,9 @@ use crate::sys;
 use super::get_arg;
 
 // VT ioctls
-const VT_OPENQRY: u64 = 0x5600;
-const VT_ACTIVATE: u64 = 0x5606;
-const VT_WAITACTIVE: u64 = 0x5607;
+const VT_OPENQRY: crate::io::IoctlReq = 0x5600u32 as crate::io::IoctlReq;
+const VT_ACTIVATE: crate::io::IoctlReq = 0x5606u32 as crate::io::IoctlReq;
+const VT_WAITACTIVE: crate::io::IoctlReq = 0x5607u32 as crate::io::IoctlReq;
 
 /// openvt - start a program on a new virtual terminal
 ///

@@ -115,7 +115,7 @@ pub fn ulimit(argc: i32, argv: *const *const u8) -> i32 {
 
     // Get current limit
     let mut rlim: libc::rlimit = unsafe { core::mem::zeroed() };
-    if unsafe { libc::getrlimit(resource as u32, &mut rlim) } != 0 {
+    if unsafe { libc::getrlimit(resource as _, &mut rlim) } != 0 {
         sys::perror(resource_name);
         return 1;
     }
@@ -150,7 +150,7 @@ fn print_all_limits(use_hard: bool) {
         io::write_all(1, name);
 
         let mut rlim: libc::rlimit = unsafe { core::mem::zeroed() };
-        if unsafe { libc::getrlimit(*resource as u32, &mut rlim) } == 0 {
+        if unsafe { libc::getrlimit(*resource as _, &mut rlim) } == 0 {
             let value = if use_hard { rlim.rlim_max } else { rlim.rlim_cur };
             if value == libc::RLIM_INFINITY {
                 io::write_str(1, b"unlimited\n");

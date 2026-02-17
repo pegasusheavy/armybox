@@ -1,0 +1,497 @@
+.\" armybox(1) man page
+.\" Copyright (c) 2026 Pegasus Heavy Industries LLC
+.\" Licensed under MIT OR Apache-2.0
+.\"
+.TH ARMYBOX 1 "2026-02-08" "armybox 0.3.0" "ArmyBox Manual"
+.\"
+.SH NAME
+armybox \- a memory-safe, #[no_std] multi-call binary providing 296 Unix utilities
+.\"
+.SH SYNOPSIS
+.B armybox
+.RB [ \-\-help | \-\-version | \-\-list | \-\-install
+.RI [ \-s ]
+.IR DIR ]
+.br
+.B armybox
+.I APPLET
+.RI [ ARGUMENTS .\|.\|.]
+.br
+.I APPLET
+.RI [ ARGUMENTS .\|.\|.]
+.\"
+.SH DESCRIPTION
+.B armybox
+combines 296 standard Unix utilities into a single, compact, statically linked
+binary.
+It is written entirely in Rust with
+.B #[no_std]
+(no standard library dependency), using only
+.BR libc (7)
+for system calls and the
+.B alloc
+crate for heap allocation.
+.PP
+The resulting binary is approximately 500\ KB and can serve as the sole
+userland for an embedded Linux system or a minimal container image.
+.B armybox
+is designed as a drop-in replacement for BusyBox and Toybox, with a focus
+on memory safety and POSIX.1-2017 compliance.
+.PP
+Like BusyBox,
+.B armybox
+is a \(lqmulti-call binary\(rq: a single executable that behaves differently
+depending on the name by which it is invoked.
+Typically, a directory of symbolic links is created, each named after an
+applet and pointing to the
+.B armybox
+binary.
+.\"
+.SH INVOCATION
+.B armybox
+determines which applet to run in two ways:
+.TP
+.B Symlink invocation
+If the basename of
+.BR argv [0]
+matches a known applet name, that applet is executed.
+For example, if
+.I /bin/ls
+is a symlink to
+.IR /bin/armybox ,
+running
+.B /bin/ls \-la
+invokes the
+.B ls
+applet with the
+.B \-la
+argument.
+.TP
+.B Direct invocation
+When invoked as
+.BR armybox ,
+the first non-option argument is treated as the applet name.
+For example:
+.RS
+.nf
+.B armybox ls \-la
+.B armybox sh
+.B armybox tar xf archive.tar.gz
+.fi
+.RE
+.\"
+.SH OPTIONS
+When invoked as
+.BR armybox :
+.TP
+.B \-\-help
+Display a brief usage message and exit.
+.TP
+.B \-\-version
+Display the version number and exit.
+.TP
+.B \-\-list
+Print the names of all available applets, one per line, and exit.
+Useful for scripting:
+.RS
+.nf
+.B armybox \-\-list | sort
+.fi
+.RE
+.TP
+.BI \-\-install " DIR"
+Create hard links in
+.I DIR
+for every applet.
+The
+.B armybox
+binary must be accessible from the target directory.
+.TP
+.BI "\-\-install \-s " DIR
+Create symbolic links instead of hard links.
+This is the recommended method:
+.RS
+.nf
+.B armybox \-\-install \-s /usr/bin
+.fi
+.RE
+.\"
+.SH APPLET CATEGORIES
+.B armybox
+provides applets in the following categories.
+See
+.BR armybox-applets (7)
+for the complete list with descriptions.
+.\"
+.SS File Utilities
+.BR basename ,
+.BR cat ,
+.BR cd ,
+.BR chattr ,
+.BR chgrp ,
+.BR chmod ,
+.BR chown ,
+.BR cp ,
+.BR dd ,
+.BR dirname ,
+.BR file ,
+.BR find ,
+.BR install ,
+.BR link ,
+.BR ln ,
+.BR ls ,
+.BR lsattr ,
+.BR mkdir ,
+.BR mkfifo ,
+.BR mknod ,
+.BR mktemp ,
+.BR mv ,
+.BR patch ,
+.BR pwd ,
+.BR readlink ,
+.BR realpath ,
+.BR rm ,
+.BR rmdir ,
+.BR setfattr ,
+.BR shred ,
+.BR split ,
+.BR stat ,
+.BR sync ,
+.BR touch ,
+.BR truncate ,
+.BR unlink ,
+.BR xargs
+.\"
+.SS Text Processing
+.BR awk ,
+.BR comm ,
+.BR cut ,
+.BR dos2unix ,
+.BR echo ,
+.BR expand ,
+.BR fmt ,
+.BR fold ,
+.BR grep / egrep / fgrep ,
+.BR head ,
+.BR nl ,
+.BR paste ,
+.BR printf ,
+.BR rev ,
+.BR sed ,
+.BR seq ,
+.BR sort ,
+.BR strings ,
+.BR tac ,
+.BR tail ,
+.BR tee ,
+.BR tr ,
+.BR unexpand ,
+.BR uniq ,
+.BR unix2dos ,
+.BR wc ,
+.BR yes
+.\"
+.SS System
+.BR acpi ,
+.BR arch ,
+.BR blkdiscard ,
+.BR blkid ,
+.BR blockdev ,
+.BR cal ,
+.BR chroot ,
+.BR chvt ,
+.BR date ,
+.BR deallocvt ,
+.BR df ,
+.BR dmesg ,
+.BR dnsdomainname ,
+.BR du ,
+.BR eject ,
+.BR env ,
+.BR fallocate ,
+.BR fgconsole ,
+.BR flock ,
+.BR free ,
+.BR freeramdisk ,
+.BR fsfreeze ,
+.BR fsync ,
+.BR groups ,
+.BR halt / reboot / poweroff ,
+.BR hostid ,
+.BR hostname ,
+.BR hwclock ,
+.BR id ,
+.BR insmod / rmmod / modprobe ,
+.BR logger ,
+.BR login ,
+.BR logname ,
+.BR losetup ,
+.BR lsmod ,
+.BR lspci ,
+.BR lsusb ,
+.BR mkswap ,
+.BR modinfo ,
+.BR mount / umount ,
+.BR mountpoint ,
+.BR nologin ,
+.BR nproc ,
+.BR pivot_root ,
+.BR printenv ,
+.BR readahead ,
+.BR rfkill ,
+.BR rtcwake ,
+.BR shuf ,
+.BR sleep / usleep ,
+.BR su ,
+.BR swapon / swapoff ,
+.BR sysctl ,
+.BR tty ,
+.BR ulimit ,
+.BR uname ,
+.BR uptime ,
+.BR vmstat ,
+.BR w ,
+.BR watch ,
+.BR who / whoami / users
+.\"
+.SS Process Management
+.BR chrt ,
+.BR ionice ,
+.BR iorenice ,
+.BR iotop ,
+.BR kill / killall / killall5 ,
+.BR nice ,
+.BR nohup ,
+.BR nsenter ,
+.BR pgrep / pkill ,
+.BR pidof ,
+.BR pmap ,
+.BR prlimit ,
+.BR procs ,
+.BR ps ,
+.BR pwdx ,
+.BR renice ,
+.BR setsid ,
+.BR taskset ,
+.BR timeout ,
+.BR top ,
+.BR uclampset ,
+.BR unshare
+.\"
+.SS Networking
+.BR arp ,
+.BR arping ,
+.BR brctl ,
+.BR ether\-wake ,
+.BR ftpget / ftpput ,
+.BR host ,
+.BR httpd ,
+.BR ifconfig ,
+.BR ifdown / ifup ,
+.BR ip / ipaddr / iplink / ipneigh / iproute / iprule ,
+.BR ipcalc ,
+.BR microcom ,
+.BR nameif ,
+.BR nbd\-client / nbd\-server ,
+.BR nc / netcat ,
+.BR netstat ,
+.BR nslookup ,
+.BR ping / ping6 ,
+.BR route ,
+.BR slattach ,
+.BR sntp ,
+.BR ss ,
+.BR telnet ,
+.BR tftp ,
+.BR traceroute / traceroute6 ,
+.BR tunctl ,
+.BR vconfig ,
+.BR wget
+.\"
+.SS Archive & Compression
+.BR bzip2 / bunzip2 / bzcat ,
+.BR compress / uncompress ,
+.BR cpio ,
+.BR gzip / gunzip / zcat ,
+.BR lzma / unlzma / lzcat ,
+.BR tar ,
+.BR unzip ,
+.BR xz / unxz / xzcat ,
+.BR zstd / unzstd / zstdcat
+.\"
+.SS Shell & Scripting
+.BR sh / ash / dash
+(POSIX shell),
+.BR expr ,
+.BR test / [ ,
+.BR true / false / : ,
+.BR getopt ,
+.BR time
+.\"
+.SS Editors
+.BR vi / view ,
+.BR hexedit
+.\"
+.SS Init System
+.BR init / linuxrc ,
+.BR getty ,
+.BR sulogin ,
+.BR telinit ,
+.BR runlevel ,
+.BR switch_root ,
+.BR oneit ,
+.BR watchdog
+.br
+See
+.BR armybox-init (8)
+for details on the init system.
+.\"
+.SS Miscellaneous
+.BR ascii ,
+.BR base32 / base64 ,
+.BR cksum / crc32 ,
+.BR clear / reset ,
+.BR cmp ,
+.BR count ,
+.BR diff ,
+.BR factor ,
+.BR getconf ,
+.BR hd / hexdump / od / xxd ,
+.BR help ,
+.BR iconv ,
+.BR mcookie ,
+.BR md5sum / sha1sum / sha256sum / sha512sum / sha3sum ,
+.BR mesg ,
+.BR mkpasswd ,
+.BR pwgen ,
+.BR readelf ,
+.BR screen / tmux ,
+.BR toybox ,
+.BR ts ,
+.BR tsort ,
+.BR unicode ,
+.BR uuencode / uudecode ,
+.BR uuidgen ,
+.BR which
+.\"
+.SS Package Management
+.BR abp ,
+.BR apk
+.\"
+.SH INSTALLATION
+.SS Building from Source
+.nf
+.B "rustup target add x86_64-unknown-linux-musl"
+.B "CC=musl-gcc cargo build \-\-release \-\-target x86_64-unknown-linux-musl"
+.fi
+.SS Installing Symlinks
+After placing the
+.B armybox
+binary in a suitable location (e.g.\&
+.IR /bin/armybox ),
+create symlinks for all applets:
+.PP
+.nf
+.B "armybox \-\-install \-s /bin"
+.B "armybox \-\-install \-s /sbin"
+.B "armybox \-\-install \-s /usr/bin"
+.B "armybox \-\-install \-s /usr/sbin"
+.fi
+.\"
+.SH ENVIRONMENT
+.TP
+.B HOME
+Used by various applets for the user's home directory.
+.TP
+.B PATH
+Used by the shell and applets that search for executables.
+.TP
+.B PS1
+Primary prompt string for the shell.
+.TP
+.B PS2
+Secondary prompt string for the shell.
+.TP
+.B IFS
+Internal field separator used by the shell for word splitting.
+.TP
+.B TERM
+Terminal type; used by
+.BR vi ,
+.BR clear ,
+.BR reset ,
+and other terminal-aware applets.
+.TP
+.B TZ
+Timezone; used by
+.BR date ,
+.BR hwclock ,
+and other time-related applets.
+.\"
+.SH EXIT STATUS
+Each applet follows the POSIX.1-2017 exit status conventions:
+.TP
+.B 0
+Success.
+.TP
+.B 1
+General errors (file not found, permission denied, etc.).
+.TP
+.B 2
+Incorrect usage (invalid options, missing operands).
+.PP
+Some applets define additional exit codes as specified by their respective
+POSIX standards.
+.\"
+.SH CONFORMING TO
+.B armybox
+aims for full compliance with IEEE Std 1003.1-2017 (POSIX.1-2017) for all
+utilities defined by the standard.
+See
+.UR https://pubs.opengroup.org/onlinepubs/9699919799/
+POSIX.1-2017
+.UE .
+.\"
+.SH NOTES
+.B armybox
+is implemented in Rust with
+.BR #[no_std] ,
+meaning it does not link against the Rust standard library.
+This results in an extremely small binary suitable for:
+.IP \(bu 2
+Embedded Linux systems
+.IP \(bu 2
+Docker
+.B FROM scratch
+images
+.IP \(bu 2
+Initramfs environments
+.IP \(bu 2
+Recovery systems
+.IP \(bu 2
+IoT devices
+.PP
+The entire binary is typically under 500\ KB when statically linked against musl.
+.\"
+.SH SEE ALSO
+.BR armybox-applets (7),
+.BR armybox-init (8),
+.BR busybox (1),
+.BR toybox (1)
+.PP
+.UR https://github.com/PegasusHeavyIndustries/armybox
+Project homepage
+.UE
+.\"
+.SH AUTHORS
+.B armybox
+is developed by Pegasus Heavy Industries LLC.
+.br
+Contact:
+.MT pegasusheavyindustries@gmail.com
+pegasusheavyindustries@gmail.com
+.ME
+.\"
+.SH LICENSE
+.B armybox
+is dual-licensed under the MIT License and the Apache License, Version 2.0.

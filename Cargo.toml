@@ -1,10 +1,13 @@
+[workspace]
+members = [".", "crates/abp", "crates/zstd-nostd"]
+
 [package]
 name = "armybox"
 version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
-description = "A memory-safe #[no_std] BusyBox/Toybox clone in Rust - 293 Unix utilities in 108KB"
+description = "A memory-safe #[no_std] BusyBox/Toybox clone in Rust - 299 Unix utilities in ~500KB"
 documentation = "https://docs.rs/armybox"
 readme = "README.md"
 homepage = "https://pegasusheavy.github.io/armybox"
@@ -15,19 +18,374 @@ categories = ["command-line-utilities", "no-std", "embedded"]
 exclude = ["docs/", "dist/", "fuzz/", "packaging/", "scripts/", ".github/", "target/", "benches/", "crates/"]
 
 [features]
-default = ["alloc"]
+default = ["alloc", "full"]
 alloc = []          # Enable heap allocation (Vec, String, Box)
 std = ["alloc"]     # Enable std (for easier testing, not required)
 android = ["alloc"] # Android/Bionic-specific compatibility
-apk = ["alloc"]     # Alpine Package Keeper (APK) package manager
+
+# =============================================================================
+# Applet Meta-Features
+# =============================================================================
+
+# All applets enabled (default)
+full = [
+    # File utilities
+    "basename", "cat", "cd", "chattr", "chgrp", "chmod", "chown", "cp", "dd",
+    "dirname", "file", "find", "fstype", "install", "link", "ln", "ls", "lsattr",
+    "makedevs", "mkdir", "mkfifo", "mknod", "mktemp", "mv", "patch", "pwd",
+    "readlink", "realpath", "rm", "rmdir", "setfattr", "shred", "split", "stat",
+    "sync", "touch", "truncate", "unlink", "xargs",
+    # Text utilities
+    "awk", "comm", "cut", "dos2unix", "echo", "expand", "fmt", "fold", "grep",
+    "head", "nl", "paste", "printf", "rev", "sed", "seq", "sort", "strings",
+    "tac", "tail", "tee", "tr", "unexpand", "uniq", "unix2dos", "wc", "yes",
+    # System utilities
+    "acpi", "arch", "blkdiscard", "blkid", "blockdev", "cal", "chroot", "chvt",
+    "date", "deallocvt", "devmem", "df", "dmesg", "dnsdomainname", "du", "eject",
+    "env", "fallocate", "fgconsole", "flock", "free", "freeramdisk", "fsfreeze",
+    "fsync", "gpiodetect", "gpiofind", "gpioget", "gpioinfo", "gpioset", "groups",
+    "halt", "hostid", "hostname", "hwclock", "i2cdetect", "i2cdump", "i2cget",
+    "i2cset", "i2ctransfer", "id", "inotifyd", "insmod", "linux32", "logger",
+    "login", "logname", "losetup", "lsmod", "lspci", "lsusb", "mkswap", "modinfo",
+    "modprobe", "mount", "mountpoint", "nologin", "nproc", "openvt", "partprobe",
+    "pivot_root", "poweroff", "printenv", "readahead", "reboot", "rfkill", "rmmod",
+    "rtcwake", "shuf", "sleep", "su", "swapoff", "swapon", "sysctl", "tty",
+    "ulimit", "umount", "uname", "uptime", "users", "usleep", "vmstat", "w",
+    "watch", "who", "whoami",
+    # Process utilities
+    "chrt", "ionice", "iorenice", "iotop", "kill", "killall", "killall5", "nice",
+    "nohup", "nsenter", "pgrep", "pidof", "pkill", "pmap", "prlimit", "ps", "pwdx",
+    "renice", "setsid", "taskset", "timeout", "top", "uclampset", "unshare",
+    # Network utilities
+    "arp", "arping", "brctl", "ether_wake", "ftpget", "ftpput", "host", "httpd",
+    "ifconfig", "ifdown", "ifup", "ip", "ipaddr", "ipcalc", "iplink", "ipneigh",
+    "iproute", "iprule", "microcom", "nameif", "nbd_client", "nbd_server", "nc",
+    "netstat", "nslookup", "ping", "route", "slattach", "sntp", "ss", "telnet",
+    "tftp", "traceroute", "tunctl", "vconfig", "wget",
+    # Archive utilities
+    "bzip2", "compress", "cpio", "gzip", "tar", "unzip", "xz", "zstd",
+    # Misc utilities
+    "ascii", "base64", "boolean", "cmp", "count", "diff", "expr",
+    "factor", "getconf", "getopt", "hash", "help", "hexdump", "iconv", "mcookie",
+    "memeater", "mesg", "mix", "mkpasswd", "pwgen", "readelf", "screen",
+    "terminal", "test", "time", "toybox", "ts", "tsort", "unicode", "uudecode",
+    "uuencode", "uuidgen", "which",
+    # Editors
+    "vi", "hexedit",
+    # Init system
+    "init", "getty", "oneit", "runlevel", "sulogin", "switch_root", "telinit",
+    "watchdog",
+    # Shell
+    "sh",
+    # Package manager
+    "apk",
+    "abp",
+]
+
+# Minimal useful set for basic shell use
+minimal = ["cat", "echo", "ls", "sh", "boolean", "test"]
+
+# =============================================================================
+# Individual Applet Features
+# =============================================================================
+
+# --- File utilities ---
+basename = []
+cat = []
+cd = []
+chattr = []
+chgrp = []
+chmod = []
+chown = []
+cp = []
+dd = []
+dirname = []
+file = []
+find = []
+fstype = []
+install = []
+link = []
+ln = []
+ls = []
+lsattr = []
+makedevs = []
+mkdir = []
+mkfifo = []
+mknod = []
+mktemp = []
+mv = []
+patch = []
+pwd = []
+readlink = []
+realpath = []
+rm = []
+rmdir = []
+setfattr = []
+shred = []
+split = []
+stat = []
+sync = []          # sync command
+touch = []
+truncate = []
+unlink = []
+xargs = []
+
+# --- Text utilities ---
+awk = []
+comm = []
+cut = []
+dos2unix = []
+echo = []
+expand = []
+fmt = []
+fold = []
+grep = []          # includes egrep, fgrep aliases
+head = []
+nl = []
+paste = []
+printf = []
+rev = []
+sed = []
+seq = []
+sort = []
+strings = []
+tac = []
+tail = []
+tee = []
+tr = []
+unexpand = []
+uniq = []
+unix2dos = []
+wc = []
+yes = []
+
+# --- System utilities ---
+acpi = []
+arch = []
+blkdiscard = []
+blkid = []
+blockdev = []
+cal = []
+chroot = []
+chvt = []
+date = []
+deallocvt = []
+devmem = []
+df = []
+dmesg = []
+dnsdomainname = []
+du = []
+eject = []
+env = []
+fallocate = []
+fgconsole = []
+flock = []
+free = []
+freeramdisk = []
+fsfreeze = []
+fsync = []
+gpiodetect = []
+gpiofind = []
+gpioget = []
+gpioinfo = []
+gpioset = []
+groups = []
+halt = []
+hostid = []
+hostname = []
+hwclock = []
+i2cdetect = []
+i2cdump = []
+i2cget = []
+i2cset = []
+i2ctransfer = []
+id = []
+inotifyd = []
+insmod = []
+linux32 = []
+logger = []
+login = []
+logname = []
+losetup = []
+lsmod = []
+lspci = []
+lsusb = []
+mkswap = []
+modinfo = []
+modprobe = []
+mount = []
+mountpoint = []
+nologin = []
+nproc = []
+openvt = []
+partprobe = []
+pivot_root = []
+poweroff = []
+printenv = []
+readahead = []
+reboot = []
+rfkill = []
+rmmod = []
+rtcwake = []
+shuf = []
+sleep = []
+su = []
+swapoff = []
+swapon = []
+sysctl = []
+tty = []
+ulimit = []
+umount = []
+uname = []
+uptime = []
+users = []
+usleep = []
+vmstat = []
+w = []
+watch = []
+who = []
+whoami = []
+
+# --- Process utilities ---
+chrt = []
+ionice = []
+iorenice = []
+iotop = []
+kill = []
+killall = []
+killall5 = []
+nice = []
+nohup = []
+nsenter = []
+pgrep = []
+pidof = []
+pkill = []
+pmap = []
+prlimit = []
+ps = []
+pwdx = []
+renice = []
+setsid = []
+taskset = []
+timeout = []
+top = []
+uclampset = []
+unshare = []
+
+# --- Network utilities ---
+arp = []
+arping = []
+brctl = []
+ether_wake = []
+ftpget = []
+ftpput = []
+host = []
+httpd = []
+ifconfig = []
+ifdown = []
+ifup = []
+ip = []
+ipaddr = []
+ipcalc = []
+iplink = []
+ipneigh = []
+iproute = []
+iprule = []
+microcom = []
+nameif = []
+nbd_client = []
+nbd_server = []
+nc = []            # includes netcat alias
+netstat = []
+nslookup = []
+ping = []          # includes ping6 alias
+route = []
+slattach = []
+sntp = []
+ss = []
+telnet = []
+tftp = []
+traceroute = []    # includes traceroute6 alias
+tunctl = []
+vconfig = []
+wget = []
+
+# --- Archive utilities ---
+bzip2 = []         # includes bunzip2, bzcat aliases
+compress = []      # includes uncompress alias
+cpio = []
+gzip = []          # includes gunzip, zcat aliases
+tar = []
+unzip = []
+xz = []            # includes unxz, xzcat, lzma, unlzma, lzcat aliases
+zstd = ["alloc", "dep:zstd-nostd"]  # includes unzstd, zstdcat aliases
+
+# --- Misc utilities ---
+ascii = []
+base64 = []        # includes base32 alias
+boolean = []       # true, false, : (colon)
+cmp = []
+count = []
+diff = []
+expr = []
+factor = []
+getconf = []
+getopt = []
+hash = []          # md5sum, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, sha3sum, cksum, crc32
+help = []
+hexdump = []       # includes hd, xxd, od aliases
+iconv = []
+mcookie = []
+memeater = []
+mesg = []
+mix = []
+mkpasswd = []
+pwgen = []
+readelf = []
+screen = []        # includes tmux alias
+terminal = []      # clear, reset
+test = []          # includes [ alias
+time = []
+toybox = []
+ts = []
+tsort = []
+unicode = []
+uudecode = []
+uuencode = []
+uuidgen = []
+which = []
+
+# --- Editors ---
+vi = []            # includes view alias
+hexedit = []
+
+# --- Init system ---
+init = []          # includes linuxrc alias
+getty = []
+oneit = []
+runlevel = []
+sulogin = []
+switch_root = []
+telinit = []
+watchdog = []
+
+# --- Shell ---
+sh = []            # includes ash, dash aliases
+
+# --- Package manager ---
+apk = ["alloc"]    # Alpine Package Keeper (APK) package manager
+abp = ["alloc", "dep:abp"]  # Armybox Package Manager (ABP)
 
 [dependencies]
 # Core dependency - provides syscall interface
 libc = "0.2"
+abp = { version = "0.1.0", path = "crates/abp", optional = true, default-features = false, features = ["alloc"] }
+zstd-nostd = { version = "0.1.0", path = "crates/zstd-nostd", optional = true, default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 # For testing only - benchmarks are in crates/benchmarks
 tempfile = "3"
+proptest = "1"
 
 # Benchmark profile
 [profile.bench]
@@ -44,10 +402,6 @@ overflow-checks = false
 
 # Don't use panic=abort for dev profile to allow tests
 [profile.dev]
-panic = "unwind"
-
-# Test profile needs unwind for test harness
-[profile.test]
 panic = "unwind"
 
 [[bin]]

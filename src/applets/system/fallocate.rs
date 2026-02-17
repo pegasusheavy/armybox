@@ -34,7 +34,7 @@ pub fn fallocate(argc: i32, argv: *const *const u8) -> i32 {
     for i in 1..argc-1 {
         if let Some(arg) = unsafe { get_arg(argv, i ) } {
             if arg == b"-l" && i + 1 < argc - 1 {
-                if let Some(s) = unsafe { get_arg(argv, (i + 1) ) } {
+                if let Some(s) = unsafe { get_arg(argv, i + 1 ) } {
                     size = sys::parse_i64(s).unwrap_or(0);
                 }
             }
@@ -61,6 +61,9 @@ pub fn fallocate(argc: i32, argv: *const *const u8) -> i32 {
 #[cfg(test)]
 mod tests {
     extern crate std;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
     use std::process::Command;
     use std::path::PathBuf;
     use std::fs;

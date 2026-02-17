@@ -7,7 +7,7 @@ use crate::sys;
 use super::get_arg;
 
 // BLKFLSBUF ioctl - flush buffer cache
-const BLKFLSBUF: u64 = 0x1261;
+const BLKFLSBUF: crate::io::IoctlReq = 0x1261u32 as crate::io::IoctlReq;
 
 /// freeramdisk - free all memory used by a ramdisk
 ///
