@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-12
+
+### Changed
+- Reimplemented ~33 applets to POSIX conformance (date, env, id, getconf, cut,
+  tr, sort, uniq, head, tail, wc, nl, paste, fold, printf, grep, sed, awk, find,
+  ls, ln, cp, dd, mkfifo, xargs, expr, test/`[`, cmp, nice, nohup, renice, sleep,
+  base64) — many previously ignored their arguments or were stubs.
+- Consolidated the grep/sed/awk/expr regex engines into one shared engine
+  (`applets::regex`), now an iterative Pike VM: linear-time matching with no
+  recursion/stack-depth caps and no catastrophic backtracking.
+
+### Fixed
+- Security & data loss: `su` now authenticates against `/etc/shadow`;
+  `cp`/`mv`/`truncate`/`gunzip` no longer destroy data on error; `kill` signal
+  handling corrected; `tar`/`unzip`/`cpio`/`httpd` path traversal closed.
+- Engine hardening: regex `{n,m}` caps, `printf` width cap; checked output
+  writes and `--help` handling across the text applets.
+
+### abp package manager (0.2.0)
+- Replaced the broken hand-rolled Ed25519 with `ed25519-dalek` (RFC 8032 KATs);
+  byte-exact signature verification; extraction escapes closed (symlink targets,
+  `O_NOFOLLOW`, setuid mask, integrity over all member types); parse-overflow
+  and OOB panics fixed; atomic install with rollback; GNU longname/pax + base-256
+  tar handling; per-file content verification; 256 MiB decompression cap.
+
+### zstd-nostd (0.2.0)
+- Added `decompress_bounded` for a caller-supplied output cap.
+
 ## [0.3.0] - 2026-01-03
 
 ### Added

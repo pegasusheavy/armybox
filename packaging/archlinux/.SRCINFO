@@ -1,6 +1,6 @@
 pkgbase = armybox
 	pkgdesc = BusyBox/Toybox clone written in Rust
-	pkgver = 0.3.0
+	pkgver = 0.4.0
 	pkgrel = 1
 	url = https://github.com/quinnjr/armybox
 	arch = x86_64

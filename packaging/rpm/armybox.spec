@@ -1,5 +1,5 @@
 Name:           armybox
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        BusyBox/Toybox clone written in Rust
 

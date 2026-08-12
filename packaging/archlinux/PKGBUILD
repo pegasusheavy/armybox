@@ -1,6 +1,6 @@
 # Maintainer: Pegasus Heavy Industries <contact@pegasusheavy.industries>
 pkgname=armybox
-pkgver=0.3.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="BusyBox/Toybox clone written in Rust"
 arch=('x86_64' 'aarch64')
