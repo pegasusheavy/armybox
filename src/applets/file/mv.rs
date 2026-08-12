@@ -197,14 +197,40 @@ fn copy_file(src: &[u8], dest: &[u8]) -> i32 {
     }
 
     let mut buf = [0u8; 4096];
+    let mut copy_failed = false;
     loop {
         let n = io::read(src_fd, &mut buf);
-        if n <= 0 { break; }
-        io::write_all(dest_fd, &buf[..n as usize]);
+        if n < 0 {
+            sys::perror(src);
+            copy_failed = true;
+            break;
+        }
+        if n == 0 { break; }
+        if io::write_all(dest_fd, &buf[..n as usize]) < 0 {
+            sys::perror(dest);
+            copy_failed = true;
+            break;
+        }
     }
 
     io::close(src_fd);
-    io::close(dest_fd);
+    if io::close(dest_fd) < 0 && !copy_failed {
+        sys::perror(dest);
+        copy_failed = true;
+    }
+
+    if copy_failed {
+        io::write_str(2, b"mv: failed to copy '");
+        io::write_all(2, src);
+        io::write_str(2, b"' to '");
+        io::write_all(2, dest);
+        io::write_str(2, b"'\n");
+        // Best-effort cleanup of the partial/incomplete destination so a
+        // failed copy does not masquerade as a complete file.
+        let _ = io::unlink(dest);
+        return 1;
+    }
+
     0
 }
 

@@ -178,6 +178,24 @@ fn copy_file_opts(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
     let mut src_st: libc::stat = unsafe { core::mem::zeroed() };
     let has_stat = io::stat(src, &mut src_st) == 0;
 
+    // Refuse to copy a file onto itself (POSIX requirement): if both source
+    // and destination exist and refer to the same file (same device and
+    // inode), report the error and skip the copy without truncating.
+    let mut dest_st: libc::stat = unsafe { core::mem::zeroed() };
+    let dest_has_stat = io::stat(dest, &mut dest_st) == 0;
+    if has_stat && dest_has_stat
+        && src_st.st_dev == dest_st.st_dev
+        && src_st.st_ino == dest_st.st_ino
+    {
+        io::close(src_fd);
+        io::write_str(2, b"cp: '");
+        io::write_all(2, src);
+        io::write_str(2, b"' and '");
+        io::write_all(2, dest);
+        io::write_str(2, b"' are the same file\n");
+        return 1;
+    }
+
     // If force and dest exists, try to remove it first
     if force {
         let _ = io::unlink(dest);

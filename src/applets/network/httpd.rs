@@ -164,7 +164,18 @@ pub fn httpd(argc: i32, argv: *const *const u8) -> i32 {
         };
 
         if client_fd < 0 {
-            continue;
+            let e = sys::errno();
+            if e == libc::EINTR || e == libc::ECONNABORTED {
+                continue;
+            } else if e == libc::EMFILE || e == libc::ENFILE {
+                // Fd exhaustion: back off briefly instead of busy-spinning.
+                unsafe { libc::usleep(100_000) };
+                continue;
+            } else {
+                io::write_str(2, b"httpd: accept failed\n");
+                io::close(listen_fd);
+                return 1;
+            }
         }
 
         // Fork to handle request
@@ -232,11 +243,27 @@ fn handle_request(fd: i32, _verbose: bool) {
         return;
     }
 
+    // Strip ALL leading slashes (not just one) so requests like
+    // "GET //etc/passwd" or "GET /%2Fetc/passwd" cannot decode into an
+    // absolute path that escapes the document root.
+    let mut stripped_start = 0;
+    while stripped_start < decoded_path.len() && decoded_path[stripped_start] == b'/' {
+        stripped_start += 1;
+    }
+    let stripped = &decoded_path[stripped_start..];
+
+    // Reject anything that is still absolute after stripping (shouldn't
+    // happen, but be defensive) and anything containing a ".." component.
+    if stripped.first() == Some(&b'/') || has_dotdot(stripped) {
+        send_error(fd, 403, b"Forbidden");
+        return;
+    }
+
     // Remove leading slash and handle root
-    let file_path = if decoded_path.len() <= 1 {
+    let file_path = if stripped.is_empty() {
         b"index.html".to_vec()
     } else {
-        decoded_path[1..].to_vec()
+        stripped.to_vec()
     };
 
     // Check if directory, append index.html

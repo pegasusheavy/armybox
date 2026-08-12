@@ -7,6 +7,27 @@ use alloc::vec;
 use crate::io;
 use super::{get_arg, open_read, open_write_create, create_parent_dirs, mode_string};
 
+/// Returns `true` if `name` is unsafe to use as an extraction path:
+/// an absolute path, or a path containing a `..` component.
+///
+/// Detection is component-based (splitting on `/`), not a substring
+/// search, so it correctly rejects `../x`, `a/../b`, `a/..`, and `..`.
+fn is_unsafe_path(name: &[u8]) -> bool {
+    if name.starts_with(b"/") {
+        return true;
+    }
+    let mut start = 0;
+    for i in 0..=name.len() {
+        if i == name.len() || name[i] == b'/' {
+            if &name[start..i] == b".." {
+                return true;
+            }
+            start = i + 1;
+        }
+    }
+    false
+}
+
 /// cpio - copy files to and from archives
 ///
 /// # Synopsis
@@ -83,6 +104,7 @@ fn write_hex_8(buf: &mut [u8], val: u32) {
 
 fn cpio_extract(verbose: bool) -> i32 {
     let mut header_buf = [0u8; 110];
+    let mut exit_code = 0;
 
     loop {
         if io::read(0, &mut header_buf) != 110 {
@@ -131,18 +153,38 @@ fn cpio_extract(verbose: bool) -> i32 {
         let is_dir = (mode & 0o170000) == 0o040000;
         let is_file = (mode & 0o170000) == 0o100000;
 
-        if is_dir {
+        if is_unsafe_path(name_str) {
+            io::write_str(2, b"cpio: skipping unsafe path\n");
+            exit_code = 1;
+            // Skip content (if any) to stay aligned with the stream
+            let mut remaining = filesize;
+            let mut buf = [0u8; 4096];
+            while remaining > 0 {
+                let to_read = remaining.min(4096);
+                io::read(0, &mut buf[..to_read]);
+                remaining -= to_read;
+            }
+        } else if name_str.len() >= io::PATH_MAX {
+            io::write_str(2, b"cpio: path too long, skipping\n");
+            exit_code = 1;
+            let mut remaining = filesize;
+            let mut buf = [0u8; 4096];
+            while remaining > 0 {
+                let to_read = remaining.min(4096);
+                io::read(0, &mut buf[..to_read]);
+                remaining -= to_read;
+            }
+        } else if is_dir {
             // Create directory
-            let mut path_z = vec![0u8; name_str.len() + 1];
-            path_z[..name_str.len()].copy_from_slice(name_str);
-            unsafe { libc::mkdir(path_z.as_ptr() as *const i8, (mode & 0o7777) as u32) };
+            io::mkdir(name_str, (mode & 0o7777) as u32);
         } else if is_file {
             // Create file
-            create_parent_dirs(name_str);
-            let mut path_z = vec![0u8; name_str.len() + 1];
-            path_z[..name_str.len()].copy_from_slice(name_str);
+            if !create_parent_dirs(name_str) {
+                io::write_str(2, b"cpio: path too long, skipping\n");
+                exit_code = 1;
+            }
 
-            let fd = open_write_create(&path_z, (mode & 0o7777) as i32);
+            let fd = open_write_create(name_str, (mode & 0o7777) as i32);
             if fd >= 0 {
                 let mut remaining = filesize;
                 let mut buf = [0u8; 4096];
@@ -155,6 +197,7 @@ fn cpio_extract(verbose: bool) -> i32 {
                 }
                 io::close(fd);
             } else {
+                exit_code = 1;
                 // Skip file content
                 let mut remaining = filesize;
                 let mut buf = [0u8; 4096];
@@ -182,7 +225,7 @@ fn cpio_extract(verbose: bool) -> i32 {
         }
     }
 
-    0
+    exit_code
 }
 
 fn cpio_create(verbose: bool) -> i32 {
@@ -209,11 +252,8 @@ fn cpio_create(verbose: bool) -> i32 {
         if line.is_empty() { continue; }
 
         // Stat the file
-        let mut path_z = vec![0u8; line.len() + 1];
-        path_z[..line.len()].copy_from_slice(&line);
-
         let mut stat_buf: libc::stat = unsafe { core::mem::zeroed() };
-        if unsafe { libc::lstat(path_z.as_ptr() as *const i8, &mut stat_buf) } != 0 {
+        if io::lstat(&line, &mut stat_buf) != 0 {
             io::write_str(2, b"cpio: cannot stat ");
             io::write_all(2, &line);
             io::write_str(2, b"\n");
@@ -226,7 +266,7 @@ fn cpio_create(verbose: bool) -> i32 {
 
         if is_file {
             // Read file content
-            let fd = open_read(&path_z);
+            let fd = open_read(&line);
             if fd >= 0 {
                 let mut content = Vec::new();
                 let mut buf = [0u8; 4096];

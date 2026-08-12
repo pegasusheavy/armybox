@@ -8,6 +8,10 @@ use alloc::vec::Vec;
 use crate::io;
 use crate::sys;
 use crate::applets::get_arg;
+// Shared password-verification primitives live in the login applet.
+// NOTE: this makes the `su` feature depend on the `login` module being
+// compiled in (add `su = ["login"]` in Cargo.toml).
+use super::login;
 
 /// User info from /etc/passwd
 struct UserInfo {
@@ -79,6 +83,36 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
             return 1;
         }
     };
+
+    // Authenticate the caller BEFORE changing any credentials.
+    // Root (real uid 0) may su to anyone without a password; every other
+    // caller must prove knowledge of the target user's password.
+    if unsafe { libc::getuid() } != 0 {
+        // Fetch the target user's password hash from /etc/shadow.
+        let hash = login::get_shadow_hash(user);
+
+        // Prompt with terminal echo disabled.
+        io::write_str(2, b"Password: ");
+        let old_termios = login::disable_echo();
+        let password = match login::read_line() {
+            Some(p) => p,
+            None => {
+                login::restore_termios(&old_termios);
+                io::write_str(2, b"\n");
+                io::write_str(2, b"su: Authentication failure\n");
+                return 1;
+            }
+        };
+        login::restore_termios(&old_termios);
+        io::write_str(2, b"\n");
+
+        // An empty/locked hash makes verify_password return false, so a
+        // missing shadow entry is rejected rather than treated as no password.
+        if !login::verify_password(&password, &hash) {
+            io::write_str(2, b"su: Authentication failure\n");
+            return 1;
+        }
+    }
 
     let shell = shell_override.map(|s| s.to_vec()).unwrap_or(user_info.shell.clone());
 
@@ -240,9 +274,17 @@ fn lookup_user(username: &[u8]) -> Option<UserInfo> {
             continue;
         }
 
-        // Parse uid and gid
-        let uid = sys::parse_u64(fields[2]).unwrap_or(0) as u32;
-        let gid = sys::parse_u64(fields[3]).unwrap_or(0) as u32;
+        // Parse uid and gid. Reject a malformed entry outright instead of
+        // silently falling back to uid/gid 0 (root), which would be a
+        // privilege-escalation fail-open.
+        let uid = match sys::parse_u64(fields[2]) {
+            Some(v) => v as u32,
+            None => return None,
+        };
+        let gid = match sys::parse_u64(fields[3]) {
+            Some(v) => v as u32,
+            None => return None,
+        };
         let home = fields[5].to_vec();
         let shell = if fields[6].is_empty() {
             b"/bin/sh".to_vec()

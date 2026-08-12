@@ -232,17 +232,44 @@ fn gunzip_stream(input_fd: i32, output_fd: i32) -> i32 {
         compressed.extend_from_slice(&buf[..n as usize]);
     }
 
-    // The last 8 bytes are CRC32 and original size
+    // The last 8 bytes are CRC32 (LE) and ISIZE (LE); capture them before truncating
     if compressed.len() < 8 {
         io::write_str(2, b"gzip: truncated file\n");
         return 1;
     }
 
     let trailer_start = compressed.len() - 8;
+    let expected_crc = u32::from_le_bytes([
+        compressed[trailer_start],
+        compressed[trailer_start + 1],
+        compressed[trailer_start + 2],
+        compressed[trailer_start + 3],
+    ]);
+    let expected_isize = u32::from_le_bytes([
+        compressed[trailer_start + 4],
+        compressed[trailer_start + 5],
+        compressed[trailer_start + 6],
+        compressed[trailer_start + 7],
+    ]);
     compressed.truncate(trailer_start);
 
     // Decompress DEFLATE data
-    let decompressed = inflate(&compressed);
+    let decompressed = match inflate(&compressed) {
+        Ok(d) => d,
+        Err(()) => {
+            io::write_str(2, b"gunzip: invalid compressed data--crc error\n");
+            return 1;
+        }
+    };
+
+    // Validate the gzip trailer (CRC32 + ISIZE) against the decompressed data
+    // before trusting it or handing it to the caller.
+    let actual_crc = crc32(&decompressed);
+    let actual_isize = decompressed.len() as u32;
+    if actual_crc != expected_crc || actual_isize != expected_isize {
+        io::write_str(2, b"gunzip: invalid compressed data--crc error\n");
+        return 1;
+    }
 
     io::write_all(output_fd, &decompressed);
 
@@ -327,52 +354,63 @@ fn gunzip_file(path: &[u8], keep: bool) -> i32 {
 }
 
 // DEFLATE decompression (inflate)
-pub fn inflate(data: &[u8]) -> Vec<u8> {
+//
+// Returns `Err(())` on any malformed input (invalid block type, truncated
+// bitstream, invalid Huffman code, or an out-of-range back-reference) instead
+// of silently truncating the output, so callers can detect corrupt archives.
+pub fn inflate(data: &[u8]) -> Result<Vec<u8>, ()> {
     let mut output = Vec::new();
     let mut bit_pos = 0usize;
 
-    fn get_bits(data: &[u8], bit_pos: &mut usize, count: usize) -> u32 {
+    fn get_bits(data: &[u8], bit_pos: &mut usize, count: usize) -> Option<u32> {
         let mut result = 0u32;
         for i in 0..count {
             let byte_idx = *bit_pos / 8;
+            if byte_idx >= data.len() {
+                return None;
+            }
             let bit_idx = *bit_pos % 8;
-            if byte_idx < data.len() {
-                if data[byte_idx] & (1 << bit_idx) != 0 {
-                    result |= 1 << i;
-                }
+            if data[byte_idx] & (1 << bit_idx) != 0 {
+                result |= 1 << i;
             }
             *bit_pos += 1;
         }
-        result
+        Some(result)
     }
 
     loop {
-        let bfinal = get_bits(data, &mut bit_pos, 1);
-        let btype = get_bits(data, &mut bit_pos, 2);
+        let bfinal = get_bits(data, &mut bit_pos, 1).ok_or(())?;
+        let btype = get_bits(data, &mut bit_pos, 2).ok_or(())?;
 
         match btype {
             0 => {
                 // Stored block
                 bit_pos = (bit_pos + 7) & !7;
-                let len = get_bits(data, &mut bit_pos, 16) as usize;
-                let _nlen = get_bits(data, &mut bit_pos, 16);
+                let len = get_bits(data, &mut bit_pos, 16).ok_or(())? as u16;
+                let nlen = get_bits(data, &mut bit_pos, 16).ok_or(())? as u16;
+                if nlen != !len {
+                    return Err(());
+                }
+                let len = len as usize;
 
                 let byte_pos = bit_pos / 8;
-                if byte_pos + len <= data.len() {
-                    output.extend_from_slice(&data[byte_pos..byte_pos + len]);
+                if byte_pos + len > data.len() {
+                    return Err(());
                 }
+                output.extend_from_slice(&data[byte_pos..byte_pos + len]);
                 bit_pos += len * 8;
             }
             1 => {
                 // Fixed Huffman
-                inflate_fixed_huffman(data, &mut bit_pos, &mut output);
+                inflate_fixed_huffman(data, &mut bit_pos, &mut output)?;
             }
             2 => {
                 // Dynamic Huffman
-                inflate_dynamic_huffman(data, &mut bit_pos, &mut output);
+                inflate_dynamic_huffman(data, &mut bit_pos, &mut output)?;
             }
             _ => {
-                break;
+                // BTYPE 3 is reserved/invalid
+                return Err(());
             }
         }
 
@@ -381,39 +419,41 @@ pub fn inflate(data: &[u8]) -> Vec<u8> {
         }
     }
 
-    output
+    Ok(output)
 }
 
-fn inflate_fixed_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8>) {
-    fn get_bits(data: &[u8], bit_pos: &mut usize, count: usize) -> u32 {
+fn inflate_fixed_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8>) -> Result<(), ()> {
+    fn get_bits(data: &[u8], bit_pos: &mut usize, count: usize) -> Option<u32> {
         let mut result = 0u32;
         for i in 0..count {
             let byte_idx = *bit_pos / 8;
+            if byte_idx >= data.len() {
+                return None;
+            }
             let bit_idx = *bit_pos % 8;
-            if byte_idx < data.len() {
-                if data[byte_idx] & (1 << bit_idx) != 0 {
-                    result |= 1 << i;
-                }
+            if data[byte_idx] & (1 << bit_idx) != 0 {
+                result |= 1 << i;
             }
             *bit_pos += 1;
         }
-        result
+        Some(result)
     }
 
-    fn get_bits_rev(data: &[u8], bit_pos: &mut usize, count: usize) -> u32 {
+    fn get_bits_rev(data: &[u8], bit_pos: &mut usize, count: usize) -> Option<u32> {
         let mut result = 0u32;
         for _ in 0..count {
             result <<= 1;
             let byte_idx = *bit_pos / 8;
+            if byte_idx >= data.len() {
+                return None;
+            }
             let bit_idx = *bit_pos % 8;
-            if byte_idx < data.len() {
-                if data[byte_idx] & (1 << bit_idx) != 0 {
-                    result |= 1;
-                }
+            if data[byte_idx] & (1 << bit_idx) != 0 {
+                result |= 1;
             }
             *bit_pos += 1;
         }
-        result
+        Some(result)
     }
 
     let length_bases: [u16; 29] = [
@@ -434,18 +474,18 @@ fn inflate_fixed_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8>)
     ];
 
     loop {
-        let mut code = get_bits_rev(data, bit_pos, 7);
+        let mut code = get_bits_rev(data, bit_pos, 7).ok_or(())?;
 
         let symbol = if code <= 0b0010111 {
             code + 256
         } else {
-            code = (code << 1) | get_bits_rev(data, bit_pos, 1);
+            code = (code << 1) | get_bits_rev(data, bit_pos, 1).ok_or(())?;
             if code <= 0b10111111 {
                 code - 0b00110000
             } else if code <= 0b11000111 {
                 code - 0b11000000 + 280
             } else {
-                code = (code << 1) | get_bits_rev(data, bit_pos, 1);
+                code = (code << 1) | get_bits_rev(data, bit_pos, 1).ok_or(())?;
                 code - 0b110010000 + 144
             }
         };
@@ -456,50 +496,54 @@ fn inflate_fixed_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8>)
             break;
         } else {
             let length_idx = (symbol - 257) as usize;
-            if length_idx >= 29 { break; }
+            if length_idx >= 29 { return Err(()); }
             let length = length_bases[length_idx] as usize +
-                get_bits(data, bit_pos, length_extra[length_idx] as usize) as usize;
+                get_bits(data, bit_pos, length_extra[length_idx] as usize).ok_or(())? as usize;
 
-            let dist_code = get_bits_rev(data, bit_pos, 5) as usize;
-            if dist_code >= 30 { break; }
+            let dist_code = get_bits_rev(data, bit_pos, 5).ok_or(())? as usize;
+            if dist_code >= 30 { return Err(()); }
             let distance = dist_bases[dist_code] as usize +
-                get_bits(data, bit_pos, dist_extra[dist_code] as usize) as usize;
+                get_bits(data, bit_pos, dist_extra[dist_code] as usize).ok_or(())? as usize;
 
-            let start = if distance > output.len() { 0 } else { output.len() - distance };
+            if distance == 0 || distance > output.len() {
+                return Err(());
+            }
+            let start = output.len() - distance;
             for i in 0..length {
                 let idx = start + (i % distance);
-                if idx < output.len() {
-                    output.push(output[idx]);
-                }
+                output.push(output[idx]);
             }
         }
     }
+
+    Ok(())
 }
 
-fn inflate_dynamic_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8>) {
-    fn get_bits(data: &[u8], bit_pos: &mut usize, count: usize) -> u32 {
+fn inflate_dynamic_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8>) -> Result<(), ()> {
+    fn get_bits(data: &[u8], bit_pos: &mut usize, count: usize) -> Option<u32> {
         let mut result = 0u32;
         for i in 0..count {
             let byte_idx = *bit_pos / 8;
+            if byte_idx >= data.len() {
+                return None;
+            }
             let bit_idx = *bit_pos % 8;
-            if byte_idx < data.len() {
-                if data[byte_idx] & (1 << bit_idx) != 0 {
-                    result |= 1 << i;
-                }
+            if data[byte_idx] & (1 << bit_idx) != 0 {
+                result |= 1 << i;
             }
             *bit_pos += 1;
         }
-        result
+        Some(result)
     }
 
-    let hlit = get_bits(data, bit_pos, 5) as usize + 257;
-    let hdist = get_bits(data, bit_pos, 5) as usize + 1;
-    let hclen = get_bits(data, bit_pos, 4) as usize + 4;
+    let hlit = get_bits(data, bit_pos, 5).ok_or(())? as usize + 257;
+    let hdist = get_bits(data, bit_pos, 5).ok_or(())? as usize + 1;
+    let hclen = get_bits(data, bit_pos, 4).ok_or(())? as usize + 4;
 
     let order: [usize; 19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
     let mut code_length_lengths = [0u8; 19];
     for i in 0..hclen {
-        code_length_lengths[order[i]] = get_bits(data, bit_pos, 3) as u8;
+        code_length_lengths[order[i]] = get_bits(data, bit_pos, 3).ok_or(())? as u8;
     }
 
     let code_length_tree = build_huffman_tree(&code_length_lengths);
@@ -507,41 +551,38 @@ fn inflate_dynamic_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8
     let mut lengths = vec![0u8; hlit + hdist];
     let mut i = 0;
     while i < hlit + hdist {
-        let sym = decode_huffman(data, bit_pos, &code_length_tree);
+        let sym = decode_huffman(data, bit_pos, &code_length_tree).ok_or(())?;
         match sym {
             0..=15 => {
                 lengths[i] = sym as u8;
                 i += 1;
             }
             16 => {
-                let repeat = get_bits(data, bit_pos, 2) as usize + 3;
+                let repeat = get_bits(data, bit_pos, 2).ok_or(())? as usize + 3;
                 let val = if i > 0 { lengths[i - 1] } else { 0 };
                 for _ in 0..repeat {
-                    if i < lengths.len() {
-                        lengths[i] = val;
-                        i += 1;
-                    }
+                    if i >= lengths.len() { return Err(()); }
+                    lengths[i] = val;
+                    i += 1;
                 }
             }
             17 => {
-                let repeat = get_bits(data, bit_pos, 3) as usize + 3;
+                let repeat = get_bits(data, bit_pos, 3).ok_or(())? as usize + 3;
                 for _ in 0..repeat {
-                    if i < lengths.len() {
-                        lengths[i] = 0;
-                        i += 1;
-                    }
+                    if i >= lengths.len() { return Err(()); }
+                    lengths[i] = 0;
+                    i += 1;
                 }
             }
             18 => {
-                let repeat = get_bits(data, bit_pos, 7) as usize + 11;
+                let repeat = get_bits(data, bit_pos, 7).ok_or(())? as usize + 11;
                 for _ in 0..repeat {
-                    if i < lengths.len() {
-                        lengths[i] = 0;
-                        i += 1;
-                    }
+                    if i >= lengths.len() { return Err(()); }
+                    lengths[i] = 0;
+                    i += 1;
                 }
             }
-            _ => break,
+            _ => return Err(()),
         }
     }
 
@@ -566,7 +607,7 @@ fn inflate_dynamic_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8
     ];
 
     loop {
-        let symbol = decode_huffman(data, bit_pos, &lit_tree);
+        let symbol = decode_huffman(data, bit_pos, &lit_tree).ok_or(())?;
 
         if symbol < 256 {
             output.push(symbol as u8);
@@ -574,24 +615,27 @@ fn inflate_dynamic_huffman(data: &[u8], bit_pos: &mut usize, output: &mut Vec<u8
             break;
         } else {
             let length_idx = (symbol - 257) as usize;
-            if length_idx >= 29 { break; }
+            if length_idx >= 29 { return Err(()); }
             let length = length_bases[length_idx] as usize +
-                get_bits(data, bit_pos, length_extra[length_idx] as usize) as usize;
+                get_bits(data, bit_pos, length_extra[length_idx] as usize).ok_or(())? as usize;
 
-            let dist_code = decode_huffman(data, bit_pos, &dist_tree) as usize;
-            if dist_code >= 30 { break; }
+            let dist_code = decode_huffman(data, bit_pos, &dist_tree).ok_or(())? as usize;
+            if dist_code >= 30 { return Err(()); }
             let distance = dist_bases[dist_code] as usize +
-                get_bits(data, bit_pos, dist_extra[dist_code] as usize) as usize;
+                get_bits(data, bit_pos, dist_extra[dist_code] as usize).ok_or(())? as usize;
 
-            let start = if distance > output.len() { 0 } else { output.len() - distance };
+            if distance == 0 || distance > output.len() {
+                return Err(());
+            }
+            let start = output.len() - distance;
             for i in 0..length {
                 let idx = start + (i % distance);
-                if idx < output.len() {
-                    output.push(output[idx]);
-                }
+                output.push(output[idx]);
             }
         }
     }
+
+    Ok(())
 }
 
 struct HuffmanTree {
@@ -631,31 +675,32 @@ fn build_huffman_tree(lengths: &[u8]) -> HuffmanTree {
     HuffmanTree { codes, max_bits }
 }
 
-fn decode_huffman(data: &[u8], bit_pos: &mut usize, tree: &HuffmanTree) -> u16 {
+fn decode_huffman(data: &[u8], bit_pos: &mut usize, tree: &HuffmanTree) -> Option<u16> {
     if tree.codes.is_empty() {
-        return 0;
+        return None;
     }
 
     let mut code = 0u16;
     for len in 1..=tree.max_bits {
         let byte_idx = *bit_pos / 8;
+        if byte_idx >= data.len() {
+            return None;
+        }
         let bit_idx = *bit_pos % 8;
         code <<= 1;
-        if byte_idx < data.len() {
-            if data[byte_idx] & (1 << bit_idx) != 0 {
-                code |= 1;
-            }
+        if data[byte_idx] & (1 << bit_idx) != 0 {
+            code |= 1;
         }
         *bit_pos += 1;
 
         for &(c, l, sym) in &tree.codes {
             if l == len && c == code {
-                return sym;
+                return Some(sym);
             }
         }
     }
 
-    0
+    None
 }
 
 pub fn crc32(data: &[u8]) -> u32 {

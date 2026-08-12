@@ -6,6 +6,47 @@ use crate::io;
 use crate::sys;
 use crate::applets::get_arg;
 
+/// Table of symbolic signal names (without the "SIG" prefix) to numbers.
+const SIGNALS: &[(&[u8], i32)] = &[
+    (b"HUP", libc::SIGHUP),
+    (b"INT", libc::SIGINT),
+    (b"QUIT", libc::SIGQUIT),
+    (b"KILL", libc::SIGKILL),
+    (b"USR1", libc::SIGUSR1),
+    (b"USR2", libc::SIGUSR2),
+    (b"PIPE", libc::SIGPIPE),
+    (b"ALRM", libc::SIGALRM),
+    (b"TERM", libc::SIGTERM),
+    (b"STOP", libc::SIGSTOP),
+    (b"CONT", libc::SIGCONT),
+];
+
+/// Parse a signal specification: a bare number, a bare name (HUP), or a
+/// name with the "SIG" prefix (SIGHUP). Case-insensitive.
+fn parse_signal(spec: &[u8]) -> Option<i32> {
+    if spec.is_empty() {
+        return None;
+    }
+    if spec.iter().all(|c| c.is_ascii_digit()) {
+        return sys::parse_i64(spec).map(|v| v as i32);
+    }
+    let name = if spec.len() > 3
+        && spec[0].to_ascii_uppercase() == b'S'
+        && spec[1].to_ascii_uppercase() == b'I'
+        && spec[2].to_ascii_uppercase() == b'G'
+    {
+        &spec[3..]
+    } else {
+        spec
+    };
+    for (n, val) in SIGNALS.iter() {
+        if n.eq_ignore_ascii_case(name) {
+            return Some(*val);
+        }
+    }
+    None
+}
+
 /// killall - kill processes by name
 ///
 /// # Synopsis
@@ -30,11 +71,17 @@ pub fn killall(argc: i32, argv: *const *const u8) -> i32 {
 
     // Parse signal argument
     if let Some(arg) = unsafe { get_arg(argv, 1) } {
-        if arg[0] == b'-' {
-            if arg.len() > 1 {
-                signal = sys::parse_i64(&arg[1..]).unwrap_or(libc::SIGTERM as i64) as i32;
+        if let Some(&first) = arg.first() {
+            if first == b'-' && arg.len() > 1 {
+                match parse_signal(&arg[1..]) {
+                    Some(sig) => signal = sig,
+                    None => {
+                        io::write_str(2, b"killall: invalid signal\n");
+                        return 1;
+                    }
+                }
+                name_idx = 2;
             }
-            name_idx = 2;
         }
     }
 

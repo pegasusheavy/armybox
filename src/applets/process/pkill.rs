@@ -6,6 +6,47 @@ use crate::io;
 use crate::sys;
 use crate::applets::get_arg;
 
+/// Table of symbolic signal names (without the "SIG" prefix) to numbers.
+const SIGNALS: &[(&[u8], i32)] = &[
+    (b"HUP", libc::SIGHUP),
+    (b"INT", libc::SIGINT),
+    (b"QUIT", libc::SIGQUIT),
+    (b"KILL", libc::SIGKILL),
+    (b"USR1", libc::SIGUSR1),
+    (b"USR2", libc::SIGUSR2),
+    (b"PIPE", libc::SIGPIPE),
+    (b"ALRM", libc::SIGALRM),
+    (b"TERM", libc::SIGTERM),
+    (b"STOP", libc::SIGSTOP),
+    (b"CONT", libc::SIGCONT),
+];
+
+/// Parse a signal specification: a bare number, a bare name (HUP), or a
+/// name with the "SIG" prefix (SIGHUP). Case-insensitive.
+fn parse_signal(spec: &[u8]) -> Option<i32> {
+    if spec.is_empty() {
+        return None;
+    }
+    if spec.iter().all(|c| c.is_ascii_digit()) {
+        return sys::parse_i64(spec).map(|v| v as i32);
+    }
+    let name = if spec.len() > 3
+        && spec[0].to_ascii_uppercase() == b'S'
+        && spec[1].to_ascii_uppercase() == b'I'
+        && spec[2].to_ascii_uppercase() == b'G'
+    {
+        &spec[3..]
+    } else {
+        spec
+    };
+    for (n, val) in SIGNALS.iter() {
+        if n.eq_ignore_ascii_case(name) {
+            return Some(*val);
+        }
+    }
+    None
+}
+
 /// pkill - signal processes based on name
 ///
 /// # Synopsis
@@ -26,14 +67,24 @@ pub fn pkill(argc: i32, argv: *const *const u8) -> i32 {
     let mut pattern_idx = 1;
 
     if let Some(arg) = unsafe { get_arg(argv, 1) } {
-        if arg[0] == b'-' && arg.len() > 1 {
-            signal = sys::parse_i64(&arg[1..]).unwrap_or(libc::SIGTERM as i64) as i32;
-            pattern_idx = 2;
+        if let Some(&first) = arg.first() {
+            if first == b'-' && arg.len() > 1 {
+                match parse_signal(&arg[1..]) {
+                    Some(sig) => signal = sig,
+                    None => {
+                        io::write_str(2, b"pkill: invalid signal\n");
+                        return 1;
+                    }
+                }
+                pattern_idx = 2;
+            }
         }
     }
 
     if pattern_idx >= argc { return 1; }
     let pattern = unsafe { get_arg(argv, pattern_idx).unwrap() };
+    if pattern.is_empty() { return 1; }
+    let my_pid = unsafe { libc::getpid() };
     let mut killed = 0;
 
     let fd = io::open(b"/proc", libc::O_RDONLY | libc::O_DIRECTORY, 0);
@@ -49,6 +100,11 @@ pub fn pkill(argc: i32, argv: *const *const u8) -> i32 {
             let name = unsafe { io::cstr_to_slice(dirent.d_name.as_ptr() as *const u8) };
 
             if !name.is_empty() && name[0] >= b'0' && name[0] <= b'9' {
+                let pid_opt = sys::parse_i64(name);
+                if pid_opt == Some(my_pid as i64) {
+                    offset += dirent.d_reclen as usize;
+                    continue;
+                }
                 let mut path = [0u8; 64];
                 let mut pi = 0;
                 for &c in b"/proc/" { path[pi] = c; pi += 1; }
@@ -64,8 +120,8 @@ pub fn pkill(argc: i32, argv: *const *const u8) -> i32 {
                     if cn > 0 {
                         let comm = &comm_buf[..cn as usize];
                         let comm = comm.split(|&c| c == b'\n').next().unwrap_or(comm);
-                        if comm.windows(pattern.len()).any(|w| w == pattern) {
-                            if let Some(pid) = sys::parse_i64(name) {
+                        if comm.len() >= pattern.len() && comm.windows(pattern.len()).any(|w| w == pattern) {
+                            if let Some(pid) = pid_opt {
                                 if unsafe { libc::kill(pid as i32, signal) } == 0 {
                                     killed += 1;
                                 }

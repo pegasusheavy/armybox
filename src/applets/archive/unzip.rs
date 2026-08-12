@@ -3,10 +3,30 @@
 //! List and extract compressed files from ZIP archives.
 
 use alloc::vec::Vec;
-use alloc::vec;
 use crate::io;
 use super::{get_arg, open_read, open_write_create, create_parent_dirs};
 use super::gzip::inflate;
+
+/// Returns `true` if `name` is unsafe to use as an extraction path:
+/// an absolute path, or a path containing a `..` component.
+///
+/// Detection is component-based (splitting on `/`), not a substring
+/// search, so it correctly rejects `../x`, `a/../b`, `a/..`, and `..`.
+fn is_unsafe_path(name: &[u8]) -> bool {
+    if name.starts_with(b"/") {
+        return true;
+    }
+    let mut start = 0;
+    for i in 0..=name.len() {
+        if i == name.len() || name[i] == b'/' {
+            if &name[start..i] == b".." {
+                return true;
+            }
+            start = i + 1;
+        }
+    }
+    false
+}
 
 /// unzip - extract files from ZIP archives
 ///
@@ -64,6 +84,7 @@ pub fn unzip(argc: i32, argv: *const *const u8) -> i32 {
 
     // Process ZIP local file headers
     let mut offset = 0usize;
+    let mut exit_code = 0;
 
     while offset + 30 <= data.len() {
         // Check for local file header signature
@@ -98,6 +119,12 @@ pub fn unzip(argc: i32, argv: *const *const u8) -> i32 {
             io::write_str(1, b"  ");
             io::write_all(1, filename);
             io::write_str(1, b"\n");
+        } else if is_unsafe_path(filename) {
+            io::write_str(2, b"unzip: skipping unsafe path\n");
+            exit_code = 1;
+        } else if filename.len() >= io::PATH_MAX {
+            io::write_str(2, b"unzip: path too long, skipping\n");
+            exit_code = 1;
         } else {
             io::write_str(1, b"  inflating: ");
             io::write_all(1, filename);
@@ -105,42 +132,50 @@ pub fn unzip(argc: i32, argv: *const *const u8) -> i32 {
 
             // Extract file
             if !filename.ends_with(b"/") {
-                create_parent_dirs(filename);
-                let mut path_z = vec![0u8; filename.len() + 1];
-                path_z[..filename.len()].copy_from_slice(filename);
+                if !create_parent_dirs(filename) {
+                    io::write_str(2, b"unzip: path too long, skipping\n");
+                    exit_code = 1;
+                } else {
+                    let out_fd = open_write_create(filename, 0o644);
+                    if out_fd >= 0 {
+                        let compressed_data = &data[data_start..data_end];
 
-                let out_fd = open_write_create(&path_z, 0o644);
-                if out_fd >= 0 {
-                    let compressed_data = &data[data_start..data_end];
-
-                    match compression {
-                        0 => {
-                            // Stored (no compression)
-                            io::write_all(out_fd, compressed_data);
+                        match compression {
+                            0 => {
+                                // Stored (no compression)
+                                io::write_all(out_fd, compressed_data);
+                            }
+                            8 => {
+                                // DEFLATE
+                                match inflate(compressed_data) {
+                                    Ok(decompressed) => {
+                                        io::write_all(out_fd, &decompressed);
+                                    }
+                                    Err(()) => {
+                                        io::write_str(2, b"unzip: invalid compressed data\n");
+                                        exit_code = 1;
+                                    }
+                                }
+                            }
+                            _ => {
+                                io::write_str(2, b"unzip: unsupported compression\n");
+                            }
                         }
-                        8 => {
-                            // DEFLATE
-                            let decompressed = inflate(compressed_data);
-                            io::write_all(out_fd, &decompressed);
-                        }
-                        _ => {
-                            io::write_str(2, b"unzip: unsupported compression\n");
-                        }
+                        io::close(out_fd);
+                    } else {
+                        exit_code = 1;
                     }
-                    io::close(out_fd);
                 }
             } else {
                 // Directory
-                let mut path_z = vec![0u8; filename.len() + 1];
-                path_z[..filename.len()].copy_from_slice(filename);
-                unsafe { libc::mkdir(path_z.as_ptr() as *const i8, 0o755) };
+                io::mkdir(filename, 0o755);
             }
         }
 
         offset = data_end;
     }
 
-    0
+    exit_code
 }
 
 #[cfg(test)]

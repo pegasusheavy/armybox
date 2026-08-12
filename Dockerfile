@@ -26,7 +26,7 @@ COPY tests/ tests/
 # Build the static binary
 RUN RUSTFLAGS="-C target-feature=+crt-static" \
     cargo build --release --target x86_64-unknown-linux-musl \
-    --no-default-features --features "coreutils,compression,network,process,system"
+    --features full
 
 # Strip the binary for smaller size
 RUN strip /build/target/x86_64-unknown-linux-musl/release/armybox
