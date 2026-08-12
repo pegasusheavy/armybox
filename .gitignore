@@ -33,3 +33,7 @@ Thumbs.db
 
 # Property test regressions
 *.proptest-regressions
+
+# Local dev files
+.claude-profile
+*.code-workspace
