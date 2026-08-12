@@ -7,6 +7,39 @@ use crate::io;
 use crate::sys;
 use crate::applets::get_arg;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+/// Hard cap on `-R` recursion depth so a pathologically deep tree stops with a
+/// diagnostic and a nonzero exit instead of overflowing the stack (SIGSEGV).
+const MAX_DEPTH: usize = 4096;
+
+/// Set when any stdout write fails (e.g. EPIPE from `ls -R | head`). Once set,
+/// listing stops and ls exits nonzero rather than silently reporting success.
+static WRITE_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Write bytes to stdout, recording any failure for the caller to observe.
+fn out(buf: &[u8]) {
+    if io::write_all(1, buf) < 0 {
+        WRITE_FAILED.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Write a number to stdout, recording any failure.
+fn out_num(n: u64) {
+    if io::write_num(1, n) < 0 {
+        WRITE_FAILED.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Whether a stdout write has failed since listing began.
+fn write_failed() -> bool {
+    WRITE_FAILED.load(Ordering::Relaxed)
+}
+
+/// Print a short usage summary (for `--help`).
+fn print_help() {
+    out(b"Usage: ls [-aAcdFhilpRrStu1] [file...]\n");
+}
 
 /// Parsed command-line options.
 #[derive(Clone, Copy)]
@@ -156,6 +189,18 @@ pub fn ls(argc: i32, argv: *const *const u8) -> i32 {
                 continue;
             }
             if !no_more_opts && arg.len() > 1 && arg[0] == b'-' {
+                // `--help` is a long option, not the short flags `-h -e -l -p`.
+                if arg == b"--help" {
+                    print_help();
+                    return 0;
+                }
+                // Any other `--long` option is unrecognized (usage error).
+                if arg[1] == b'-' {
+                    io::write_str(2, b"ls: unrecognized option '");
+                    io::write_all(2, arg);
+                    io::write_str(2, b"'\n");
+                    return 2;
+                }
                 for &c in &arg[1..] {
                     match c {
                         b'a' => flags.show_all = true,
@@ -227,13 +272,22 @@ pub fn ls(argc: i32, argv: *const *const u8) -> i32 {
     }
 
     for &d in &dirs {
+        // Stop on a stdout write failure (e.g. EPIPE) instead of exiting 0.
+        if write_failed() {
+            exit_code = 1;
+            break;
+        }
         if printed_any {
-            io::write_str(1, b"\n");
+            out(b"\n");
         }
         printed_any = true;
-        if list_dir(d, &flags, print_header) != 0 {
+        if list_dir(d, &flags, print_header, 0) != 0 {
             exit_code = 1;
         }
+    }
+
+    if write_failed() {
+        exit_code = 1;
     }
 
     exit_code
@@ -241,7 +295,16 @@ pub fn ls(argc: i32, argv: *const *const u8) -> i32 {
 
 /// Read, sort, and print the contents of a single directory.
 /// When `recursive`, descends into subdirectories afterward.
-fn list_dir(path: &[u8], flags: &Flags, print_header: bool) -> i32 {
+fn list_dir(path: &[u8], flags: &Flags, print_header: bool, depth: usize) -> i32 {
+    // Bound recursion depth so a pathologically deep tree stops with a
+    // diagnostic and a nonzero exit instead of overflowing the stack.
+    if depth >= MAX_DEPTH {
+        io::write_str(2, b"ls: '");
+        io::write_all(2, path);
+        io::write_str(2, b"': directory too deep\n");
+        return 1;
+    }
+
     let mut entries = match read_dir_entries(path, flags) {
         Some(e) => e,
         None => {
@@ -251,17 +314,26 @@ fn list_dir(path: &[u8], flags: &Flags, print_header: bool) -> i32 {
     };
 
     if print_header {
-        io::write_all(1, path);
-        io::write_str(1, b":\n");
+        out(path);
+        out(b":\n");
     }
 
     sort_entries(&mut entries, flags);
     print_entries(&entries, path, false, flags);
 
+    // A failed stdout write (e.g. EPIPE) stops listing immediately.
+    if write_failed() {
+        return 1;
+    }
+
     let mut exit_code = 0;
 
     if flags.recursive {
         for e in &entries {
+            if write_failed() {
+                exit_code = 1;
+                break;
+            }
             if !e.is_dir() {
                 continue;
             }
@@ -270,8 +342,8 @@ fn list_dir(path: &[u8], flags: &Flags, print_header: bool) -> i32 {
             }
             let mut child = [0u8; io::PATH_MAX];
             if let Some(len) = join_path(path, &e.name, &mut child) {
-                io::write_str(1, b"\n");
-                if list_dir(&child[..len], flags, true) != 0 {
+                out(b"\n");
+                if list_dir(&child[..len], flags, true, depth + 1) != 0 {
                     exit_code = 1;
                 }
             } else {
@@ -372,71 +444,71 @@ fn print_entries(entries: &[Entry], dir: &[u8], names_are_paths: bool, flags: &F
     for e in entries {
         if flags.long_format {
             print_long(e, dir, names_are_paths, flags);
-            io::write_str(1, b"\n");
+            out(b"\n");
         } else if flags.one_per_line {
             if flags.show_inode && e.have_stat {
-                io::write_num(1, e.ino);
-                io::write_str(1, b" ");
+                out_num(e.ino);
+                out(b" ");
             }
-            io::write_all(1, &e.name);
+            out(&e.name);
             write_suffix(e, flags);
-            io::write_str(1, b"\n");
+            out(b"\n");
         } else {
             // Columnar output.
             let entry_len = e.name.len() + 2;
             if col + entry_len > term_width && col > 0 {
-                io::write_str(1, b"\n");
+                out(b"\n");
                 col = 0;
             }
             if flags.show_inode && e.have_stat {
-                io::write_num(1, e.ino);
-                io::write_str(1, b" ");
+                out_num(e.ino);
+                out(b" ");
             }
-            io::write_all(1, &e.name);
+            out(&e.name);
             write_suffix(e, flags);
-            io::write_str(1, b"  ");
+            out(b"  ");
             col += entry_len;
         }
     }
 
     if !flags.one_per_line && !flags.long_format && col > 0 {
-        io::write_str(1, b"\n");
+        out(b"\n");
     }
 }
 
 /// Emit one long-format line for an entry (without trailing newline).
 fn print_long(e: &Entry, dir: &[u8], names_are_paths: bool, flags: &Flags) {
     if flags.show_inode && e.have_stat {
-        io::write_num(1, e.ino);
-        io::write_str(1, b" ");
+        out_num(e.ino);
+        out(b" ");
     }
 
     if !e.have_stat {
         // Fall back to just the name if we couldn't stat it.
-        io::write_all(1, &e.name);
+        out(&e.name);
         return;
     }
 
     let mut mode_buf = [0u8; 10];
     sys::format_mode(e.mode, &mut mode_buf);
-    io::write_all(1, &mode_buf);
-    io::write_str(1, b" ");
+    out(&mode_buf);
+    out(b" ");
 
     write_padded(e.nlink, 3);
-    io::write_str(1, b" ");
+    out(b" ");
     write_padded(e.uid, 5);
-    io::write_str(1, b" ");
+    out(b" ");
     write_padded(e.gid, 5);
-    io::write_str(1, b" ");
+    out(b" ");
 
     write_size(e.size, flags.human);
-    io::write_str(1, b" ");
+    out(b" ");
 
     let t = e.sort_time(flags);
     format_time(if t < 0 { 0 } else { t as u64 });
-    io::write_str(1, b" ");
+    out(b" ");
 
-    io::write_all(1, &e.name);
+    out(&e.name);
 
     // Symlink target.
     if (e.mode & libc::S_IFMT as u32) == libc::S_IFLNK as u32 {
@@ -449,11 +521,11 @@ fn print_long(e: &Entry, dir: &[u8], names_are_paths: bool, flags: &Flags) {
             join_path(dir, &e.name, &mut full)
         };
         if let Some(len) = target_path {
-            io::write_str(1, b" -> ");
+            out(b" -> ");
             let mut link_target = [0u8; io::PATH_MAX];
             let link_len = io::readlink(&full[..len], &mut link_target);
             if link_len > 0 {
-                io::write_all(1, &link_target[..link_len as usize]);
+                out(&link_target[..link_len as usize]);
             }
         }
     }
@@ -470,7 +542,7 @@ fn write_suffix(e: &Entry, flags: &Flags) {
         write_classify_suffix(e.mode);
     } else if flags.slash_dir {
         if (e.mode & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
-            io::write_str(1, b"/");
+            out(b"/");
         }
     }
 }
@@ -485,10 +557,10 @@ fn write_padded(n: u64, width: usize) {
     }
     let mut i = digits;
     while i < width {
-        io::write_str(1, b" ");
+        out(b" ");
         i += 1;
     }
-    io::write_num(1, n);
+    out_num(n);
 }
 
 /// Write a size, optionally human-readable (K/M/G/T), right-aligned.
@@ -502,7 +574,7 @@ fn write_size(size: i64, human: bool) {
     const UNITS: [&[u8]; 5] = [b"", b"K", b"M", b"G", b"T"];
     if s < 1024 {
         write_padded(s, 4);
-        io::write_str(1, b" ");
+        out(b" ");
         return;
     }
     let mut value = s;
@@ -521,11 +593,11 @@ fn write_size(size: i64, human: bool) {
     }
     let mut pad = 4;
     while pad > digits + 1 {
-        io::write_str(1, b" ");
+        out(b" ");
         pad -= 1;
     }
-    io::write_num(1, value);
-    io::write_all(1, UNITS[unit]);
+    out_num(value);
+    out(UNITS[unit]);
 }
 
 /// Join `dir` and `name` into `out` with bounds checking (PATH_MAX safe).
@@ -608,35 +680,35 @@ fn format_time(timestamp: u64) {
     let now = unsafe { libc::time(core::ptr::null_mut()) } as u64;
     let six_months_ago = now.saturating_sub(180 * secs_per_day);
 
-    io::write_all(1, MONTHS[month]);
-    io::write_str(1, b" ");
-    if day < 10 { io::write_str(1, b" "); }
-    io::write_num(1, day);
-    io::write_str(1, b" ");
+    out(MONTHS[month]);
+    out(b" ");
+    if day < 10 { out(b" "); }
+    out_num(day);
+    out(b" ");
 
     if timestamp < six_months_ago || timestamp > now {
         // Show year for old/future files
-        io::write_str(1, b" ");
-        io::write_num(1, year);
+        out(b" ");
+        out_num(year);
     } else {
         // Show time for recent files
-        if hour < 10 { io::write_str(1, b"0"); }
-        io::write_num(1, hour);
-        io::write_str(1, b":");
-        if minute < 10 { io::write_str(1, b"0"); }
-        io::write_num(1, minute);
+        if hour < 10 { out(b"0"); }
+        out_num(hour);
+        out(b":");
+        if minute < 10 { out(b"0"); }
+        out_num(minute);
     }
 }
 
 /// Write classify suffix (-F option)
 fn write_classify_suffix(mode: u32) {
     match mode & libc::S_IFMT as u32 {
-        m if m == libc::S_IFDIR as u32 => { io::write_str(1, b"/"); }
-        m if m == libc::S_IFLNK as u32 => { io::write_str(1, b"@"); }
-        m if m == libc::S_IFIFO as u32 => { io::write_str(1, b"|"); }
-        m if m == libc::S_IFSOCK as u32 => { io::write_str(1, b"="); }
+        m if m == libc::S_IFDIR as u32 => { out(b"/"); }
+        m if m == libc::S_IFLNK as u32 => { out(b"@"); }
+        m if m == libc::S_IFIFO as u32 => { out(b"|"); }
+        m if m == libc::S_IFSOCK as u32 => { out(b"="); }
         m if m == libc::S_IFREG as u32 => {
-            if mode & 0o111 != 0 { io::write_str(1, b"*"); }
+            if mode & 0o111 != 0 { out(b"*"); }
         }
         _ => {}
     }

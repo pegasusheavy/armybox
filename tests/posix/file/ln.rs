@@ -152,3 +152,29 @@ fn posix_ln_sf() {
     assert_success(&result);
     assert!(link.is_symlink());
 }
+
+/// POSIX: ln (hard link, no -s) into a directory target names the link
+/// after the source's basename and does not truncate the destination path.
+#[test]
+fn posix_ln_hard_link_to_directory() {
+    let dir = setup_test_env();
+    let target = dir.path().join("target");
+    let target_dir = dir.path().join("linkdir");
+    fs::write(&target, "content").unwrap();
+    fs::create_dir(&target_dir).unwrap();
+
+    let result = run(&[
+        "ln",
+        target.to_str().unwrap(),
+        target_dir.to_str().unwrap(),
+    ]);
+    assert_success(&result);
+    let link = target_dir.join("target");
+    assert!(link.exists());
+    assert_eq!(fs::read_to_string(&link).unwrap(), "content");
+
+    use std::os::unix::fs::MetadataExt;
+    let target_ino = fs::metadata(&target).unwrap().ino();
+    let link_ino = fs::metadata(&link).unwrap().ino();
+    assert_eq!(target_ino, link_ino);
+}

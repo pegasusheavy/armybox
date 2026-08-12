@@ -6,6 +6,10 @@ use crate::io;
 use crate::sys;
 use crate::applets::get_arg;
 
+/// Reject block sizes above this ceiling (1 GiB) so a value like `bs=1T`
+/// cannot trigger a multi-terabyte up-front allocation.
+const MAX_BLOCK_SIZE: u64 = 1 << 30;
+
 /// dd - convert and copy a file
 ///
 /// # Synopsis
@@ -54,18 +58,18 @@ pub fn dd(argc: i32, argv: *const *const u8) -> i32 {
                 of_path = Some(&arg[3..]);
             } else if arg.starts_with(b"bs=") {
                 match sys::parse_size(&arg[3..]) {
-                    Some(v) => bs = Some(v as usize),
-                    None => return dd_bad_operand(arg),
+                    Some(v) if v <= MAX_BLOCK_SIZE => bs = Some(v as usize),
+                    _ => return dd_bad_operand(arg),
                 }
             } else if arg.starts_with(b"ibs=") {
                 match sys::parse_size(&arg[4..]) {
-                    Some(v) => ibs = v as usize,
-                    None => return dd_bad_operand(arg),
+                    Some(v) if v <= MAX_BLOCK_SIZE => ibs = v as usize,
+                    _ => return dd_bad_operand(arg),
                 }
             } else if arg.starts_with(b"obs=") {
                 match sys::parse_size(&arg[4..]) {
-                    Some(v) => obs = v as usize,
-                    None => return dd_bad_operand(arg),
+                    Some(v) if v <= MAX_BLOCK_SIZE => obs = v as usize,
+                    _ => return dd_bad_operand(arg),
                 }
             } else if arg.starts_with(b"count=") {
                 match sys::parse_size(&arg[6..]) {
@@ -216,7 +220,10 @@ pub fn dd(argc: i32, argv: *const *const u8) -> i32 {
                         out_partial += 1;
                     }
                 }
-                // Without sync, skip the bad block entirely and retry.
+                // Advance past the unreadable block before retrying (GNU
+                // dd behavior). Without this the read offset never moves
+                // and a persistent error spins forever.
+                io::lseek(in_fd, ibs as i64, libc::SEEK_CUR);
                 continue 'copy;
             }
 

@@ -256,10 +256,8 @@ fn posix_cp_no_clobber() {
     fs::write(&src, "new").unwrap();
     fs::write(&dst, "old").unwrap();
 
-    // -n may not be POSIX but is commonly supported
+    // -n never overwrites an existing destination and is not an error.
     let result = run(&["cp", "-n", src.to_str().unwrap(), dst.to_str().unwrap()]);
-    // If -n is supported, dest should be unchanged
-    if result.0 == 0 {
-        assert_eq!(fs::read_to_string(&dst).unwrap(), "old");
-    }
+    assert_success(&result);
+    assert_eq!(fs::read_to_string(&dst).unwrap(), "old");
 }

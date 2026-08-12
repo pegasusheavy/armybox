@@ -74,9 +74,12 @@ fn posix_sort_separator() {
 /// POSIX: sort -b ignore leading blanks
 #[test]
 fn posix_sort_ignore_blanks() {
-    let result = run_with_stdin(&["sort", "-b"], b"  apple\n banana\ncherry");
+    // Without -b, leading blanks participate in the byte comparison, so
+    // "  cherry" < " banana" < "apple". With -b, blanks are skipped and the
+    // lines sort by their first non-blank character: apple < banana < cherry.
+    let result = run_with_stdin(&["sort", "-b"], b"  cherry\n banana\napple");
     assert_success(&result);
-    // Leading blanks should be ignored for comparison
+    assert_eq!(result.1, "apple\n banana\n  cherry\n");
 }
 
 /// POSIX: sort -c check sorted
@@ -164,7 +167,41 @@ fn posix_sort_stable() {
 /// POSIX: sort key with start and end positions
 #[test]
 fn posix_sort_key_positions() {
+    // -k1.2,1.3 compares characters 2 through 3 of field 1 (the whole line,
+    // since there's no field separator here). All three lines are only two
+    // characters long, so the effective key is just the second character.
     let result = run_with_stdin(&["sort", "-k1.2,1.3"], b"ab\naa\nac");
     assert_success(&result);
-    // Sorting by second character only
+    assert_eq!(result.1, "aa\nab\nac\n");
+}
+
+/// POSIX: sort -k with a character-offset range spanning more than one
+/// character within the key field.
+#[test]
+fn posix_sort_key_char_offset() {
+    // Key is characters 2..3 of the (whole-line) field: "34", "12", "90".
+    let result = run_with_stdin(&["sort", "-k1.2,1.3"], b"a34z\nb12z\nc90z");
+    assert_success(&result);
+    assert_eq!(result.1, "b12z\na34z\nc90z\n");
+}
+
+/// POSIX: sort -o writes sorted output to the given file, independent of
+/// any other options in effect.
+#[test]
+fn posix_sort_output_file() {
+    let dir = setup_test_env();
+    let input = dir.path().join("nums.txt");
+    let output = dir.path().join("sorted.txt");
+    fs::write(&input, "10\n2\n33\n1").unwrap();
+
+    let result = run(&[
+        "sort",
+        "-n",
+        "-o",
+        output.to_str().unwrap(),
+        input.to_str().unwrap(),
+    ]);
+    assert_success(&result);
+    assert_eq!(result.1, "");
+    assert_eq!(fs::read_to_string(&output).unwrap(), "1\n2\n10\n33\n");
 }

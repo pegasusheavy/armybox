@@ -209,7 +209,39 @@ fn posix_ls_human_readable() {
 
     let result = run_in_dir(&["ls", "-lh"], dir.path());
     assert_success(&result);
-    // Human-readable should show K, M, G suffixes
+    // 10000 bytes rounds up to a 10K human-readable size.
+    assert!(result.1.contains("10K"));
+    assert!(result.1.contains("largefile"));
+}
+
+/// POSIX: ls -u selects access time for -t sorting / -l display
+#[test]
+fn posix_ls_atime() {
+    let dir = setup_test_env();
+    fs::write(dir.path().join("one"), "a").unwrap();
+    fs::write(dir.path().join("two"), "b").unwrap();
+
+    // -u must be accepted and combine with -t; atime ordering itself depends on
+    // the filesystem's atime policy, so we assert both entries are listed.
+    let result = run_in_dir(&["ls", "-u", "-t"], dir.path());
+    assert_success(&result);
+    assert!(result.1.contains("one"));
+    assert!(result.1.contains("two"));
+}
+
+/// ls --help prints usage and exits 0 (not parsed as -h -e -l -p)
+#[test]
+fn posix_ls_help() {
+    let result = run(&["ls", "--help"]);
+    assert_eq!(result.0, 0);
+    assert!(result.1.contains("Usage"));
+}
+
+/// ls rejects an unknown --long option with exit status 2
+#[test]
+fn posix_ls_unknown_long_option() {
+    let result = run(&["ls", "--bogus"]);
+    assert_eq!(result.0, 2);
 }
 
 /// POSIX: ls multiple directories

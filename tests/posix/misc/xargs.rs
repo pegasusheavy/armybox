@@ -94,5 +94,40 @@ fn posix_xargs_prompt_flag() {
 fn posix_xargs_quoted() {
     let result = run_with_stdin(&["xargs", "echo"], b"'hello world'");
     assert_success(&result);
-    // Quotes should be processed
+    // Quotes are stripped and the quoted text becomes a single argument.
+    assert_eq!(result.1.trim(), "hello world");
+}
+
+/// GNU xargs: `-d` sets a custom, single-character input delimiter.
+#[test]
+fn posix_xargs_custom_delimiter() {
+    let result = run_with_stdin(&["xargs", "-d", ":", "echo"], b"a:b:c");
+    assert_success(&result);
+    assert_eq!(result.1.trim(), "a b c");
+}
+
+/// GNU xargs: `-P2 -n1` runs up to two invocations in parallel, one item each.
+#[test]
+fn posix_xargs_parallel() {
+    let result = run_with_stdin(&["xargs", "-P2", "-n1", "echo"], b"a\nb\nc");
+    assert_eq!(result.0, 0);
+    assert!(result.1.contains('a'));
+    assert!(result.1.contains('b'));
+    assert!(result.1.contains('c'));
+}
+
+/// GNU xargs: an empty `-I` replstr is a usage error (exit status 2), not a crash.
+#[test]
+fn posix_xargs_empty_replstr_is_usage_error() {
+    let result = run_with_stdin(&["xargs", "-I", "", "echo"], b"hello");
+    assert_eq!(result.0, 2);
+}
+
+/// GNU xargs: `-I` replaces every occurrence of REPLSTR in an argument, not
+/// just the first.
+#[test]
+fn posix_xargs_replace_all_occurrences() {
+    let result = run_with_stdin(&["xargs", "-I{}", "echo", "{}-{}"], b"x");
+    assert_success(&result);
+    assert_eq!(result.1.trim(), "x-x");
 }

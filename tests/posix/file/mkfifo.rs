@@ -30,6 +30,19 @@ fn posix_mkfifo_mode() {
     assert_eq!(perms.mode() & 0o777, 0o644);
 }
 
+/// POSIX: mkfifo -m with a symbolic mode clause
+#[test]
+fn posix_mkfifo_symbolic_mode() {
+    let dir = setup_test_env();
+    let fifo = dir.path().join("testfifo");
+
+    let result = run(&["mkfifo", "-m", "u=rw,g=r,o=", fifo.to_str().unwrap()]);
+    assert_success(&result);
+
+    let perms = fs::metadata(&fifo).unwrap().permissions();
+    assert_eq!(perms.mode() & 0o777, 0o640);
+}
+
 /// POSIX: Exit status 0 on success
 #[test]
 fn posix_mkfifo_exit_success() {

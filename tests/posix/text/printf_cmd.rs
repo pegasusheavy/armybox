@@ -122,3 +122,35 @@ fn posix_printf_left_justify() {
     assert_success(&result);
     assert_eq!(result.1, "42   |\n");
 }
+
+/// POSIX: printf %.2f float with precision
+#[test]
+fn posix_printf_float_precision() {
+    let result = run(&["printf", "%.2f\n", "3.14159"]);
+    assert_success(&result);
+    assert_eq!(result.1, "3.14\n");
+}
+
+/// POSIX: printf %b interprets backslash escapes in its argument
+#[test]
+fn posix_printf_b_escape() {
+    let result = run(&["printf", "%b", "a\\tb\\n"]);
+    assert_success(&result);
+    assert_eq!(result.1, "a\tb\n");
+}
+
+/// POSIX: printf %b stops all output at \c
+#[test]
+fn posix_printf_b_c_stops_output() {
+    let result = run(&["printf", "%b|after", "before\\cignored"]);
+    assert_success(&result);
+    assert_eq!(result.1, "before");
+}
+
+/// POSIX: printf %d with a non-numeric argument fails with diagnostic
+#[test]
+fn posix_printf_d_invalid_numeric() {
+    let result = run(&["printf", "%d\n", "abc"]);
+    assert_eq!(result.0, 1);
+    assert!(result.2.contains("numeric"), "stderr was: {}", result.2);
+}

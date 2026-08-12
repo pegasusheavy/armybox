@@ -45,6 +45,16 @@ pub fn nl(argc: i32, argv: *const *const u8) -> i32 {
     let mut i = 1;
     while i < argc {
         if let Some(arg) = unsafe { get_arg(argv, i) } {
+            if arg == b"--help" {
+                io::write_str(1, b"usage: nl [-b type] [-n format] [-w width] [-s sep] [-v start] [-i incr] [file...]\n");
+                return 0;
+            }
+            if arg.len() > 2 && arg.starts_with(b"--") {
+                io::write_str(2, b"nl: unrecognized option '");
+                io::write_all(2, arg);
+                io::write_str(2, b"'\n");
+                return 2;
+            }
             if arg.len() > 1 && arg[0] == b'-' {
                 let opt = arg[1];
                 let value: Option<&[u8]> = if arg.len() > 2 {
@@ -64,7 +74,15 @@ pub fn nl(argc: i32, argv: *const *const u8) -> i32 {
                     }
                     b'w' => {
                         if let Some(v) = value {
-                            width = sys::parse_u64(v).unwrap_or(6) as usize;
+                            match sys::parse_u64(v) {
+                                Some(n) => width = n as usize,
+                                None => {
+                                    io::write_str(2, b"nl: invalid line number field width: ");
+                                    io::write_all(2, v);
+                                    io::write_str(2, b"\n");
+                                    return 2;
+                                }
+                            }
                         }
                     }
                     b's' => {
@@ -72,12 +90,28 @@ pub fn nl(argc: i32, argv: *const *const u8) -> i32 {
                     }
                     b'v' => {
                         if let Some(v) = value {
-                            start = sys::parse_u64(v).unwrap_or(1);
+                            match sys::parse_u64(v) {
+                                Some(n) => start = n,
+                                None => {
+                                    io::write_str(2, b"nl: invalid starting line number: ");
+                                    io::write_all(2, v);
+                                    io::write_str(2, b"\n");
+                                    return 2;
+                                }
+                            }
                         }
                     }
                     b'i' => {
                         if let Some(v) = value {
-                            incr = sys::parse_u64(v).unwrap_or(1);
+                            match sys::parse_u64(v) {
+                                Some(n) => incr = n,
+                                None => {
+                                    io::write_str(2, b"nl: invalid line number increment: ");
+                                    io::write_all(2, v);
+                                    io::write_str(2, b"\n");
+                                    return 2;
+                                }
+                            }
                         }
                     }
                     b'n' => {
@@ -117,8 +151,7 @@ pub fn nl(argc: i32, argv: *const *const u8) -> i32 {
 
                 if fd < 0 {
                     io::write_str(2, b"nl: ");
-                    io::write_all(2, path);
-                    io::write_str(2, b": No such file or directory\n");
+                    sys::perror(path);
                     had_error = true;
                     continue;
                 }
@@ -144,12 +177,18 @@ pub fn nl(argc: i32, argv: *const *const u8) -> i32 {
             };
 
             if numbered {
-                write_number(width, counter, zero_pad, left_justify);
-                io::write_all(1, sep);
+                if !write_number(width, counter, zero_pad, left_justify)
+                    || io::write_all(1, sep) < 0
+                {
+                    io::write_str(2, b"nl: write error\n");
+                    return 1;
+                }
                 counter = counter.wrapping_add(incr);
             }
-            io::write_all(1, seg);
-            io::write_str(1, b"\n");
+            if io::write_all(1, seg) < 0 || io::write_str(1, b"\n") < 0 {
+                io::write_str(2, b"nl: write error\n");
+                return 1;
+            }
         }
 
         if had_error { return 1; }
@@ -165,7 +204,9 @@ pub fn nl(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-fn write_number(width: usize, num: u64, zero_pad: bool, left_justify: bool) {
+/// Write a line number in the requested field width and justification.
+/// Returns false if any write fails.
+fn write_number(width: usize, num: u64, zero_pad: bool, left_justify: bool) -> bool {
     let mut buf = [0u8; 20];
     let mut i = buf.len();
     let mut n = num;
@@ -185,13 +226,18 @@ fn write_number(width: usize, num: u64, zero_pad: bool, left_justify: bool) {
     let pad = width.saturating_sub(digits.len());
 
     if left_justify {
-        io::write_all(1, digits);
-        for _ in 0..pad { io::write_str(1, b" "); }
+        if io::write_all(1, digits) < 0 { return false; }
+        for _ in 0..pad {
+            if io::write_str(1, b" ") < 0 { return false; }
+        }
     } else {
         let pad_char: u8 = if zero_pad { b'0' } else { b' ' };
-        for _ in 0..pad { io::write_all(1, &[pad_char]); }
-        io::write_all(1, digits);
+        for _ in 0..pad {
+            if io::write_all(1, &[pad_char]) < 0 { return false; }
+        }
+        if io::write_all(1, digits) < 0 { return false; }
     }
+    true
 }
 
 #[cfg(test)]

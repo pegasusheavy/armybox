@@ -46,6 +46,11 @@ struct Cfg {
     maxdepth: usize,
 }
 
+/// Hard cap on real directory recursion depth. Symlink cycles are already
+/// avoided via `lstat`; this only bounds genuinely deep trees so a pathological
+/// hierarchy can't exhaust the stack and crash (SIGSEGV).
+const MAX_DEPTH: usize = 4096;
+
 /// find - search for files in a directory hierarchy
 ///
 /// # Synopsis
@@ -129,14 +134,26 @@ pub fn find(argc: i32, argv: *const *const u8) -> i32 {
     };
 
     let mut ret = 0i32;
+    let mut abort = false;
     for p in &paths {
-        process(p, basename(p), 0, &cfg, &expr, &mut ret);
+        if abort {
+            break;
+        }
+        process(p, basename(p), 0, &cfg, &expr, &mut ret, &mut abort);
     }
     ret
 }
 
 /// Recursively process a single path entry.
-fn process(path: &[u8], name: &[u8], depth: usize, cfg: &Cfg, expr: &Expr, ret: &mut i32) {
+fn process(
+    path: &[u8],
+    name: &[u8],
+    depth: usize,
+    cfg: &Cfg,
+    expr: &Expr,
+    ret: &mut i32,
+    abort: &mut bool,
+) {
     let mut st = io::stat_zeroed();
     if io::lstat(path, &mut st) < 0 {
         diag(path);
@@ -145,25 +162,39 @@ fn process(path: &[u8], name: &[u8], depth: usize, cfg: &Cfg, expr: &Expr, ret: 
     }
 
     let is_dir = (st.st_mode & libc::S_IFMT) == libc::S_IFDIR;
-    let can_descend = is_dir && depth < cfg.maxdepth;
+    let mut can_descend = is_dir && depth < cfg.maxdepth;
+
+    // Bound genuine recursion depth so a pathologically deep tree stops the
+    // descent with a diagnostic and a nonzero exit instead of overflowing the
+    // stack.
+    if can_descend && depth >= MAX_DEPTH {
+        io::write_str(2, b"find: '");
+        io::write_all(2, path);
+        io::write_str(2, b"': directory too deep\n");
+        *ret = 1;
+        can_descend = false;
+    }
 
     if cfg.depth_first {
         if can_descend {
-            descend(path, depth, cfg, expr, ret);
+            descend(path, depth, cfg, expr, ret, abort);
+        }
+        if *abort {
+            return;
         }
         let mut prune = false;
-        eval(expr, path, name, &st, &mut prune, ret);
+        eval(expr, path, name, &st, &mut prune, ret, abort);
     } else {
         let mut prune = false;
-        eval(expr, path, name, &st, &mut prune, ret);
-        if can_descend && !prune {
-            descend(path, depth, cfg, expr, ret);
+        eval(expr, path, name, &st, &mut prune, ret, abort);
+        if can_descend && !prune && !*abort {
+            descend(path, depth, cfg, expr, ret, abort);
         }
     }
 }
 
 /// Read a directory and process each child.
-fn descend(path: &[u8], depth: usize, cfg: &Cfg, expr: &Expr, ret: &mut i32) {
+fn descend(path: &[u8], depth: usize, cfg: &Cfg, expr: &Expr, ret: &mut i32, abort: &mut bool) {
     let fd = io::open(path, libc::O_RDONLY | libc::O_DIRECTORY, 0);
     if fd < 0 {
         diag(path);
@@ -198,10 +229,16 @@ fn descend(path: &[u8], depth: usize, cfg: &Cfg, expr: &Expr, ret: &mut i32) {
                 }
                 child.extend_from_slice(name);
 
-                process(&child, name, depth + 1, cfg, expr, ret);
+                process(&child, name, depth + 1, cfg, expr, ret, abort);
+                if *abort {
+                    break;
+                }
             }
 
             offset += dirent.d_reclen as usize;
+        }
+        if *abort {
+            break;
         }
     }
     io::close(fd);
@@ -216,24 +253,25 @@ fn eval(
     st: &libc::stat,
     prune: &mut bool,
     ret: &mut i32,
+    abort: &mut bool,
 ) -> bool {
     match expr {
         Expr::And(a, b) => {
-            if eval(a, path, name, st, prune, ret) {
-                eval(b, path, name, st, prune, ret)
+            if eval(a, path, name, st, prune, ret, abort) {
+                eval(b, path, name, st, prune, ret, abort)
             } else {
                 false
             }
         }
         Expr::Or(a, b) => {
-            if eval(a, path, name, st, prune, ret) {
+            if eval(a, path, name, st, prune, ret, abort) {
                 true
             } else {
-                eval(b, path, name, st, prune, ret)
+                eval(b, path, name, st, prune, ret, abort)
             }
         }
-        Expr::Not(a) => !eval(a, path, name, st, prune, ret),
-        Expr::Pred(p) => eval_pred(p, path, name, st, prune, ret),
+        Expr::Not(a) => !eval(a, path, name, st, prune, ret, abort),
+        Expr::Pred(p) => eval_pred(p, path, name, st, prune, ret, abort),
     }
 }
 
@@ -244,14 +282,19 @@ fn eval_pred(
     st: &libc::stat,
     prune: &mut bool,
     ret: &mut i32,
+    abort: &mut bool,
 ) -> bool {
     match p {
         Pred::True => true,
         Pred::Name(pat) => glob_match(pat, name),
         Pred::Type(c) => type_match(*c, st.st_mode),
         Pred::Print => {
-            io::write_all(1, path);
-            io::write_str(1, b"\n");
+            // A failed stdout write (e.g. EPIPE from `find | head`) must set a
+            // nonzero exit and stop the traversal rather than silently exit 0.
+            if io::write_all(1, path) < 0 || io::write_str(1, b"\n") < 0 {
+                *ret = 1;
+                *abort = true;
+            }
             true
         }
         Pred::Prune => {
@@ -402,47 +445,69 @@ fn parse_usize(b: &[u8]) -> Option<usize> {
 // Glob matching (shell filename patterns: '*', '?', '[..]').
 // ---------------------------------------------------------------------------
 
+/// Iterative two-pointer glob matcher. A single remembered backtrack point for
+/// the most recent `*` collapses the search to O(pat * name) time, so adversarial
+/// patterns like `a*a*a*...` can never trigger catastrophic (exponential)
+/// backtracking as the previous recursive matcher could.
 fn glob_match(pat: &[u8], name: &[u8]) -> bool {
-    if pat.is_empty() {
-        return name.is_empty();
+    let mut p = 0usize; // current index into pat
+    let mut s = 0usize; // current index into name
+    let mut star_p: Option<usize> = None; // pat index of the last '*' seen
+    let mut star_s = 0usize; // name index when that '*' was matched
+
+    while s < name.len() {
+        let mut matched_here = false;
+        let mut pat_adv = 0usize;
+        if p < pat.len() {
+            match pat[p] {
+                b'*' => {
+                    // Record the backtrack point and consume the '*'; it can
+                    // still absorb more of `name` on a later mismatch.
+                    star_p = Some(p);
+                    star_s = s;
+                    p += 1;
+                    continue;
+                }
+                b'?' => {
+                    matched_here = true;
+                    pat_adv = 1;
+                }
+                b'[' => match match_bracket(&pat[p..], name[s]) {
+                    Some((m, next)) => {
+                        matched_here = m;
+                        pat_adv = next;
+                    }
+                    None => {
+                        // No closing bracket — treat '[' as a literal.
+                        matched_here = name[s] == b'[';
+                        pat_adv = 1;
+                    }
+                },
+                c => {
+                    matched_here = name[s] == c;
+                    pat_adv = 1;
+                }
+            }
+        }
+
+        if matched_here {
+            p += pat_adv;
+            s += 1;
+        } else if let Some(sp) = star_p {
+            // Backtrack: let the last '*' swallow one more character.
+            p = sp + 1;
+            star_s += 1;
+            s = star_s;
+        } else {
+            return false;
+        }
     }
-    match pat[0] {
-        b'*' => {
-            let rest = &pat[1..];
-            let mut k = 0;
-            loop {
-                if glob_match(rest, &name[k..]) {
-                    return true;
-                }
-                if k >= name.len() {
-                    return false;
-                }
-                k += 1;
-            }
-        }
-        b'?' => {
-            if name.is_empty() {
-                false
-            } else {
-                glob_match(&pat[1..], &name[1..])
-            }
-        }
-        b'[' => {
-            if name.is_empty() {
-                return false;
-            }
-            match match_bracket(pat, name[0]) {
-                Some((matched, next)) => {
-                    matched && glob_match(&pat[next..], &name[1..])
-                }
-                None => {
-                    // No closing bracket — treat '[' as a literal.
-                    name[0] == b'[' && glob_match(&pat[1..], &name[1..])
-                }
-            }
-        }
-        c => !name.is_empty() && name[0] == c && glob_match(&pat[1..], &name[1..]),
+
+    // Name exhausted: any remaining pattern must be all '*' to match.
+    while p < pat.len() && pat[p] == b'*' {
+        p += 1;
     }
+    p == pat.len()
 }
 
 /// Match a `[..]` bracket expression against `ch`.

@@ -515,7 +515,11 @@ pub fn printf(argc: i32, argv: *const *const u8) -> i32 {
         }
     }
 
-    io::write_all(1, &out);
+    let w = io::write_all(1, &out);
+    if w < 0 || (w as usize) < out.len() {
+        io::write_str(2, b"printf: write error\n");
+        return 1;
+    }
     code
 }
 

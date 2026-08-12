@@ -4,6 +4,7 @@
 //! Reference: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/paste.html
 
 use crate::io;
+use crate::sys;
 use crate::applets::get_arg;
 
 /// paste - merge lines of files
@@ -40,6 +41,16 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
         let mut i = 1;
         while i < argc {
             if let Some(arg) = unsafe { get_arg(argv, i) } {
+                if arg == b"--help" {
+                    io::write_str(1, b"usage: paste [-s] [-d list] file...\n");
+                    return 0;
+                }
+                if arg.len() > 2 && arg.starts_with(b"--") {
+                    io::write_str(2, b"paste: unrecognized option '");
+                    io::write_all(2, arg);
+                    io::write_str(2, b"'\n");
+                    return 2;
+                }
                 if arg == b"-" {
                     files.push(b"-");
                 } else if arg.starts_with(b"-") && arg.len() > 1 {
@@ -88,8 +99,7 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
 
                 if fd < 0 {
                     io::write_str(2, b"paste: ");
-                    io::write_all(2, file);
-                    io::write_str(2, b": No such file or directory\n");
+                    sys::perror(file);
                     had_error = true;
                     continue;
                 }
@@ -99,12 +109,19 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
 
                 let lines = split_lines(&content);
                 for (idx, line) in lines.iter().enumerate() {
-                    if idx > 0 {
-                        write_delim(&delims, idx - 1);
+                    if idx > 0 && !write_delim(&delims, idx - 1) {
+                        io::write_str(2, b"paste: write error\n");
+                        return 1;
                     }
-                    io::write_all(1, line);
+                    if io::write_all(1, line) < 0 {
+                        io::write_str(2, b"paste: write error\n");
+                        return 1;
+                    }
                 }
-                io::write_str(1, b"\n");
+                if io::write_str(1, b"\n") < 0 {
+                    io::write_str(2, b"paste: write error\n");
+                    return 1;
+                }
             }
         } else {
             let mut contents: Vec<Vec<u8>> = Vec::new();
@@ -118,8 +135,7 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
 
                 if fd < 0 {
                     io::write_str(2, b"paste: ");
-                    io::write_all(2, file);
-                    io::write_str(2, b": No such file or directory\n");
+                    sys::perror(file);
                     had_error = true;
                     contents.push(Vec::new());
                     continue;
@@ -135,14 +151,19 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
 
             for line_idx in 0..max_lines {
                 for (file_idx, lines) in file_lines.iter().enumerate() {
-                    if file_idx > 0 {
-                        write_delim(&delims, file_idx - 1);
+                    if file_idx > 0 && !write_delim(&delims, file_idx - 1) {
+                        io::write_str(2, b"paste: write error\n");
+                        return 1;
                     }
-                    if line_idx < lines.len() {
-                        io::write_all(1, &lines[line_idx]);
+                    if line_idx < lines.len() && io::write_all(1, &lines[line_idx]) < 0 {
+                        io::write_str(2, b"paste: write error\n");
+                        return 1;
                     }
                 }
-                io::write_str(1, b"\n");
+                if io::write_str(1, b"\n") < 0 {
+                    io::write_str(2, b"paste: write error\n");
+                    return 1;
+                }
             }
         }
 
@@ -161,12 +182,13 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
 /// Write the cycling delimiter for gap index `gap` (0-based gap between
 /// consecutive fields). A marker byte of 0 means "no delimiter".
 #[cfg(feature = "alloc")]
-fn write_delim(delims: &[u8], gap: usize) {
-    if delims.is_empty() { return; }
+fn write_delim(delims: &[u8], gap: usize) -> bool {
+    if delims.is_empty() { return true; }
     let d = delims[gap % delims.len()];
     if d != 0 {
-        io::write_all(1, &[d]);
+        return io::write_all(1, &[d]) >= 0;
     }
+    true
 }
 
 /// Parse a `-d` delimiter list, expanding `\n`, `\t`, `\\`, and `\0`

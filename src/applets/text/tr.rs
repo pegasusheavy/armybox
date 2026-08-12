@@ -40,6 +40,16 @@ pub fn tr(argc: i32, argv: *const *const u8) -> i32 {
 
         for i in 1..argc {
             if let Some(arg) = unsafe { get_arg(argv, i) } {
+                if arg == b"--help" {
+                    io::write_str(1, b"usage: tr [-cCdst] string1 [string2]\n");
+                    return 0;
+                }
+                if arg.len() > 2 && arg.starts_with(b"--") {
+                    io::write_str(2, b"tr: unrecognized option '");
+                    io::write_all(2, arg);
+                    io::write_str(2, b"'\n");
+                    return 2;
+                }
                 if arg.len() > 1 && arg[0] == b'-' {
                     if has_opt(arg, b'd') { delete = true; }
                     if has_opt(arg, b's') { squeeze = true; }
@@ -165,8 +175,10 @@ pub fn tr(argc: i32, argv: *const *const u8) -> i32 {
             }
         }
 
-        // Per-byte processing (uses only pre-built tables).
-        let process = |c: u8, last_out: &mut i32| {
+        // Per-byte processing (uses only pre-built tables). Transformed
+        // bytes are appended to an output buffer that is flushed in blocks,
+        // rather than issuing one write syscall per byte.
+        let process = |c: u8, out_buf: &mut alloc::vec::Vec<u8>, last_out: &mut i32| {
             if delete && delete_set[c as usize] {
                 return;
             }
@@ -174,7 +186,7 @@ pub fn tr(argc: i32, argv: *const *const u8) -> i32 {
             if squeeze && squeeze_set[out as usize] && *last_out == out as i32 {
                 return;
             }
-            io::write_all(1, &[out]);
+            out_buf.push(out);
             *last_out = out as i32;
         };
 
@@ -182,6 +194,7 @@ pub fn tr(argc: i32, argv: *const *const u8) -> i32 {
         // trailing newline is added; output is exactly the transformed
         // input bytes, matching POSIX tr behavior). ---
         let mut buf = [0u8; 4096];
+        let mut out_buf: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(4096);
         let mut last_out: i32 = -1;
 
         loop {
@@ -191,8 +204,20 @@ pub fn tr(argc: i32, argv: *const *const u8) -> i32 {
             }
             let n = n as usize;
             for k in 0..n {
-                process(buf[k], &mut last_out);
+                process(buf[k], &mut out_buf, &mut last_out);
             }
+            if out_buf.len() >= 4096 {
+                if io::write_all(1, &out_buf) < 0 {
+                    io::write_str(2, b"tr: write error\n");
+                    return 1;
+                }
+                out_buf.clear();
+            }
+        }
+
+        if !out_buf.is_empty() && io::write_all(1, &out_buf) < 0 {
+            io::write_str(2, b"tr: write error\n");
+            return 1;
         }
 
         return 0;

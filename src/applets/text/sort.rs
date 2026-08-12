@@ -4,6 +4,7 @@
 //! Reference: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 
 use crate::io;
+use crate::sys;
 use crate::applets::get_arg;
 use core::cmp::Ordering;
 
@@ -35,14 +36,18 @@ fn parse_pos(s: &[u8]) -> (usize, usize) {
     let mut i = 0;
     let mut f: usize = 0;
     while i < s.len() && s[i].is_ascii_digit() {
-        f = f * 10 + (s[i] - b'0') as usize;
+        f = f
+            .saturating_mul(10)
+            .saturating_add((s[i] - b'0') as usize);
         i += 1;
     }
     let mut c: usize = 0;
     if i < s.len() && s[i] == b'.' {
         i += 1;
         while i < s.len() && s[i].is_ascii_digit() {
-            c = c * 10 + (s[i] - b'0') as usize;
+            c = c
+                .saturating_mul(10)
+                .saturating_add((s[i] - b'0') as usize);
             i += 1;
         }
     }
@@ -147,6 +152,21 @@ fn fold_cmp(a: &[u8], b: &[u8]) -> Ordering {
     a.len().cmp(&b.len())
 }
 
+fn print_usage() {
+    io::write_str(1, b"Usage: sort [-cmnrufb] [-o output] [-t char] [-k keydef] [file...]\n");
+    io::write_str(1, b"Sort, merge, or sequence check text files.\n\n");
+    io::write_str(1, b"  -n            compare according to string numerical value\n");
+    io::write_str(1, b"  -r            reverse the result of comparisons\n");
+    io::write_str(1, b"  -u            output only the first of an equal run\n");
+    io::write_str(1, b"  -b            ignore leading blanks\n");
+    io::write_str(1, b"  -f            fold lowercase to uppercase\n");
+    io::write_str(1, b"  -c            check whether input is already sorted\n");
+    io::write_str(1, b"  -k KEYDEF     sort key definition\n");
+    io::write_str(1, b"  -t CHAR       field separator character\n");
+    io::write_str(1, b"  -o FILE       write output to FILE\n");
+    io::write_str(1, b"  --help        display this help and exit\n");
+}
+
 /// sort - sort lines of text files
 ///
 /// # Synopsis
@@ -193,6 +213,16 @@ pub fn sort(argc: i32, argv: *const *const u8) -> i32 {
                 Some(a) => a,
                 None => { i += 1; continue; }
             };
+            if arg == b"--help" {
+                print_usage();
+                return 0;
+            }
+            if arg.len() > 2 && arg[0] == b'-' && arg[1] == b'-' {
+                io::write_str(2, b"sort: unrecognized option '");
+                io::write_all(2, arg);
+                io::write_str(2, b"'\n");
+                return 2;
+            }
             if arg.len() >= 2 && arg[0] == b'-' {
                 let mut j = 1;
                 while j < arg.len() {
@@ -258,9 +288,8 @@ pub fn sort(argc: i32, argv: *const *const u8) -> i32 {
                 } else {
                     let fd = io::open(path, libc::O_RDONLY, 0);
                     if fd < 0 {
-                        io::write_str(2, b"sort: cannot open ");
-                        io::write_all(2, path);
-                        io::write_str(2, b"\n");
+                        io::write_str(2, b"sort: ");
+                        sys::perror(path);
                         return 1;
                     }
                     buffers.push(io::read_all(fd));
@@ -356,7 +385,8 @@ pub fn sort(argc: i32, argv: *const *const u8) -> i32 {
         let out_fd = if let Some(path) = output {
             let fd = io::open(path, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
             if fd < 0 {
-                io::write_str(2, b"sort: cannot open output file\n");
+                io::write_str(2, b"sort: ");
+                sys::perror(path);
                 return 1;
             }
             fd
@@ -364,14 +394,20 @@ pub fn sort(argc: i32, argv: *const *const u8) -> i32 {
             1
         };
 
+        let mut exit_code = 0;
         for line in &lines {
-            io::write_all(out_fd, line);
-            io::write_str(out_fd, b"\n");
+            if io::write_all(out_fd, line) < 0 || io::write_str(out_fd, b"\n") < 0 {
+                sys::perror(b"sort: write error");
+                exit_code = 1;
+                break;
+            }
         }
 
         if out_fd != 1 {
             io::close(out_fd);
         }
+
+        return exit_code;
     }
 
     #[cfg(not(feature = "alloc"))]
@@ -379,8 +415,6 @@ pub fn sort(argc: i32, argv: *const *const u8) -> i32 {
         io::write_str(2, b"sort: requires alloc feature\n");
         return 1;
     }
-
-    0
 }
 
 #[cfg(test)]

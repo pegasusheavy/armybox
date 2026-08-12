@@ -59,9 +59,17 @@ pub fn cut(argc: i32, argv: *const *const u8) -> i32 {
                 None => { i += 1; continue; }
             };
 
-            if arg == b"-" {
+            if arg == b"--help" {
+                io::write_str(1, b"usage: cut -b|-c|-f list [-n] [-d delim] [-s] [file...]\n");
+                return 0;
+            } else if arg == b"-" {
                 // Explicit stdin operand.
                 files.push(i);
+            } else if arg.len() > 2 && arg.starts_with(b"--") {
+                io::write_str(2, b"cut: unrecognized option '");
+                io::write_all(2, arg);
+                io::write_str(2, b"'\n");
+                return 2;
             } else if arg.len() >= 2 && arg[0] == b'-' {
                 match arg[1] {
                     b'd' => {
@@ -120,7 +128,10 @@ pub fn cut(argc: i32, argv: *const *const u8) -> i32 {
 
         if files.is_empty() {
             let content = io::read_all(0);
-            process_content(&content, field_mode, delimiter, &ranges, suppress);
+            if !process_content(&content, field_mode, delimiter, &ranges, suppress) {
+                io::write_str(2, b"cut: write error\n");
+                return 1;
+            }
         } else {
             for &idx in &files {
                 let path = match unsafe { get_arg(argv, idx) } {
@@ -129,20 +140,25 @@ pub fn cut(argc: i32, argv: *const *const u8) -> i32 {
                 };
                 if path == b"-" {
                     let content = io::read_all(0);
-                    process_content(&content, field_mode, delimiter, &ranges, suppress);
+                    if !process_content(&content, field_mode, delimiter, &ranges, suppress) {
+                        io::write_str(2, b"cut: write error\n");
+                        return 1;
+                    }
                     continue;
                 }
                 let fd = io::open(path, libc::O_RDONLY, 0);
                 if fd < 0 {
                     io::write_str(2, b"cut: ");
-                    io::write_all(2, path);
-                    io::write_str(2, b": No such file or directory\n");
+                    sys::perror(path);
                     exit_code = 1;
                     continue;
                 }
                 let content = io::read_all(fd);
                 io::close(fd);
-                process_content(&content, field_mode, delimiter, &ranges, suppress);
+                if !process_content(&content, field_mode, delimiter, &ranges, suppress) {
+                    io::write_str(2, b"cut: write error\n");
+                    return 1;
+                }
             }
         }
 
@@ -219,20 +235,23 @@ fn process_content(
     delimiter: u8,
     ranges: &[(usize, usize)],
     suppress: bool,
-) {
+) -> bool {
     let len = content.len();
     let mut start = 0;
     let mut i = 0;
     while i < len {
         if content[i] == b'\n' {
-            cut_line(&content[start..i], field_mode, delimiter, ranges, suppress);
+            if !cut_line(&content[start..i], field_mode, delimiter, ranges, suppress) {
+                return false;
+            }
             start = i + 1;
         }
         i += 1;
     }
     if start < len {
-        cut_line(&content[start..len], field_mode, delimiter, ranges, suppress);
+        return cut_line(&content[start..len], field_mode, delimiter, ranges, suppress);
     }
+    true
 }
 
 /// Cut a single line (without its trailing newline) and write the result,
@@ -244,17 +263,15 @@ fn cut_line(
     delimiter: u8,
     ranges: &[(usize, usize)],
     suppress: bool,
-) {
+) -> bool {
     if field_mode {
         // If the line contains no delimiter it is passed through whole,
         // unless -s was given, in which case it is dropped entirely.
         if !line.contains(&delimiter) {
             if suppress {
-                return;
+                return true;
             }
-            io::write_all(1, line);
-            io::write_str(1, b"\n");
-            return;
+            return io::write_all(1, line) >= 0 && io::write_str(1, b"\n") >= 0;
         }
 
         let len = line.len();
@@ -267,10 +284,12 @@ fn cut_line(
                 j += 1;
             }
             if is_selected(field_num, ranges) {
-                if !first_out {
-                    io::write_all(1, &[delimiter]);
+                if !first_out && io::write_all(1, &[delimiter]) < 0 {
+                    return false;
                 }
-                io::write_all(1, &line[start..j]);
+                if io::write_all(1, &line[start..j]) < 0 {
+                    return false;
+                }
                 first_out = false;
             }
             if j >= len {
@@ -279,7 +298,7 @@ fn cut_line(
             start = j + 1;
             field_num += 1;
         }
-        io::write_str(1, b"\n");
+        io::write_str(1, b"\n") >= 0
     } else {
         // Byte/character mode: emit selected positions in contiguous runs.
         let len = line.len();
@@ -290,12 +309,14 @@ fn cut_line(
                 while pos <= len && is_selected(pos, ranges) {
                     pos += 1;
                 }
-                io::write_all(1, &line[run_start - 1..pos - 1]);
+                if io::write_all(1, &line[run_start - 1..pos - 1]) < 0 {
+                    return false;
+                }
             } else {
                 pos += 1;
             }
         }
-        io::write_str(1, b"\n");
+        io::write_str(1, b"\n") >= 0
     }
 }
 

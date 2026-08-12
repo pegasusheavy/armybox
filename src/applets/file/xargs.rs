@@ -73,7 +73,12 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
                 cmd_start = i + 1;
             } else if arg == b"-I" || arg == b"-i" {
                 i += 1;
-                replace_str = unsafe { get_arg(argv, i) };
+                let repl = unsafe { get_arg(argv, i) };
+                if repl.map(|r| r.is_empty()).unwrap_or(true) {
+                    io::write_str(2, b"xargs: replstr may not be empty\n");
+                    return 2;
+                }
+                replace_str = repl;
                 cmd_start = i + 1;
             } else if arg.starts_with(b"-I") && arg.len() > 2 {
                 // Handle -I{} format (no space)
@@ -92,12 +97,24 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
             } else if arg == b"-P" {
                 i += 1;
                 if let Some(p) = unsafe { get_arg(argv, i) } {
-                    max_procs = sys::parse_u64(p).unwrap_or(1) as usize;
+                    match sys::parse_u64(p) {
+                        Some(v) => max_procs = v as usize,
+                        None => {
+                            io::write_str(2, b"xargs: invalid number for -P\n");
+                            return 2;
+                        }
+                    }
                 }
                 cmd_start = i + 1;
             } else if arg.starts_with(b"-P") && arg.len() > 2 {
                 // Handle -PN format (no space)
-                max_procs = sys::parse_u64(&arg[2..]).unwrap_or(1) as usize;
+                match sys::parse_u64(&arg[2..]) {
+                    Some(v) => max_procs = v as usize,
+                    None => {
+                        io::write_str(2, b"xargs: invalid number for -P\n");
+                        return 2;
+                    }
+                }
                 cmd_start = i + 1;
             } else if arg == b"-r" || arg == b"--no-run-if-empty" {
                 no_run_if_empty = true;
@@ -233,7 +250,19 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
         let batches = compute_batches(&items, max_args, max_bytes);
 
         for (start, end) in batches {
-            if exit_on_limit && end == start + 1 && items[start].len() + 1 > max_bytes && max_args.is_none() {
+            let batch_len = end - start;
+            // A single oversized item that can't fit within max_bytes on its own.
+            let is_single_oversized = batch_len == 1
+                && items[start].len() + 1 > max_bytes
+                && max_args.is_none();
+            // A `-n`-requested batch that had to be shrunk below the requested
+            // count because it would otherwise exceed max_bytes (there is more
+            // input still to come, so this wasn't just running out of items).
+            let is_shrunk_n_batch = match max_args {
+                Some(m) => batch_len < m && end < items.len(),
+                None => false,
+            };
+            if exit_on_limit && (is_single_oversized || is_shrunk_n_batch) {
                 io::write_str(2, b"xargs: argument line too long\n");
                 exit_status = 1;
                 break;
@@ -413,24 +442,33 @@ fn compute_batches(items: &[Vec<u8>], max_args: Option<usize>, max_bytes: usize)
     batches
 }
 
-/// Build args with replacement
+/// Build args with replacement. GNU xargs replaces every occurrence of
+/// REPLSTR within each argument, not just the first.
 fn build_replace_args(args: &[&[u8]], repl: &[u8], item: &[u8]) -> Vec<Vec<u8>> {
-    args.iter().map(|arg| {
-        if let Some(pos) = find_subsequence(arg, repl) {
-            // Replace REPLSTR with item
-            let mut new_arg = Vec::new();
-            new_arg.extend_from_slice(&arg[..pos]);
-            new_arg.extend_from_slice(item);
-            new_arg.extend_from_slice(&arg[pos + repl.len()..]);
-            new_arg
-        } else {
-            arg.to_vec()
-        }
-    }).collect()
+    args.iter().map(|arg| replace_all_subsequences(arg, repl, item)).collect()
+}
+
+/// Replace every non-overlapping occurrence of `repl` in `arg` with `item`.
+fn replace_all_subsequences(arg: &[u8], repl: &[u8], item: &[u8]) -> Vec<u8> {
+    if repl.is_empty() {
+        return arg.to_vec();
+    }
+    let mut out = Vec::new();
+    let mut rest = arg;
+    while let Some(pos) = find_subsequence(rest, repl) {
+        out.extend_from_slice(&rest[..pos]);
+        out.extend_from_slice(item);
+        rest = &rest[pos + repl.len()..];
+    }
+    out.extend_from_slice(rest);
+    out
 }
 
 /// Find subsequence in slice
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return None;
+    }
     haystack.windows(needle.len()).position(|window| window == needle)
 }
 

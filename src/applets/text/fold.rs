@@ -19,7 +19,10 @@ use crate::applets::{get_arg, has_opt};
 ///
 /// # Options
 /// - `-w width`: Use width columns (default 80)
-/// - `-b`: Count width in bytes rather than columns
+/// - `-b`: Accepted for compatibility, but has no effect. This
+///   implementation always measures width in bytes (byte-width folding
+///   only), which is equivalent to columns for the ASCII input targeted
+///   here, so `-b` never changes the output.
 /// - `-s`: Break at the last blank before the width limit, if any
 ///
 /// # Exit Status
@@ -36,17 +39,39 @@ pub fn fold(argc: i32, argv: *const *const u8) -> i32 {
     let mut i = 1;
     while i < argc {
         if let Some(arg) = unsafe { get_arg(argv, i) } {
+            if arg == b"--help" {
+                io::write_str(1, b"usage: fold [-bs] [-w width] [file...]\n");
+                return 0;
+            }
+            if arg.len() > 2 && arg.starts_with(b"--") {
+                io::write_str(2, b"fold: unrecognized option '");
+                io::write_all(2, arg);
+                io::write_str(2, b"'\n");
+                return 2;
+            }
             if arg.len() > 1 && arg[0] == b'-' {
                 if has_opt(arg, b'b') { by_bytes = true; }
                 if has_opt(arg, b's') { break_at_blank = true; }
                 if has_opt(arg, b'w') {
-                    if arg.len() > 2 && arg[1] == b'w' {
-                        width = sys::parse_u64(&arg[2..]).unwrap_or(80) as usize;
+                    let wval: Option<&[u8]> = if arg.len() > 2 && arg[1] == b'w' {
+                        Some(&arg[2..])
                     } else if i + 1 < argc {
-                        if let Some(w) = unsafe { get_arg(argv, i + 1) } {
-                            width = sys::parse_u64(w).unwrap_or(80) as usize;
-                        }
+                        let v = unsafe { get_arg(argv, i + 1) };
                         i += 1;
+                        v
+                    } else {
+                        None
+                    };
+                    if let Some(w) = wval {
+                        match sys::parse_u64(w) {
+                            Some(n) => width = n as usize,
+                            None => {
+                                io::write_str(2, b"fold: invalid number of columns: ");
+                                io::write_all(2, w);
+                                io::write_str(2, b"\n");
+                                return 2;
+                            }
+                        }
                     }
                 }
             } else {
@@ -64,7 +89,10 @@ pub fn fold(argc: i32, argv: *const *const u8) -> i32 {
         let mut had_error = false;
 
         if files.is_empty() {
-            fold_fd(0, width, by_bytes, break_at_blank);
+            if !fold_fd(0, width, by_bytes, break_at_blank) {
+                io::write_str(2, b"fold: write error\n");
+                return 1;
+            }
         } else {
             for &path in &files {
                 let fd = if path == b"-" {
@@ -75,14 +103,17 @@ pub fn fold(argc: i32, argv: *const *const u8) -> i32 {
 
                 if fd < 0 {
                     io::write_str(2, b"fold: ");
-                    io::write_all(2, path);
-                    io::write_str(2, b": No such file or directory\n");
+                    sys::perror(path);
                     had_error = true;
                     continue;
                 }
 
-                fold_fd(fd, width, by_bytes, break_at_blank);
+                let ok = fold_fd(fd, width, by_bytes, break_at_blank);
                 if fd != 0 { io::close(fd); }
+                if !ok {
+                    io::write_str(2, b"fold: write error\n");
+                    return 1;
+                }
             }
         }
 
@@ -91,7 +122,10 @@ pub fn fold(argc: i32, argv: *const *const u8) -> i32 {
 
     #[cfg(not(feature = "alloc"))]
     {
-        fold_fd(0, width, by_bytes, break_at_blank);
+        if !fold_fd(0, width, by_bytes, break_at_blank) {
+            io::write_str(2, b"fold: write error\n");
+            return 1;
+        }
     }
 
     0
@@ -99,11 +133,12 @@ pub fn fold(argc: i32, argv: *const *const u8) -> i32 {
 
 /// Fold the content of a file descriptor to stdout.
 ///
-/// `by_bytes` counts raw bytes toward the width instead of columns
-/// (they are equivalent for ASCII input, which is all this
-/// implementation targets). `break_at_blank` prefers breaking at the
-/// last blank (space or tab) seen before the width limit, if any.
-fn fold_fd(fd: i32, width: usize, by_bytes: bool, break_at_blank: bool) {
+/// `by_bytes` is accepted for option compatibility but has no effect:
+/// width is always measured in bytes here (byte-width folding only),
+/// which equals columns for the ASCII input this implementation targets.
+/// `break_at_blank` prefers breaking at the last blank (space or tab)
+/// seen before the width limit, if any. Returns false on a write error.
+fn fold_fd(fd: i32, width: usize, by_bytes: bool, break_at_blank: bool) -> bool {
     let _ = by_bytes;
 
     #[cfg(feature = "alloc")]
@@ -123,8 +158,9 @@ fn fold_fd(fd: i32, width: usize, by_bytes: bool, break_at_blank: bool) {
 
             for &c in &buf[..n as usize] {
                 if c == b'\n' {
-                    io::write_all(1, &line);
-                    io::write_str(1, b"\n");
+                    if io::write_all(1, &line) < 0 || io::write_str(1, b"\n") < 0 {
+                        return false;
+                    }
                     line.clear();
                     last_blank = None;
                     col = 0;
@@ -135,21 +171,24 @@ fn fold_fd(fd: i32, width: usize, by_bytes: bool, break_at_blank: bool) {
                     if break_at_blank {
                         if let Some(pos) = last_blank {
                             let rest: Vec<u8> = line[pos + 1..].to_vec();
-                            io::write_all(1, &line[..=pos]);
-                            io::write_str(1, b"\n");
+                            if io::write_all(1, &line[..=pos]) < 0 || io::write_str(1, b"\n") < 0 {
+                                return false;
+                            }
                             line.clear();
                             line.extend_from_slice(&rest);
                             col = rest.len();
                             last_blank = None;
                         } else {
-                            io::write_all(1, &line);
-                            io::write_str(1, b"\n");
+                            if io::write_all(1, &line) < 0 || io::write_str(1, b"\n") < 0 {
+                                return false;
+                            }
                             line.clear();
                             col = 0;
                         }
                     } else {
-                        io::write_all(1, &line);
-                        io::write_str(1, b"\n");
+                        if io::write_all(1, &line) < 0 || io::write_str(1, b"\n") < 0 {
+                            return false;
+                        }
                         line.clear();
                         col = 0;
                         last_blank = None;
@@ -165,9 +204,11 @@ fn fold_fd(fd: i32, width: usize, by_bytes: bool, break_at_blank: bool) {
         }
 
         if !line.is_empty() {
-            io::write_all(1, &line);
-            io::write_str(1, b"\n");
+            if io::write_all(1, &line) < 0 || io::write_str(1, b"\n") < 0 {
+                return false;
+            }
         }
+        true
     }
 
     #[cfg(not(feature = "alloc"))]
@@ -180,18 +221,19 @@ fn fold_fd(fd: i32, width: usize, by_bytes: bool, break_at_blank: bool) {
 
             for &c in &buf[..n as usize] {
                 if c == b'\n' {
-                    io::write_str(1, b"\n");
+                    if io::write_str(1, b"\n") < 0 { return false; }
                     col = 0;
                 } else {
                     if col >= width {
-                        io::write_str(1, b"\n");
+                        if io::write_str(1, b"\n") < 0 { return false; }
                         col = 0;
                     }
-                    io::write_all(1, &[c]);
+                    if io::write_all(1, &[c]) < 0 { return false; }
                     col += 1;
                 }
             }
         }
+        true
     }
 }
 

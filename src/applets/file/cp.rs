@@ -7,6 +7,11 @@ use crate::io;
 use crate::sys;
 use crate::applets::{get_arg, has_opt};
 
+/// Hard cap on recursive-copy depth. Symlink cycles are already broken by
+/// recreating links instead of following them; this bounds genuinely deep real
+/// trees so `cp -R` can't exhaust the stack and crash (SIGSEGV).
+const MAX_DEPTH: usize = 4096;
+
 /// cp - copy files and directories
 ///
 /// # Synopsis
@@ -99,9 +104,9 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
                 // Copy into directory
                 let mut dest_path = [0u8; 4096];
                 let dest_len = build_dest_path(dest, src, &mut dest_path);
-                copy_item(src, &dest_path[..dest_len], recursive, force, preserve, no_deref, no_clobber)
+                copy_item(src, &dest_path[..dest_len], recursive, force, preserve, no_deref, no_clobber, 0)
             } else {
-                copy_item(src, dest, recursive, force, preserve, no_deref, no_clobber)
+                copy_item(src, dest, recursive, force, preserve, no_deref, no_clobber, 0)
             };
 
             if result != 0 {
@@ -165,6 +170,7 @@ fn copy_item(
     preserve: bool,
     no_deref: bool,
     no_clobber: bool,
+    depth: usize,
 ) -> i32 {
     // -n: if the destination already exists at all, skip this source
     // entirely without treating it as an error.
@@ -197,7 +203,7 @@ fn copy_item(
             io::write_str(2, b"'\n");
             return 1;
         }
-        copy_directory(src, dest, force, preserve, no_deref, no_clobber)
+        copy_directory(src, dest, force, preserve, no_deref, no_clobber, depth)
     } else {
         copy_file_opts(src, dest, force, preserve)
     }
@@ -332,7 +338,17 @@ fn copy_directory(
     preserve: bool,
     no_deref: bool,
     no_clobber: bool,
+    depth: usize,
 ) -> i32 {
+    // Bound genuine recursion depth so a pathologically deep tree stops with a
+    // diagnostic and a nonzero exit instead of overflowing the stack.
+    if depth >= MAX_DEPTH {
+        io::write_str(2, b"cp: '");
+        io::write_all(2, src);
+        io::write_str(2, b"': directory too deep\n");
+        return 1;
+    }
+
     // Create destination directory
     if io::mkdir(dest, 0o755) < 0 {
         // Check if it already exists
@@ -376,7 +392,7 @@ fn copy_directory(
                 dest_path.push(b'/');
                 dest_path.extend_from_slice(name);
 
-                if copy_item(&src_path, &dest_path, true, force, preserve, no_deref, no_clobber) != 0 {
+                if copy_item(&src_path, &dest_path, true, force, preserve, no_deref, no_clobber, depth + 1) != 0 {
                     exit_code = 1;
                 }
             }

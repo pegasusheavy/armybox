@@ -85,3 +85,35 @@ fn posix_head_exit_error() {
     let result = run(&["head", "/nonexistent/file"]);
     assert!(result.0 > 0);
 }
+
+/// head -c with negative count (all but last N bytes)
+#[test]
+fn posix_head_bytes_negative() {
+    let result = run_with_stdin(&["head", "-c", "-5"], b"hello world");
+    assert_success(&result);
+    assert_eq!(result.1, "hello ");
+}
+
+/// An unparsable -n count is a hard error, not a silent default of 10.
+#[test]
+fn posix_head_invalid_n_exits_nonzero() {
+    let result = run_with_stdin(&["head", "-n", "xyz"], b"hello\n");
+    assert!(result.0 != 0);
+    assert_eq!(result.1, "");
+}
+
+/// An unparsable -c count is a hard error, not a silent default.
+#[test]
+fn posix_head_invalid_c_exits_nonzero() {
+    let result = run_with_stdin(&["head", "-c", "xyz"], b"hello\n");
+    assert!(result.0 != 0);
+    assert_eq!(result.1, "");
+}
+
+/// head --help prints usage and exits 0 without reading stdin.
+#[test]
+fn posix_head_help() {
+    let result = run_with_stdin(&["head", "--help"], b"should not be read");
+    assert_eq!(result.0, 0);
+    assert!(result.1.to_lowercase().contains("usage"));
+}

@@ -20,14 +20,21 @@ enum Mode {
     FromByte(u64),
 }
 
-/// Parse a `-n`/`-c` argument, handling the `+N` "from start" form.
-fn parse_count(s: &[u8], last: fn(u64) -> Mode, start: fn(u64) -> Mode) -> Mode {
-    if !s.is_empty() && s[0] == b'+' {
-        let n = sys::parse_u64(&s[1..]).unwrap_or(0);
-        start(n)
+/// Parse a `-n`/`-c` argument, handling the `+N` "from start" form and the
+/// `-N` "last N" form (a bare leading `-`, e.g. from `-n -5`, still means
+/// "last N" — it is not a parse error). Returns `None` if the numeric part
+/// cannot be parsed at all, so callers can diagnose and exit rather than
+/// silently defaulting.
+fn parse_count(s: &[u8], last: fn(u64) -> Mode, start: fn(u64) -> Mode) -> Option<Mode> {
+    if s.is_empty() {
+        return None;
+    }
+    if s[0] == b'+' {
+        sys::parse_u64(&s[1..]).map(start)
+    } else if s[0] == b'-' {
+        sys::parse_u64(&s[1..]).map(last)
     } else {
-        let n = sys::parse_u64(s).unwrap_or(10);
-        last(n)
+        sys::parse_u64(s).map(last)
     }
 }
 
@@ -50,12 +57,17 @@ fn parse_count(s: &[u8], last: fn(u64) -> Mode, start: fn(u64) -> Mode) -> Mode 
 /// - `-c N`: Print the last N bytes instead of lines. `-c +N` prints
 ///   starting at byte N (1-based) instead.
 /// - `-N`: Legacy form of `-n N`.
-/// - `-f`: Follow the file (output appended data as the file grows).
+/// - `-f`: Follow the file (output appended data as the file grows). With
+///   multiple files, only the last file is followed after all files'
+///   initial output has been printed.
 /// - `-q`: Never print file name headers.
+/// - `--help`: Print usage information and exit.
 ///
 /// # Exit Status
 /// - 0: Success
-/// - >0: An error occurred reading one or more files
+/// - 1: An error occurred reading one or more files, or an option's count
+///   could not be parsed
+/// - 2: An unrecognized long option was given
 pub fn tail(argc: i32, argv: *const *const u8) -> i32 {
     let mut mode = Mode::LastLines(10);
     let mut follow = false;
@@ -70,30 +82,53 @@ pub fn tail(argc: i32, argv: *const *const u8) -> i32 {
         let mut i = 1;
         while i < argc {
             if let Some(arg) = unsafe { get_arg(argv, i) } {
-                if arg.len() > 1 && arg[0] == b'-' && arg != b"-" {
+                if arg == b"--help" {
+                    print_usage();
+                    return 0;
+                } else if arg.len() > 2 && arg[0] == b'-' && arg[1] == b'-' {
+                    io::write_str(2, b"tail: unrecognized option '");
+                    io::write_all(2, arg);
+                    io::write_str(2, b"'\n");
+                    return 2;
+                } else if arg.len() > 1 && arg[0] == b'-' && arg != b"-" {
                     if arg[1] == b'n' {
-                        if arg.len() > 2 {
-                            let spec = &arg[2..];
-                            mode = parse_count(spec, Mode::LastLines, Mode::FromLine);
+                        let spec: &[u8] = if arg.len() > 2 {
+                            &arg[2..]
                         } else if i + 1 < argc {
-                            if let Some(n) = unsafe { get_arg(argv, i + 1) } {
-                                mode = parse_count(n, Mode::LastLines, Mode::FromLine);
-                            }
                             i += 1;
+                            match unsafe { get_arg(argv, i) } {
+                                Some(n) => n,
+                                None => b"",
+                            }
+                        } else {
+                            b""
+                        };
+                        match parse_count(spec, Mode::LastLines, Mode::FromLine) {
+                            Some(m) => mode = m,
+                            None => return invalid_number(b"lines", spec),
                         }
                     } else if arg[1] == b'c' {
-                        if arg.len() > 2 {
-                            let spec = &arg[2..];
-                            mode = parse_count(spec, Mode::LastBytes, Mode::FromByte);
+                        let spec: &[u8] = if arg.len() > 2 {
+                            &arg[2..]
                         } else if i + 1 < argc {
-                            if let Some(n) = unsafe { get_arg(argv, i + 1) } {
-                                mode = parse_count(n, Mode::LastBytes, Mode::FromByte);
-                            }
                             i += 1;
+                            match unsafe { get_arg(argv, i) } {
+                                Some(n) => n,
+                                None => b"",
+                            }
+                        } else {
+                            b""
+                        };
+                        match parse_count(spec, Mode::LastBytes, Mode::FromByte) {
+                            Some(m) => mode = m,
+                            None => return invalid_number(b"bytes", spec),
                         }
                     } else if arg[1] >= b'0' && arg[1] <= b'9' {
                         // Legacy -N form
-                        mode = Mode::LastLines(sys::parse_u64(&arg[1..]).unwrap_or(10));
+                        match sys::parse_u64(&arg[1..]) {
+                            Some(n) => mode = Mode::LastLines(n),
+                            None => return invalid_number(b"lines", &arg[1..]),
+                        }
                     } else {
                         for &b in &arg[1..] {
                             match b {
@@ -113,21 +148,34 @@ pub fn tail(argc: i32, argv: *const *const u8) -> i32 {
         let mut exit_code = 0;
 
         if files.is_empty() {
-            tail_fd(0, &mode);
+            if !tail_fd(0, &mode) {
+                exit_code = 1;
+            }
             follow_fd(0, follow);
         } else {
             let multiple = files.len() > 1 && !quiet;
+            let last_idx = files.len() - 1;
             for (idx, &path) in files.iter().enumerate() {
                 if idx > 0 && multiple {
-                    io::write_str(1, b"\n");
+                    if io::write_str(1, b"\n") < 0 {
+                        exit_code = 1;
+                    }
                 }
 
                 if path == b"-" {
-                    if multiple {
-                        print_header(b"standard input");
+                    if multiple && !print_header(b"standard input") {
+                        exit_code = 1;
                     }
-                    tail_fd(0, &mode);
-                    follow_fd(0, follow);
+                    if !tail_fd(0, &mode) {
+                        exit_code = 1;
+                    }
+                    // Only follow the last file when several are given;
+                    // GNU tail's true multi-file follow multiplexes all of
+                    // them, but a single followed stream keeps this
+                    // implementation simple and predictable.
+                    if idx == last_idx {
+                        follow_fd(0, follow);
+                    }
                 } else {
                     let fd = io::open(path, libc::O_RDONLY, 0);
                     if fd < 0 {
@@ -136,11 +184,15 @@ pub fn tail(argc: i32, argv: *const *const u8) -> i32 {
                         exit_code = 1;
                         continue;
                     }
-                    if multiple {
-                        print_header(path);
+                    if multiple && !print_header(path) {
+                        exit_code = 1;
                     }
-                    tail_fd(fd, &mode);
-                    follow_fd(fd, follow);
+                    if !tail_fd(fd, &mode) {
+                        exit_code = 1;
+                    }
+                    if idx == last_idx {
+                        follow_fd(fd, follow);
+                    }
                     io::close(fd);
                 }
             }
@@ -161,13 +213,36 @@ pub fn tail(argc: i32, argv: *const *const u8) -> i32 {
     }
 }
 
-fn print_header(name: &[u8]) {
-    io::write_str(1, b"==> ");
-    io::write_all(1, name);
-    io::write_str(1, b" <==\n");
+/// Print an "invalid number of X: 'Y'" diagnostic to stderr and return the
+/// exit code (1) callers should propagate, matching GNU tail's behavior of
+/// rejecting unparsable counts instead of silently defaulting.
+#[cfg(feature = "alloc")]
+fn invalid_number(kind: &[u8], spec: &[u8]) -> i32 {
+    io::write_str(2, b"tail: invalid number of ");
+    io::write_all(2, kind);
+    io::write_str(2, b": '");
+    io::write_all(2, spec);
+    io::write_str(2, b"'\n");
+    1
 }
 
-fn tail_fd(fd: i32, mode: &Mode) {
+fn print_usage() {
+    io::write_str(1, b"Usage: tail [-f] [-q] [-n number | -c number] [file...]\n");
+    io::write_str(1, b"  -n N  Print the last N lines instead of the last 10. -n +N prints from line N.\n");
+    io::write_str(1, b"  -c N  Print the last N bytes instead of lines. -c +N prints from byte N.\n");
+    io::write_str(1, b"  -f    Follow the file as it grows.\n");
+    io::write_str(1, b"  -q    Never print file name headers.\n");
+    io::write_str(1, b"  --help  Display this help and exit.\n");
+}
+
+fn print_header(name: &[u8]) -> bool {
+    let mut ok = io::write_str(1, b"==> ") >= 0;
+    ok &= io::write_all(1, name) >= 0;
+    ok &= io::write_str(1, b" <==\n") >= 0;
+    ok
+}
+
+fn tail_fd(fd: i32, mode: &Mode) -> bool {
     match mode {
         Mode::LastLines(n) => tail_last_lines(fd, *n),
         Mode::FromLine(n) => tail_from_line(fd, *n),
@@ -187,7 +262,11 @@ fn follow_fd(fd: i32, follow: bool) {
     loop {
         let n = io::read(fd, &mut buf);
         if n > 0 {
-            io::write_all(1, &buf[..n as usize]);
+            if io::write_all(1, &buf[..n as usize]) < 0 {
+                // stdout is gone (e.g. the reader closed its pipe); there
+                // is nothing more we can usefully do.
+                return;
+            }
         } else {
             unsafe { libc::usleep(100_000) };
         }
@@ -200,12 +279,15 @@ fn follow_fd(fd: i32, follow: bool) {
 /// (or final, possibly-unterminated) lines in a ring buffer, then
 /// writes them out in one batch.
 #[cfg(feature = "alloc")]
-fn tail_last_lines(fd: i32, lines: u64) {
+fn tail_last_lines(fd: i32, lines: u64) -> bool {
     use alloc::vec::Vec;
     use alloc::collections::VecDeque;
 
     let cap = lines as usize;
-    let mut line_buf: VecDeque<Vec<u8>> = VecDeque::with_capacity(cap + 1);
+    // Don't pre-reserve `cap` up front: `lines` is a user-supplied count,
+    // so grow the buffer on demand instead of allocating a
+    // caller-controlled amount before any input has been read.
+    let mut line_buf: VecDeque<Vec<u8>> = VecDeque::new();
     let mut current_line = Vec::new();
     let mut buf = [0u8; 4096];
 
@@ -237,13 +319,17 @@ fn tail_last_lines(fd: i32, lines: u64) {
         line_buf.push_back(current_line);
     }
 
+    let mut ok = true;
     for line in line_buf {
-        io::write_all(1, &line);
+        if io::write_all(1, &line) < 0 {
+            ok = false;
+        }
     }
+    ok
 }
 
 /// Print lines starting at 1-based line number `n` (tail -n +N).
-fn tail_from_line(fd: i32, n: u64) {
+fn tail_from_line(fd: i32, n: u64) -> bool {
     let target = if n == 0 { 1 } else { n };
     let mut line_no: u64 = 1;
     let mut buf = [0u8; 4096];
@@ -258,7 +344,9 @@ fn tail_from_line(fd: i32, n: u64) {
         for &b in &buf[..r as usize] {
             if line_no >= target {
                 if out_len == out_buf.len() {
-                    io::write_all(1, &out_buf[..out_len]);
+                    if io::write_all(1, &out_buf[..out_len]) < 0 {
+                        return false;
+                    }
                     out_len = 0;
                 }
                 out_buf[out_len] = b;
@@ -271,18 +359,22 @@ fn tail_from_line(fd: i32, n: u64) {
     }
 
     if out_len > 0 {
-        io::write_all(1, &out_buf[..out_len]);
+        return io::write_all(1, &out_buf[..out_len]) >= 0;
     }
+    true
 }
 
 /// Print the last `n` bytes of `fd`.
 #[cfg(feature = "alloc")]
-fn tail_last_bytes(fd: i32, n: u64) {
+fn tail_last_bytes(fd: i32, n: u64) -> bool {
     use alloc::vec::Vec;
     use alloc::collections::VecDeque;
 
     let cap = n as usize;
-    let mut ring: VecDeque<u8> = VecDeque::with_capacity(cap + 1);
+    // Don't pre-reserve `cap` up front; grow the ring on demand so a large
+    // user-supplied `n` cannot force an unbounded allocation before any
+    // input has been read.
+    let mut ring: VecDeque<u8> = VecDeque::new();
     let mut buf = [0u8; 4096];
 
     loop {
@@ -301,11 +393,11 @@ fn tail_last_bytes(fd: i32, n: u64) {
     }
 
     let out: Vec<u8> = ring.into_iter().collect();
-    io::write_all(1, &out);
+    io::write_all(1, &out) >= 0
 }
 
 /// Print bytes starting at 1-based byte offset `n` (tail -c +N).
-fn tail_from_byte(fd: i32, n: u64) {
+fn tail_from_byte(fd: i32, n: u64) -> bool {
     let target = if n == 0 { 1 } else { n };
     let mut byte_no: u64 = 1;
     let mut buf = [0u8; 4096];
@@ -320,7 +412,9 @@ fn tail_from_byte(fd: i32, n: u64) {
         for &b in &buf[..r as usize] {
             if byte_no >= target {
                 if out_len == out_buf.len() {
-                    io::write_all(1, &out_buf[..out_len]);
+                    if io::write_all(1, &out_buf[..out_len]) < 0 {
+                        return false;
+                    }
                     out_len = 0;
                 }
                 out_buf[out_len] = b;
@@ -331,8 +425,9 @@ fn tail_from_byte(fd: i32, n: u64) {
     }
 
     if out_len > 0 {
-        io::write_all(1, &out_buf[..out_len]);
+        return io::write_all(1, &out_buf[..out_len]) >= 0;
     }
+    true
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@
 //! Reference: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/uniq.html
 
 use crate::io;
+use crate::sys;
 use crate::applets::get_arg;
 
 #[inline]
@@ -62,9 +63,21 @@ fn parse_usize(s: &[u8]) -> usize {
     let mut n = 0usize;
     for &c in s {
         if !c.is_ascii_digit() { break; }
-        n = n * 10 + (c - b'0') as usize;
+        n = n.saturating_mul(10).saturating_add((c - b'0') as usize);
     }
     n
+}
+
+fn print_usage() {
+    io::write_str(1, b"Usage: uniq [-cdui] [-f fields] [-s chars] [input_file [output_file]]\n");
+    io::write_str(1, b"Filter adjacent matching lines from INPUT, writing to OUTPUT.\n\n");
+    io::write_str(1, b"  -c            prefix lines with number of occurrences\n");
+    io::write_str(1, b"  -d            only print duplicate lines\n");
+    io::write_str(1, b"  -u            only print unique lines\n");
+    io::write_str(1, b"  -i            ignore case when comparing\n");
+    io::write_str(1, b"  -f N          skip the first N fields\n");
+    io::write_str(1, b"  -s N          skip the first N characters\n");
+    io::write_str(1, b"  --help        display this help and exit\n");
 }
 
 /// uniq - report or omit repeated lines
@@ -107,6 +120,16 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
                 Some(a) => a,
                 None => { i += 1; continue; }
             };
+            if arg == b"--help" {
+                print_usage();
+                return 0;
+            }
+            if arg.len() > 2 && arg[0] == b'-' && arg[1] == b'-' {
+                io::write_str(2, b"uniq: unrecognized option '");
+                io::write_all(2, arg);
+                io::write_str(2, b"'\n");
+                return 2;
+            }
             if arg.len() >= 2 && arg[0] == b'-' {
                 let mut j = 1;
                 while j < arg.len() {
@@ -141,9 +164,8 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
         let content = if !operands.is_empty() && operands[0] != b"-" {
             let fd = io::open(operands[0], libc::O_RDONLY, 0);
             if fd < 0 {
-                io::write_str(2, b"uniq: cannot open ");
-                io::write_all(2, operands[0]);
-                io::write_str(2, b"\n");
+                io::write_str(2, b"uniq: ");
+                sys::perror(operands[0]);
                 return 1;
             }
             let c = io::read_all(fd);
@@ -156,7 +178,8 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
         let out_fd = if operands.len() >= 2 {
             let fd = io::open(operands[1], libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
             if fd < 0 {
-                io::write_str(2, b"uniq: cannot open output file\n");
+                io::write_str(2, b"uniq: ");
+                sys::perror(operands[1]);
                 return 1;
             }
             fd
@@ -170,6 +193,7 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
             if last.is_empty() { lines.pop(); }
         }
 
+        let mut exit_code = 0;
         let mut i = 0;
         while i < lines.len() {
             let line = lines[i];
@@ -193,12 +217,19 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
             };
 
             if should_print {
+                let mut ok = true;
                 if count {
-                    io::write_num(out_fd, cnt as u64);
-                    io::write_str(out_fd, b" ");
+                    ok = io::write_num(out_fd, cnt as u64) >= 0
+                        && io::write_str(out_fd, b" ") >= 0;
                 }
-                io::write_all(out_fd, line);
-                io::write_str(out_fd, b"\n");
+                ok = ok
+                    && io::write_all(out_fd, line) >= 0
+                    && io::write_str(out_fd, b"\n") >= 0;
+                if !ok {
+                    sys::perror(b"uniq: write error");
+                    exit_code = 1;
+                    break;
+                }
             }
 
             i += cnt;
@@ -207,6 +238,8 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
         if out_fd != 1 {
             io::close(out_fd);
         }
+
+        return exit_code;
     }
 
     #[cfg(not(feature = "alloc"))]
@@ -214,8 +247,6 @@ pub fn uniq(argc: i32, argv: *const *const u8) -> i32 {
         io::write_str(2, b"uniq: requires alloc feature\n");
         return 1;
     }
-
-    0
 }
 
 #[cfg(test)]

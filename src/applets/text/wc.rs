@@ -4,6 +4,7 @@
 //! Reference: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/wc.html
 
 use crate::io;
+use crate::sys;
 use crate::applets::has_opt;
 
 /// wc - word, line, character count
@@ -38,6 +39,16 @@ pub fn wc(argc: i32, argv: *const *const u8) -> i32 {
 
     for i in 1..argc {
         if let Some(arg) = unsafe { get_arg(argv, i) } {
+            if arg == b"--help" {
+                io::write_str(1, b"usage: wc [-clmw] [file...]\n");
+                return 0;
+            }
+            if arg.len() > 2 && arg.starts_with(b"--") {
+                io::write_str(2, b"wc: unrecognized option '");
+                io::write_all(2, arg);
+                io::write_str(2, b"'\n");
+                return 2;
+            }
             if arg.len() > 1 && arg[0] == b'-' {
                 if has_opt(arg, b'l') { show_lines = true; }
                 if has_opt(arg, b'w') { show_words = true; }
@@ -58,6 +69,20 @@ pub fn wc(argc: i32, argv: *const *const u8) -> i32 {
 
     #[cfg(feature = "alloc")]
     {
+        use alloc::vec::Vec;
+
+        // Collect every row (per-file plus optional total) before printing so
+        // the count columns can be right-justified to a common width, matching
+        // GNU wc's layout.
+        struct Row<'a> {
+            l: u64,
+            w: u64,
+            b: u64,
+            c: u64,
+            name: Option<&'a [u8]>,
+        }
+        let mut rows: Vec<Row> = Vec::new();
+
         let mut total_lines = 0u64;
         let mut total_words = 0u64;
         let mut total_bytes = 0u64;
@@ -66,7 +91,7 @@ pub fn wc(argc: i32, argv: *const *const u8) -> i32 {
 
         if files.is_empty() {
             let (l, w, b, c) = wc_fd(0);
-            print_counts(show_lines, show_words, show_bytes, show_chars, l, w, b, c, None);
+            rows.push(Row { l, w, b, c, name: None });
         } else {
             for &path in &files {
                 let fd = if path == b"-" {
@@ -77,8 +102,7 @@ pub fn wc(argc: i32, argv: *const *const u8) -> i32 {
 
                 if fd < 0 {
                     io::write_str(2, b"wc: ");
-                    io::write_all(2, path);
-                    io::write_str(2, b": No such file or directory\n");
+                    sys::perror(path);
                     had_error = true;
                     continue;
                 }
@@ -91,11 +115,37 @@ pub fn wc(argc: i32, argv: *const *const u8) -> i32 {
                 total_bytes += b;
                 total_chars += c;
 
-                print_counts(show_lines, show_words, show_bytes, show_chars, l, w, b, c, Some(path));
+                rows.push(Row { l, w, b, c, name: Some(path) });
             }
 
             if files.len() > 1 {
-                print_counts(show_lines, show_words, show_bytes, show_chars, total_lines, total_words, total_bytes, total_chars, Some(b"total"));
+                rows.push(Row {
+                    l: total_lines,
+                    w: total_words,
+                    b: total_bytes,
+                    c: total_chars,
+                    name: Some(b"total"),
+                });
+            }
+        }
+
+        // Column width: number of digits in the largest displayed count.
+        let mut max_count = 0u64;
+        for r in &rows {
+            if show_lines && r.l > max_count { max_count = r.l; }
+            if show_words && r.w > max_count { max_count = r.w; }
+            if show_bytes && r.b > max_count { max_count = r.b; }
+            if show_chars && r.c > max_count { max_count = r.c; }
+        }
+        let width = digit_count(max_count);
+
+        for r in &rows {
+            if !print_counts(
+                show_lines, show_words, show_bytes, show_chars,
+                r.l, r.w, r.b, r.c, width, r.name,
+            ) {
+                io::write_str(2, b"wc: write error\n");
+                return 1;
             }
         }
 
@@ -105,12 +155,35 @@ pub fn wc(argc: i32, argv: *const *const u8) -> i32 {
     #[cfg(not(feature = "alloc"))]
     {
         let (l, w, b, c) = wc_fd(0);
-        print_counts(show_lines, show_words, show_bytes, show_chars, l, w, b, c, None);
+        if !print_counts(show_lines, show_words, show_bytes, show_chars, l, w, b, c, digit_count(l.max(w).max(b).max(c)), None) {
+            io::write_str(2, b"wc: write error\n");
+            return 1;
+        }
     }
 
     0
 }
 
+/// Number of decimal digits in `n` (at least 1).
+fn digit_count(mut n: u64) -> usize {
+    let mut d = 1;
+    while n >= 10 {
+        d += 1;
+        n /= 10;
+    }
+    d
+}
+
+/// Write `n` right-justified in `width` columns. Returns false on write error.
+fn write_num_padded(n: u64, width: usize) -> bool {
+    let d = digit_count(n);
+    for _ in d..width {
+        if io::write_str(1, b" ") < 0 { return false; }
+    }
+    io::write_num(1, n) >= 0
+}
+
+#[allow(clippy::too_many_arguments)]
 fn print_counts(
     show_lines: bool,
     show_words: bool,
@@ -120,34 +193,35 @@ fn print_counts(
     words: u64,
     bytes: u64,
     chars: u64,
+    width: usize,
     name: Option<&[u8]>,
-) {
+) -> bool {
     let mut first = true;
     if show_lines {
-        if !first { io::write_str(1, b" "); }
-        io::write_num(1, lines);
+        if !first && io::write_str(1, b" ") < 0 { return false; }
+        if !write_num_padded(lines, width) { return false; }
         first = false;
     }
     if show_words {
-        if !first { io::write_str(1, b" "); }
-        io::write_num(1, words);
+        if !first && io::write_str(1, b" ") < 0 { return false; }
+        if !write_num_padded(words, width) { return false; }
         first = false;
     }
     if show_bytes {
-        if !first { io::write_str(1, b" "); }
-        io::write_num(1, bytes);
+        if !first && io::write_str(1, b" ") < 0 { return false; }
+        if !write_num_padded(bytes, width) { return false; }
         first = false;
     }
     if show_chars {
-        if !first { io::write_str(1, b" "); }
-        io::write_num(1, chars);
+        if !first && io::write_str(1, b" ") < 0 { return false; }
+        if !write_num_padded(chars, width) { return false; }
         first = false;
     }
     if let Some(name) = name {
-        if !first { io::write_str(1, b" "); }
-        io::write_all(1, name);
+        if !first && io::write_str(1, b" ") < 0 { return false; }
+        if io::write_all(1, name) < 0 { return false; }
     }
-    io::write_str(1, b"\n");
+    io::write_str(1, b"\n") >= 0
 }
 
 fn wc_fd(fd: i32) -> (u64, u64, u64, u64) {

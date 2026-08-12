@@ -6,6 +6,7 @@
 use crate::io;
 use crate::sys;
 use crate::applets::{get_arg, has_opt};
+use alloc::vec::Vec;
 
 /// ln - make links between files
 ///
@@ -76,10 +77,16 @@ pub fn ln(argc: i32, argv: *const *const u8) -> i32 {
         let mut exit_code = 0;
         for i in files_start..(argc - 1) {
             if let Some(src) = unsafe { get_arg(argv, i) } {
-                let mut dest_path = [0u8; 4096];
-                let dest_len = build_dest_path(last, src, &mut dest_path);
-                if make_link(src, &dest_path[..dest_len], symbolic, force) != 0 {
-                    exit_code = 1;
+                match build_dest_path(last, src) {
+                    Some(dest_path) => {
+                        if make_link(src, &dest_path, symbolic, force) != 0 {
+                            exit_code = 1;
+                        }
+                    }
+                    None => {
+                        io::write_str(2, b"ln: File name too long\n");
+                        exit_code = 1;
+                    }
                 }
             }
         }
@@ -102,34 +109,30 @@ pub fn ln(argc: i32, argv: *const *const u8) -> i32 {
     }
 }
 
-/// Build destination path by appending basename of source to dest directory
-fn build_dest_path(dest_dir: &[u8], src: &[u8], buf: &mut [u8]) -> usize {
-    let mut len = 0;
-
-    for &c in dest_dir {
-        if len < buf.len() - 1 {
-            buf[len] = c;
-            len += 1;
-        }
-    }
-
-    if len > 0 && buf[len - 1] != b'/' {
-        if len < buf.len() - 1 {
-            buf[len] = b'/';
-            len += 1;
-        }
-    }
-
+/// Build destination path by appending basename of source to dest directory.
+///
+/// Builds the path on the heap (no fixed-size buffer) so a long directory
+/// or source name is never silently truncated. Returns `None` if the
+/// resulting path would exceed `io::PATH_MAX`, so callers can report an
+/// error instead of risking an unintended path (e.g. with `-f`, silently
+/// truncating could cause an unrelated file to be unlinked/overwritten).
+fn build_dest_path(dest_dir: &[u8], src: &[u8]) -> Option<Vec<u8>> {
     let basename_start = src.iter().rposition(|&c| c == b'/').map(|p| p + 1).unwrap_or(0);
+    let basename = &src[basename_start..];
 
-    for &c in &src[basename_start..] {
-        if len < buf.len() - 1 {
-            buf[len] = c;
-            len += 1;
-        }
+    let needs_sep = !dest_dir.is_empty() && dest_dir[dest_dir.len() - 1] != b'/';
+    let total = dest_dir.len() + if needs_sep { 1 } else { 0 } + basename.len();
+    if total >= io::PATH_MAX {
+        return None;
     }
 
-    len
+    let mut buf: Vec<u8> = Vec::with_capacity(total);
+    buf.extend_from_slice(dest_dir);
+    if needs_sep {
+        buf.push(b'/');
+    }
+    buf.extend_from_slice(basename);
+    Some(buf)
 }
 
 /// Create a single (hard or symbolic) link, validating before removing any
