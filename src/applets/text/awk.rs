@@ -14,6 +14,7 @@ use crate::io;
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
+use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -447,14 +448,7 @@ fn snp_str(spec: &[u8], s: &[u8]) -> Vec<u8> {
 // Limits (guard against pathological input / OOM / stack overflow)
 // ===========================================================================
 
-/// Maximum repetition count for a regex interval `{n,m}` (POSIX RE_DUP_MAX).
-const RE_DUP_MAX: usize = 32767;
-/// Recursion-depth cap for the backtracking regex matcher. The CPS matcher uses
-/// large stack frames (trait-object continuations), so this is a pragmatic
-/// backstop against stack overflow on long lines / ReDoS rather than a limit
-/// with linguistic meaning. Matches that would recurse deeper abort cleanly.
-const RE_MAX_DEPTH: usize = 6000;
-/// Recursion-depth cap for the ERE and awk-expression parsers.
+/// Recursion-depth cap for the awk-expression parser.
 const PARSE_MAX_DEPTH: usize = 2000;
 /// Upper bound on NF / a field index, to reject `NF=2000000000` style OOM.
 const FIELD_MAX: usize = 1_000_000;
@@ -462,449 +456,52 @@ const FIELD_MAX: usize = 1_000_000;
 const PRINTF_MAX_WIDTH: i64 = 8192;
 
 // ===========================================================================
-// Regex engine (ERE subset) with continuation-passing backtracking
+// Regex engine
 // ===========================================================================
+//
+// awk's regexes are POSIX EREs (case-sensitive) and are backed by the shared
+// BRE/ERE bytecode VM in `super::regex`. This thin wrapper adapts that engine's
+// capture-returning API to the `(start, end)` span interface the rest of the
+// awk interpreter expects, and preserves awk's deferred-error behavior: a
+// pattern that fails to compile is flagged and turned into a runtime error only
+// when the regex is actually used.
 
-#[derive(Clone)]
-enum ReNode {
-    Empty,
-    Char(u8),
-    Any,
-    Class(Box<[bool; 256]>),
-    Start,
-    End,
-    Concat(Vec<ReNode>),
-    Alt(Vec<ReNode>),
-    Star(Box<ReNode>),
-    Quest(Box<ReNode>),
-}
+use super::regex::{Regex as ReEngine, Syntax as ReSyntax};
+
+/// awk ERE syntax: extended, case-sensitive, with escape translation so that
+/// regex constants and dynamic regexes interpret `\t`/`\n`/`\r` as control
+/// bytes (matching gawk/POSIX awk behavior).
+const AWK_SYNTAX: ReSyntax = ReSyntax {
+    ere: true,
+    icase: false,
+    translate_escapes: true,
+};
 
 #[derive(Clone)]
 struct Regex {
-    root: ReNode,
-    /// Set when the pattern failed to parse (unbalanced parens, bad interval,
-    /// unterminated class, or too-deep nesting). The interpreter turns this into
-    /// a runtime error when the regex is actually used.
+    /// Compiled program, shared (Rc) so the wrapper stays `Clone` for storage in
+    /// `Expr::Regex` and cloning in `regex_from`. `None` iff compilation failed.
+    re: Option<Rc<ReEngine>>,
+    /// Set when the pattern failed to compile. The interpreter turns this into a
+    /// runtime error when the regex is actually used.
     error: bool,
 }
 
-fn re_run(node: &ReNode, t: &[u8], pos: usize, depth: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
-    // Backstop against stack overflow (long lines / catastrophic backtracking):
-    // abort this match path cleanly once the recursion gets too deep.
-    if depth > RE_MAX_DEPTH {
-        return None;
-    }
-    match node {
-        ReNode::Empty => k(pos),
-        ReNode::Char(c) => {
-            if pos < t.len() && t[pos] == *c {
-                k(pos + 1)
-            } else {
-                None
-            }
-        }
-        ReNode::Any => {
-            if pos < t.len() {
-                k(pos + 1)
-            } else {
-                None
-            }
-        }
-        ReNode::Class(tbl) => {
-            if pos < t.len() && tbl[t[pos] as usize] {
-                k(pos + 1)
-            } else {
-                None
-            }
-        }
-        ReNode::Start => {
-            if pos == 0 {
-                k(pos)
-            } else {
-                None
-            }
-        }
-        ReNode::End => {
-            if pos == t.len() {
-                k(pos)
-            } else {
-                None
-            }
-        }
-        ReNode::Concat(v) => re_seq(v, 0, t, pos, depth + 1, k),
-        ReNode::Alt(v) => {
-            for a in v {
-                if let Some(e) = re_run(a, t, pos, depth + 1, k) {
-                    return Some(e);
-                }
-            }
-            None
-        }
-        ReNode::Star(inner) => re_star(inner, t, pos, depth + 1, k),
-        ReNode::Quest(inner) => re_run(inner, t, pos, depth + 1, k).or_else(|| k(pos)),
+fn compile_regex(pat: &[u8]) -> Regex {
+    match ReEngine::compile(pat, AWK_SYNTAX) {
+        Ok(r) => Regex { re: Some(Rc::new(r)), error: false },
+        Err(()) => Regex { re: None, error: true },
     }
 }
 
-fn re_seq(v: &[ReNode], i: usize, t: &[u8], pos: usize, depth: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
-    if depth > RE_MAX_DEPTH {
-        return None;
-    }
-    if i >= v.len() {
-        return k(pos);
-    }
-    let cont = |p: usize| re_seq(v, i + 1, t, p, depth, k);
-    re_run(&v[i], t, pos, depth + 1, &cont)
-}
-
-fn re_star(inner: &ReNode, t: &[u8], pos: usize, depth: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
-    if depth > RE_MAX_DEPTH {
-        return None;
-    }
-    let cont = |p: usize| -> Option<usize> {
-        // Empty-loop guard: only recurse if the inner match consumed input,
-        // otherwise `a*` on an empty match would spin forever.
-        if p > pos {
-            re_star(inner, t, p, depth + 1, k)
-        } else {
-            None
-        }
-    };
-    re_run(inner, t, pos, depth + 1, &cont).or_else(|| k(pos))
-}
-
+/// Leftmost match at or after `from`, as a `(start, end)` byte span.
 fn re_find(re: &Regex, t: &[u8], from: usize) -> Option<(usize, usize)> {
-    let mut start = from;
-    loop {
-        if let Some(end) = re_run(&re.root, t, start, 0, &|p| Some(p)) {
-            return Some((start, end));
-        }
-        if start >= t.len() {
-            break;
-        }
-        start += 1;
-    }
-    None
+    let engine = re.re.as_ref()?;
+    engine.search(t, from).map(|c| (c.start(), c.end()))
 }
 
 fn re_test(re: &Regex, t: &[u8]) -> bool {
     re_find(re, t, 0).is_some()
-}
-
-// --- ERE parser ------------------------------------------------------------
-
-struct ReParser<'a> {
-    s: &'a [u8],
-    i: usize,
-    error: bool,
-    depth: usize,
-}
-
-impl<'a> ReParser<'a> {
-    fn peek(&self) -> Option<u8> {
-        self.s.get(self.i).copied()
-    }
-    fn bump(&mut self) -> Option<u8> {
-        let c = self.s.get(self.i).copied();
-        if c.is_some() {
-            self.i += 1;
-        }
-        c
-    }
-
-    fn parse_alt(&mut self) -> ReNode {
-        // Cap nesting depth (groups recurse parse_atom -> parse_alt) to avoid a
-        // parser stack overflow on adversarial patterns like "((((((...".
-        self.depth += 1;
-        if self.depth > PARSE_MAX_DEPTH {
-            self.error = true;
-            self.depth -= 1;
-            return ReNode::Empty;
-        }
-        let mut alts = vec![self.parse_concat()];
-        while self.peek() == Some(b'|') {
-            self.bump();
-            alts.push(self.parse_concat());
-        }
-        self.depth -= 1;
-        if alts.len() == 1 {
-            alts.pop().unwrap()
-        } else {
-            ReNode::Alt(alts)
-        }
-    }
-
-    fn parse_concat(&mut self) -> ReNode {
-        let mut parts = Vec::new();
-        loop {
-            match self.peek() {
-                None | Some(b'|') | Some(b')') => break,
-                _ => parts.push(self.parse_repeat()),
-            }
-        }
-        if parts.is_empty() {
-            ReNode::Empty
-        } else if parts.len() == 1 {
-            parts.pop().unwrap()
-        } else {
-            ReNode::Concat(parts)
-        }
-    }
-
-    fn parse_repeat(&mut self) -> ReNode {
-        let mut atom = self.parse_atom();
-        loop {
-            match self.peek() {
-                Some(b'*') => {
-                    self.bump();
-                    atom = ReNode::Star(Box::new(atom));
-                }
-                Some(b'+') => {
-                    self.bump();
-                    atom = ReNode::Concat(vec![atom.clone(), ReNode::Star(Box::new(atom))]);
-                }
-                Some(b'?') => {
-                    self.bump();
-                    atom = ReNode::Quest(Box::new(atom));
-                }
-                Some(b'{') => {
-                    // Interval {n}, {n,}, {n,m}. Fall back to literal if malformed.
-                    if let Some(node) = self.try_interval(&atom) {
-                        atom = node;
-                    } else {
-                        break;
-                    }
-                }
-                _ => break,
-            }
-        }
-        atom
-    }
-
-    /// Read a bounded decimal for an interval. Accumulates with saturating
-    /// arithmetic (so it can never overflow/panic) and reports whether any
-    /// digit was seen and whether the value stayed within `RE_DUP_MAX`.
-    fn interval_num(&mut self) -> (usize, bool, bool) {
-        let mut n = 0usize;
-        let mut got = false;
-        let mut ok = true;
-        while let Some(c) = self.peek() {
-            if c.is_ascii_digit() {
-                n = n.saturating_mul(10).saturating_add((c - b'0') as usize);
-                if n > RE_DUP_MAX {
-                    ok = false;
-                }
-                got = true;
-                self.bump();
-            } else {
-                break;
-            }
-        }
-        (n, got, ok)
-    }
-
-    fn try_interval(&mut self, atom: &ReNode) -> Option<ReNode> {
-        let save = self.i;
-        self.bump(); // '{'
-        let (lo, got_lo, lo_ok) = self.interval_num();
-        if !got_lo {
-            self.i = save;
-            return None;
-        }
-        if !lo_ok {
-            // In range syntactically but the bound exceeds RE_DUP_MAX.
-            self.error = true;
-            return None;
-        }
-        let mut hi = Some(lo);
-        if self.peek() == Some(b',') {
-            self.bump();
-            if self.peek() == Some(b'}') {
-                hi = None;
-            } else {
-                let (h, got, hi_ok) = self.interval_num();
-                if !got {
-                    self.i = save;
-                    return None;
-                }
-                if !hi_ok {
-                    self.error = true;
-                    return None;
-                }
-                hi = Some(h);
-            }
-        }
-        if self.peek() != Some(b'}') {
-            self.i = save;
-            return None;
-        }
-        // Reject an inverted range like {3,2}.
-        if let Some(h) = hi {
-            if h < lo {
-                self.bump(); // consume '}' so we don't reparse it
-                self.error = true;
-                return None;
-            }
-        }
-        self.bump(); // '}'
-        // Expand: lo copies, then (hi-lo) optional copies, or a Star for unbounded.
-        let mut parts = Vec::new();
-        for _ in 0..lo {
-            parts.push(atom.clone());
-        }
-        match hi {
-            None => parts.push(ReNode::Star(Box::new(atom.clone()))),
-            Some(h) => {
-                for _ in lo..h {
-                    parts.push(ReNode::Quest(Box::new(atom.clone())));
-                }
-            }
-        }
-        Some(if parts.is_empty() {
-            ReNode::Empty
-        } else if parts.len() == 1 {
-            parts.pop().unwrap()
-        } else {
-            ReNode::Concat(parts)
-        })
-    }
-
-    fn parse_atom(&mut self) -> ReNode {
-        match self.bump() {
-            Some(b'(') => {
-                let inner = self.parse_alt();
-                if self.peek() == Some(b')') {
-                    self.bump();
-                } else {
-                    // Unbalanced '(' — a bad regex.
-                    self.error = true;
-                }
-                inner
-            }
-            Some(b'[') => self.parse_class(),
-            Some(b'.') => ReNode::Any,
-            Some(b'^') => ReNode::Start,
-            Some(b'$') => ReNode::End,
-            Some(b'\\') => ReNode::Char(self.escaped()),
-            Some(c) => ReNode::Char(c),
-            None => ReNode::Empty,
-        }
-    }
-
-    fn escaped(&mut self) -> u8 {
-        match self.bump() {
-            Some(b'n') => b'\n',
-            Some(b't') => b'\t',
-            Some(b'r') => b'\r',
-            Some(b'f') => 0x0c,
-            Some(b'v') => 0x0b,
-            Some(b'a') => 0x07,
-            Some(b'b') => 0x08,
-            Some(c) => c,
-            None => b'\\',
-        }
-    }
-
-    fn parse_class(&mut self) -> ReNode {
-        let mut tbl = [false; 256];
-        let mut neg = false;
-        if self.peek() == Some(b'^') {
-            neg = true;
-            self.bump();
-        }
-        let mut first = true;
-        loop {
-            match self.peek() {
-                None => {
-                    // Unterminated '[' ... ']'.
-                    self.error = true;
-                    break;
-                }
-                Some(b']') if !first => {
-                    self.bump();
-                    break;
-                }
-                _ => {}
-            }
-            first = false;
-            // POSIX character class [:name:]
-            if self.peek() == Some(b'[') && self.s.get(self.i + 1) == Some(&b':') {
-                if let Some(()) = self.posix_class(&mut tbl) {
-                    continue;
-                }
-            }
-            let c = match self.bump() {
-                Some(b'\\') => self.escaped(),
-                Some(c) => c,
-                None => break,
-            };
-            // Range a-z
-            if self.peek() == Some(b'-') && self.s.get(self.i + 1).map_or(false, |&n| n != b']') {
-                self.bump(); // '-'
-                let hi = match self.bump() {
-                    Some(b'\\') => self.escaped(),
-                    Some(h) => h,
-                    None => c,
-                };
-                let (lo, hi) = if c <= hi { (c, hi) } else { (hi, c) };
-                for b in lo..=hi {
-                    tbl[b as usize] = true;
-                }
-            } else {
-                tbl[c as usize] = true;
-            }
-        }
-        if neg {
-            for b in tbl.iter_mut() {
-                *b = !*b;
-            }
-        }
-        ReNode::Class(Box::new(tbl))
-    }
-
-    fn posix_class(&mut self, tbl: &mut [bool; 256]) -> Option<()> {
-        // At '[:'. Find ':]'.
-        let start = self.i + 2;
-        let mut j = start;
-        while j + 1 < self.s.len() && !(self.s[j] == b':' && self.s[j + 1] == b']') {
-            j += 1;
-        }
-        if j + 1 >= self.s.len() {
-            return None;
-        }
-        let name = &self.s[start..j];
-        let pred: fn(u8) -> bool = match name {
-            b"alpha" => |c| c.is_ascii_alphabetic(),
-            b"digit" => |c| c.is_ascii_digit(),
-            b"alnum" => |c| c.is_ascii_alphanumeric(),
-            b"upper" => |c| c.is_ascii_uppercase(),
-            b"lower" => |c| c.is_ascii_lowercase(),
-            b"space" => |c| c == b' ' || (b'\t'..=b'\r').contains(&c),
-            b"blank" => |c| c == b' ' || c == b'\t',
-            b"punct" => |c| c.is_ascii_punctuation(),
-            b"print" => |c| c.is_ascii_graphic() || c == b' ',
-            b"graph" => |c| c.is_ascii_graphic(),
-            b"cntrl" => |c| c.is_ascii_control(),
-            b"xdigit" => |c| c.is_ascii_hexdigit(),
-            _ => return None,
-        };
-        for b in 0u16..256 {
-            if pred(b as u8) {
-                tbl[b as usize] = true;
-            }
-        }
-        self.i = j + 2;
-        Some(())
-    }
-}
-
-fn compile_regex(pat: &[u8]) -> Regex {
-    let mut p = ReParser { s: pat, i: 0, error: false, depth: 0 };
-    let root = p.parse_alt();
-    // Leftover input (e.g. a stray ')') means the pattern was malformed.
-    if p.i != pat.len() {
-        p.error = true;
-    }
-    Regex { root, error: p.error }
 }
 
 // ===========================================================================
