@@ -340,14 +340,16 @@ pub fn sort(argc: i32, argv: *const *const u8) -> i32 {
             return 0;
         }
 
-        lines.sort_by(|a, b| cmp(*a, *b));
+        // Apply reverse in the comparator (a stable sort) so lines with equal
+        // keys keep their original relative order, matching GNU sort -r.
+        if reverse {
+            lines.sort_by(|a, b| cmp(*b, *a));
+        } else {
+            lines.sort_by(|a, b| cmp(*a, *b));
+        }
 
         if unique {
             lines.dedup_by(|a, b| cmp(*a, *b) == Ordering::Equal);
-        }
-
-        if reverse {
-            lines.reverse();
         }
 
         // Determine output file descriptor.

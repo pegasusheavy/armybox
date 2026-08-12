@@ -32,6 +32,12 @@ fn fabs(x: f64) -> f64 {
     if x < 0.0 { -x } else { x }
 }
 
+/// Traditional awk aborts the whole program on division/modulo by zero.
+fn awk_div_by_zero() -> ! {
+    crate::io::write_str(2, b"awk: division by zero\n");
+    unsafe { libc::exit(2) }
+}
+
 /// Truncate toward zero.
 fn ftrunc(x: f64) -> f64 {
     if !x.is_finite() {
@@ -2406,8 +2412,8 @@ impl Interp {
                     BinOp::Add => x + y,
                     BinOp::Sub => x - y,
                     BinOp::Mul => x * y,
-                    BinOp::Div => x / y,
-                    BinOp::Mod => fmod(x, y),
+                    BinOp::Div => { if y == 0.0 { awk_div_by_zero(); } x / y }
+                    BinOp::Mod => { if y == 0.0 { awk_div_by_zero(); } fmod(x, y) }
                     BinOp::Pow => fpow(x, y),
                 })
             }

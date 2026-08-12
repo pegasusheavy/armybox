@@ -37,6 +37,7 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
     let mut _interactive = false;
     let mut preserve = false;
     let mut no_deref = false;
+    let mut deref_specified = false;
     let mut no_clobber = false;
     let mut files_start = 1;
 
@@ -48,14 +49,21 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
                 if has_opt(arg, b'f') { force = true; }
                 if has_opt(arg, b'i') { _interactive = true; }
                 if has_opt(arg, b'p') { preserve = true; }
-                if has_opt(arg, b'P') { no_deref = true; }
-                if has_opt(arg, b'L') { no_deref = false; }
+                if has_opt(arg, b'P') { no_deref = true; deref_specified = true; }
+                if has_opt(arg, b'L') { no_deref = false; deref_specified = true; }
+                if has_opt(arg, b'H') { deref_specified = true; }
                 if has_opt(arg, b'n') { no_clobber = true; }
                 files_start = i + 1;
             } else {
                 break;
             }
         }
+    }
+
+    // With -R and no explicit -H/-L/-P, symlinks in the tree are recreated as
+    // symlinks (as GNU/BSD cp do), which also prevents symlink-cycle recursion.
+    if recursive && !deref_specified {
+        no_deref = true;
     }
 
     let file_count = argc - files_start;
@@ -354,21 +362,21 @@ fn copy_directory(
             let name = unsafe { io::cstr_to_slice(dirent.d_name.as_ptr() as *const u8) };
 
             if name != b"." && name != b".." {
-                // Build full source path
-                let mut src_path = [0u8; 4096];
-                let mut src_len = 0;
-                for &c in src { src_path[src_len] = c; src_len += 1; }
-                src_path[src_len] = b'/'; src_len += 1;
-                for &c in name { src_path[src_len] = c; src_len += 1; }
+                // Build full paths on the heap so arbitrarily deep trees can't
+                // overflow a fixed buffer.
+                let mut src_path: alloc::vec::Vec<u8> =
+                    alloc::vec::Vec::with_capacity(src.len() + 1 + name.len());
+                src_path.extend_from_slice(src);
+                src_path.push(b'/');
+                src_path.extend_from_slice(name);
 
-                // Build full dest path
-                let mut dest_path = [0u8; 4096];
-                let mut dest_len = 0;
-                for &c in dest { dest_path[dest_len] = c; dest_len += 1; }
-                dest_path[dest_len] = b'/'; dest_len += 1;
-                for &c in name { dest_path[dest_len] = c; dest_len += 1; }
+                let mut dest_path: alloc::vec::Vec<u8> =
+                    alloc::vec::Vec::with_capacity(dest.len() + 1 + name.len());
+                dest_path.extend_from_slice(dest);
+                dest_path.push(b'/');
+                dest_path.extend_from_slice(name);
 
-                if copy_item(&src_path[..src_len], &dest_path[..dest_len], true, force, preserve, no_deref, no_clobber) != 0 {
+                if copy_item(&src_path, &dest_path, true, force, preserve, no_deref, no_clobber) != 0 {
                     exit_code = 1;
                 }
             }

@@ -164,7 +164,9 @@ fn wc_fd(fd: i32) -> (u64, u64, u64, u64) {
 
         for &c in &buf[..n as usize] {
             bytes += 1;
-            chars += 1;
+            // Count UTF-8 characters (code points): every byte that is not a
+            // continuation byte (0b10xxxxxx) starts a new character.
+            if (c & 0xC0) != 0x80 { chars += 1; }
             if c == b'\n' { lines += 1; }
 
             let is_space = c == b' ' || c == b'\n' || c == b'\t' || c == b'\r'
