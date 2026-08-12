@@ -102,8 +102,8 @@ We follow a 90-day disclosure policy:
 ### Security Advisories
 
 Security advisories are published at:
-- GitHub Security Advisories: https://github.com/pegasusheavy/armybox/security/advisories
-- Our documentation: https://pegasusheavy.github.io/armybox/security
+- GitHub Security Advisories: https://github.com/quinnjr/armybox/security/advisories
+- Our documentation: https://quinnjr.github.io/armybox/security
 
 ---
 

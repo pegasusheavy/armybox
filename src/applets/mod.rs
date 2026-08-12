@@ -113,7 +113,7 @@ mod package;
 use crate::io;
 
 /// Total number of applets
-pub const APPLET_COUNT: usize = 296;
+pub const APPLET_COUNT: usize = 303;
 
 /// Get argument as byte slice
 #[inline]

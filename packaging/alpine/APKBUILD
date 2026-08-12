@@ -1,9 +1,9 @@
 # Maintainer: Pegasus Heavy Industries <contact@pegasusheavy.industries>
 pkgname=armybox
-pkgver=0.1.0
+pkgver=0.3.0
 pkgrel=0
 pkgdesc="BusyBox/Toybox clone written in Rust"
-url="https://github.com/PegasusHeavyIndustries/armybox"
+url="https://github.com/quinnjr/armybox"
 arch="x86_64 aarch64"
 license="MIT AND Apache-2.0"
 makedepends="cargo rust"

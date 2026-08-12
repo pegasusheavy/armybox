@@ -2,7 +2,7 @@
 
 Pure Rust `#[no_std]` implementation of Zstandard (zstd) compression and decompression.
 
-Part of the [armybox](https://github.com/pegasusheavy/armybox) project.
+Part of the [armybox](https://github.com/quinnjr/armybox) project.
 
 ## Features
 

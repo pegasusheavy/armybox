@@ -55,7 +55,7 @@ git clone https://github.com/YOUR_USERNAME/armybox
 cd armybox
 
 # Add upstream remote
-git remote add upstream https://github.com/pegasusheavy/armybox
+git remote add upstream https://github.com/quinnjr/armybox
 
 # Build
 cargo build

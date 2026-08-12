@@ -12,7 +12,7 @@ ArmyLinux is a minimal, security-focused Linux distribution that maintains compa
 
 ## Features
 
-- 🦀 **Rust-powered userspace** - armybox provides 163+ utilities
+- 🦀 **Rust-powered userspace** - armybox provides 303 utilities
 - 📦 **Alpine APK compatible** - Use Alpine's package repositories
 - 🔒 **musl libc** - Static binaries, small footprint
 - 🐳 **Container-ready** - Minimal base images (~8MB)

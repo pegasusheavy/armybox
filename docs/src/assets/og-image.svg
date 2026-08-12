@@ -52,7 +52,7 @@
   <text x="400" y="200" font-family="'Courier New', monospace" font-size="72" font-weight="bold" fill="#d4c5a9">armybox</text>
 
   <!-- Subtitle -->
-  <text x="400" y="270" font-family="Arial, sans-serif" font-size="32" fill="#9ca88c">293 Unix Utilities in Rust</text>
+  <text x="400" y="270" font-family="Arial, sans-serif" font-size="32" fill="#9ca88c">303 Unix Utilities in Rust</text>
 
   <!-- Key Stats -->
   <g transform="translate(400, 320)">
@@ -67,7 +67,7 @@
     </g>
 
     <g transform="translate(230, 90)">
-      <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">293</text>
+      <text x="0" y="0" font-family="'Courier New', monospace" font-size="48" font-weight="bold" fill="#6b8e23">303</text>
       <text x="0" y="35" font-family="Arial, sans-serif" font-size="18" fill="#9ca88c">Applets</text>
     </g>
 
@@ -89,7 +89,7 @@
 
   <!-- GitHub URL -->
   <text x="600" y="600" font-family="'Courier New', monospace" font-size="20" fill="#4a5d23" text-anchor="middle">
-    github.com/pegasusheavy/armybox
+    github.com/quinnjr/armybox
   </text>
 
   <!-- Border -->

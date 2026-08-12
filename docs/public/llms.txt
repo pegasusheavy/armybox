@@ -2,18 +2,18 @@
 
 > A memory-safe `#[no_std]` BusyBox/Toybox clone written in Rust.
 
-Armybox is a multi-call binary providing 293 Unix utilities in a single, incredibly small executable. Built entirely with `#[no_std]` Rust, it delivers 100% Toybox compatibility plus 55 additional applets in just 108 KB (54 KB with UPX compression). Armybox is ideal for embedded systems, minimal containers (FROM scratch), rescue environments, space-constrained systems, and Android devices.
+Armybox is a multi-call binary providing 303 Unix utilities in a single, incredibly small executable. Built entirely with `#[no_std]` Rust, it delivers 100% Toybox compatibility plus 65 additional applets in just 108 KB (54 KB with UPX compression). Armybox is ideal for embedded systems, minimal containers (FROM scratch), rescue environments, space-constrained systems, and Android devices.
 
 ## Links
 
-- [Documentation](https://pegasusheavy.github.io/armybox/)
-- [GitHub Repository](https://github.com/pegasusheavy/armybox)
+- [Documentation](https://quinnjr.github.io/armybox/)
+- [GitHub Repository](https://github.com/quinnjr/armybox)
 - [Crates.io Package](https://crates.io/crates/armybox)
 - [API Docs (docs.rs)](https://docs.rs/armybox)
 
 ## Key Features
 
-- 293 applets -- 100% Toybox compatible plus 55 additional utilities
+- 303 applets -- 100% Toybox compatible plus 65 additional utilities
 - Multi-call binary -- single executable providing all utilities
 - Pure Rust 2024 -- memory-safe implementation using the latest Rust edition
 - Incredibly tiny -- 108 KB stripped, ~54 KB with UPX compression (~380 bytes per applet)
@@ -31,7 +31,7 @@ Armybox is a multi-call binary providing 293 Unix utilities in a single, incredi
 
 ```bash
 # Clone and build
-git clone https://github.com/pegasusheavy/armybox
+git clone https://github.com/quinnjr/armybox
 cd armybox
 cargo build --release
 

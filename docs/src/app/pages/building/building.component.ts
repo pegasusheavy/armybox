@@ -43,7 +43,7 @@ import { Component } from '@angular/core';
           </div>
 
           <p class="text-sm text-army-600">
-            All builds include <strong>293 applets</strong>. That's approximately <strong>~380 bytes per applet</strong> — 24x more efficient than BusyBox!
+            All builds include <strong>303 applets</strong>. That's approximately <strong>~380 bytes per applet</strong> — 24x more efficient than BusyBox!
           </p>
         </section>
 
@@ -78,7 +78,7 @@ import { Component } from '@angular/core';
               <h3 class="text-lg font-medium text-army-900 mb-3">Clone and build</h3>
               <div class="bg-army-900 rounded-xl p-5 font-mono text-sm overflow-x-auto">
                 <div class="text-army-100">
-                  <div><span class="text-army-500">$</span> git clone https://github.com/pegasusheavy/armybox</div>
+                  <div><span class="text-army-500">$</span> git clone https://github.com/quinnjr/armybox</div>
                   <div><span class="text-army-500">$</span> cd armybox</div>
                   <div><span class="text-army-500">$</span> cargo build --release</div>
                 </div>
@@ -101,7 +101,7 @@ import { Component } from '@angular/core';
                 <div class="text-army-100">
                   <div><span class="text-army-500">$</span> sudo install -m 755 target/release/armybox /usr/local/bin/</div>
                   <div><span class="text-army-500">$</span> armybox --install /usr/local/bin</div>
-                  <div class="text-army-400 mt-2"># Creates symlinks for all 293 applets</div>
+                  <div class="text-army-400 mt-2"># Creates symlinks for all 303 applets</div>
                 </div>
               </div>
             </div>

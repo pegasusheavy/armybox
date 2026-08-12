@@ -165,8 +165,8 @@ NAME="ArmyLinux"
 ID=armylinux
 VERSION_ID=0.1.0
 PRETTY_NAME="ArmyLinux 0.1.0"
-HOME_URL="https://github.com/PegasusHeavyIndustries/armybox"
-BUG_REPORT_URL="https://github.com/PegasusHeavyIndustries/armybox/issues"
+HOME_URL="https://github.com/quinnjr/armybox"
+BUG_REPORT_URL="https://github.com/quinnjr/armybox/issues"
 EOF
 
     # Create motd
@@ -176,7 +176,7 @@ Welcome to ArmyLinux!
 
 Powered by armybox - a memory-safe BusyBox replacement written in Rust.
 
- * Documentation: https://github.com/PegasusHeavyIndustries/armybox
+ * Documentation: https://github.com/quinnjr/armybox
  * Package repos: Alpine Linux v3.19
 
 EOF

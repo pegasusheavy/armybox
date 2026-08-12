@@ -3,15 +3,15 @@
 [![Crates.io](https://img.shields.io/crates/v/armybox)](https://crates.io/crates/armybox)
 [![docs.rs](https://img.shields.io/docsrs/armybox)](https://docs.rs/armybox)
 [![License](https://img.shields.io/crates/l/armybox)](LICENSE-MIT)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/pegasusheavy/armybox/release.yml)](https://github.com/pegasusheavy/armybox/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/quinnjr/armybox/release.yml)](https://github.com/quinnjr/armybox/actions)
 
 A memory-safe `#[no_std]` BusyBox/Toybox clone written in Rust.
 
-**[📖 Documentation](https://pegasusheavy.github.io/armybox)** · **[📦 Crates.io](https://crates.io/crates/armybox)** · **[🔧 API Docs](https://docs.rs/armybox)**
+**[📖 Documentation](https://quinnjr.github.io/armybox)** · **[📦 Crates.io](https://crates.io/crates/armybox)** · **[🔧 API Docs](https://docs.rs/armybox)**
 
 ## ✨ Features
 
-- **293 applets** — 100% Toybox compatible + 55 additional utilities
+- **303 applets** — 100% Toybox compatible + 65 additional utilities
 - **Multi-call binary** — single executable providing all utilities
 - **Pure Rust 2024** — memory-safe implementation using the latest Rust edition
 - **Incredibly tiny** — **108 KB** stripped, **~54 KB** with UPX compression
@@ -25,7 +25,7 @@ A memory-safe `#[no_std]` BusyBox/Toybox clone written in Rust.
 
 | Binary | Size | UPX Size | Applets | Size/Applet |
 |--------|------|----------|---------|-------------|
-| **Armybox** | 108 KB | ~54 KB | 293 | **~380 bytes** |
+| **Armybox** | 108 KB | ~54 KB | 303 | **~380 bytes** |
 | Toybox | ~500 KB | ~200 KB | 238 | ~2.1 KB |
 | BusyBox | 2.4 MB | ~1 MB | 274 | ~9 KB |
 
@@ -35,7 +35,7 @@ A memory-safe `#[no_std]` BusyBox/Toybox clone written in Rust.
 
 ```bash
 # Clone and build
-git clone https://github.com/pegasusheavy/armybox
+git clone https://github.com/quinnjr/armybox
 cd armybox
 cargo build --release
 
@@ -46,7 +46,7 @@ sudo ./target/release/armybox --install /usr/local/bin
 upx --best target/release/armybox
 ```
 
-## 📚 Applet Categories (293 total)
+## 📚 Applet Categories (303 total)
 
 ### File Operations (45+)
 `basename`, `cat`, `cd`, `chattr`, `chgrp`, `chmod`, `chown`, `cp`, `dd`, `dirname`, `fallocate`, `file`, `find`, `fstype`, `install`, `link`, `ln`, `ls`, `lsattr`, `makedevs`, `mkdir`, `mkfifo`, `mknod`, `mktemp`, `mv`, `patch`, `pwd`, `readlink`, `realpath`, `rm`, `rmdir`, `setfattr`, `shred`, `split`, `stat`, `sync`, `touch`, `truncate`, `unlink`, `xargs`
@@ -178,7 +178,7 @@ src/
 ├── io.rs           # Raw I/O via libc
 ├── sys.rs          # System utilities
 └── applets/
-    ├── mod.rs      # Applet registry (293 applets)
+    ├── mod.rs      # Applet registry (303 applets)
     ├── file.rs     # File operations
     ├── text.rs     # Text processing
     ├── system.rs   # System utilities
@@ -230,7 +230,7 @@ This results in an incredibly small binary that's perfect for:
 | Binary Size | **108 KB** | ~500 KB | 2.4 MB |
 | Per-Applet Size | **~380 bytes** | ~2.1 KB | ~9 KB |
 | `#[no_std]` | ✅ | N/A | N/A |
-| Applet Count | **293** | 238 | 274 |
+| Applet Count | **303** | 238 | 274 |
 | Toybox Compatible | ✅ 100% | N/A | Partial |
 | POSIX Shell | ✅ | ✅ | ✅ |
 | Vi Editor | ✅ | ✅ | ✅ |

@@ -27,7 +27,7 @@ armybox can be installed on jailbroken iOS devices via Cydia, Sileo, or Zebra.
 
 ```bash
 # From a computer
-wget https://github.com/PegasusHeavyIndustries/armybox/releases/download/v0.1.0/armybox_0.1.0_iphoneos-arm64.deb
+wget https://github.com/quinnjr/armybox/releases/download/v0.1.0/armybox_0.1.0_iphoneos-arm64.deb
 
 # Transfer to device
 scp armybox_*.deb root@<device-ip>:/var/mobile/

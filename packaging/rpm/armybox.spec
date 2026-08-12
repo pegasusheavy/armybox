@@ -1,10 +1,10 @@
 Name:           armybox
-Version:        0.1.0
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        BusyBox/Toybox clone written in Rust
 
 License:        MIT OR Apache-2.0
-URL:            https://github.com/PegasusHeavyIndustries/armybox
+URL:            https://github.com/quinnjr/armybox
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cargo
@@ -15,7 +15,7 @@ armybox is a modern implementation of common Unix utilities
 in a single multi-call binary, similar to BusyBox and Toybox.
 
 Features include:
-- 163+ applets (coreutils, compression, networking, shell, init)
+- 303 applets (coreutils, compression, networking, shell, init)
 - Memory-safe Rust implementation
 - ash-compatible shell
 - PID 1 init system
@@ -49,6 +49,6 @@ echo "Run 'armybox-install-symlinks' to create symlinks for all applets."
 %changelog
 * Thu Jan 02 2026 Pegasus Heavy Industries <contact@pegasusheavy.industries> - 0.1.0-1
 - Initial package
-- 163+ applets including coreutils, compression, networking
+- 303 applets including coreutils, compression, networking
 - ash-compatible shell
 - PID 1 init system

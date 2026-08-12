@@ -1,7 +1,7 @@
 {
-  "name": "armybox - 293 Unix Utilities in Rust",
+  "name": "armybox - 303 Unix Utilities in Rust",
   "short_name": "armybox",
-  "description": "A memory-safe BusyBox/Toybox clone in Rust. 293 Unix utilities in a 108KB binary. 100% Toybox compatible with #[no_std] support for embedded systems, containers, and Android.",
+  "description": "A memory-safe BusyBox/Toybox clone in Rust. 303 Unix utilities in a 108KB binary. 100% Toybox compatible with #[no_std] support for embedded systems, containers, and Android.",
   "start_url": "/",
   "id": "/",
   "display": "standalone",
@@ -35,7 +35,7 @@
   "related_applications": [
     {
       "platform": "webapp",
-      "url": "https://pegasusheavy.github.io/armybox/"
+      "url": "https://quinnjr.github.io/armybox/"
     }
   ],
   "prefer_related_applications": false

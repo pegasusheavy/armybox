@@ -7,11 +7,11 @@ version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
-description = "A memory-safe #[no_std] BusyBox/Toybox clone in Rust - 299 Unix utilities in ~500KB"
+description = "A memory-safe #[no_std] BusyBox/Toybox clone in Rust - 303 Unix utilities in ~108KB"
 documentation = "https://docs.rs/armybox"
 readme = "README.md"
-homepage = "https://pegasusheavy.github.io/armybox"
-repository = "https://github.com/pegasusheavy/armybox"
+homepage = "https://quinnjr.github.io/armybox"
+repository = "https://github.com/quinnjr/armybox"
 license = "MIT OR Apache-2.0"
 keywords = ["busybox", "toybox", "no_std", "embedded", "unix"]
 categories = ["command-line-utilities", "no-std", "embedded"]
@@ -84,6 +84,93 @@ full = [
 
 # Minimal useful set for basic shell use
 minimal = ["cat", "echo", "ls", "sh", "boolean", "test"]
+
+# =============================================================================
+# Category Meta-Features
+#
+# These allow building armybox with specific categories of applets.
+# Use with --no-default-features --features "alloc,<categories>" to get
+# exactly the set you want.  Category names use the "cat-" prefix to avoid
+# clashing with individual applet feature names.
+# =============================================================================
+
+# File utilities (ls, cp, mv, rm, find, chmod, etc.)
+cat-file = [
+    "basename", "cat", "cd", "chattr", "chgrp", "chmod", "chown", "cp", "dd",
+    "dirname", "file", "find", "fstype", "install", "link", "ln", "ls", "lsattr",
+    "makedevs", "mkdir", "mkfifo", "mknod", "mktemp", "mv", "patch", "pwd",
+    "readlink", "realpath", "rm", "rmdir", "setfattr", "shred", "split", "stat",
+    "sync", "touch", "truncate", "unlink", "xargs",
+]
+
+# Text processing (grep, sed, awk, sort, cut, tr, etc.)
+cat-text = [
+    "awk", "comm", "cut", "dos2unix", "echo", "expand", "fmt", "fold", "grep",
+    "head", "nl", "paste", "printf", "rev", "sed", "seq", "sort", "strings",
+    "tac", "tail", "tee", "tr", "unexpand", "uniq", "unix2dos", "wc", "yes",
+]
+
+# System administration (mount, hostname, dmesg, hwclock, etc.)
+cat-system = [
+    "acpi", "arch", "blkdiscard", "blkid", "blockdev", "cal", "chroot", "chvt",
+    "date", "deallocvt", "devmem", "df", "dmesg", "dnsdomainname", "du", "eject",
+    "env", "fallocate", "fgconsole", "flock", "free", "freeramdisk", "fsfreeze",
+    "fsync", "gpiodetect", "gpiofind", "gpioget", "gpioinfo", "gpioset", "groups",
+    "halt", "hostid", "hostname", "hwclock", "i2cdetect", "i2cdump", "i2cget",
+    "i2cset", "i2ctransfer", "id", "inotifyd", "insmod", "linux32", "logger",
+    "login", "logname", "losetup", "lsmod", "lspci", "lsusb", "mkswap", "modinfo",
+    "modprobe", "mount", "mountpoint", "nologin", "nproc", "openvt", "partprobe",
+    "pivot_root", "poweroff", "printenv", "readahead", "reboot", "rfkill", "rmmod",
+    "rtcwake", "shuf", "sleep", "su", "swapoff", "swapon", "sysctl", "tty",
+    "ulimit", "umount", "uname", "uptime", "users", "usleep", "vmstat", "w",
+    "watch", "who", "whoami",
+]
+
+# Process management (ps, kill, top, pgrep, nice, etc.)
+cat-process = [
+    "chrt", "ionice", "iorenice", "iotop", "kill", "killall", "killall5", "nice",
+    "nohup", "nsenter", "pgrep", "pidof", "pkill", "pmap", "prlimit", "ps", "pwdx",
+    "renice", "setsid", "taskset", "timeout", "top", "uclampset", "unshare",
+]
+
+# Networking (ping, wget, ifconfig, ip, netstat, etc.)
+cat-network = [
+    "arp", "arping", "brctl", "ether_wake", "ftpget", "ftpput", "host", "httpd",
+    "ifconfig", "ifdown", "ifup", "ip", "ipaddr", "ipcalc", "iplink", "ipneigh",
+    "iproute", "iprule", "microcom", "nameif", "nbd_client", "nbd_server", "nc",
+    "netstat", "nslookup", "ping", "route", "slattach", "sntp", "ss", "telnet",
+    "tftp", "traceroute", "tunctl", "vconfig", "wget",
+]
+
+# Archive/compression (tar, gzip, xz, zstd, cpio, etc.)
+cat-archive = [
+    "bzip2", "compress", "cpio", "gzip", "tar", "unzip", "xz", "zstd",
+]
+
+# Miscellaneous (base64, diff, hexdump, which, expr, etc.)
+cat-misc = [
+    "ascii", "base64", "boolean", "cmp", "count", "diff", "expr",
+    "factor", "getconf", "getopt", "hash", "help", "hexdump", "iconv", "mcookie",
+    "memeater", "mesg", "mix", "mkpasswd", "pwgen", "readelf", "screen",
+    "terminal", "test", "time", "toybox", "ts", "tsort", "unicode", "uudecode",
+    "uuencode", "uuidgen", "which",
+]
+
+# Text editors (vi, hexedit)
+cat-editors = [
+    "vi", "hexedit",
+]
+
+# Init system (init, getty, switch_root, etc.)
+cat-init = [
+    "init", "getty", "oneit", "runlevel", "sulogin", "switch_root", "telinit",
+    "watchdog",
+]
+
+# Package managers (apk, abp)
+cat-pkg = [
+    "apk", "abp",
+]
 
 # =============================================================================
 # Individual Applet Features
@@ -229,7 +316,7 @@ rmmod = []
 rtcwake = []
 shuf = []
 sleep = []
-su = []
+su = ["login"]
 swapoff = []
 swapon = []
 sysctl = []
@@ -364,7 +451,7 @@ init = []          # includes linuxrc alias
 getty = []
 oneit = []
 runlevel = []
-sulogin = []
+sulogin = ["login"]
 switch_root = []
 telinit = []
 watchdog = []
