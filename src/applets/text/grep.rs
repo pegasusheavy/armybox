@@ -982,33 +982,29 @@ fn grep_main(argc: i32, argv: *const *const u8, default_ere: bool, default_fixed
                             i += 1;
                             unsafe { get_arg(argv, i) }
                         };
-                        match val {
-                            Some(v) => {
-                                if c == b'e' {
-                                    split_patterns(v, &mut patterns);
-                                } else {
-                                    let fd = io::open(v, libc::O_RDONLY, 0);
-                                    if fd < 0 {
-                                        if !opts.suppress_errors {
-                                            io::write_str(2, b"grep: ");
-                                            io::write_all(2, v);
-                                            io::write_str(2, b": No such file or directory\n");
-                                        }
-                                        return 2;
-                                    }
-                                    let data = io::read_all(fd);
-                                    if fd != 0 {
-                                        io::close(fd);
-                                    }
-                                    split_patterns(&data, &mut patterns);
+                        let Some(v) = val else {
+                            io::write_str(2, b"grep: option requires an argument\n");
+                            return 2;
+                        };
+                        if c == b'e' {
+                            split_patterns(v, &mut patterns);
+                        } else {
+                            let fd = io::open(v, libc::O_RDONLY, 0);
+                            if fd < 0 {
+                                if !opts.suppress_errors {
+                                    io::write_str(2, b"grep: ");
+                                    io::write_all(2, v);
+                                    io::write_str(2, b": No such file or directory\n");
                                 }
-                                have_pattern_source = true;
-                            }
-                            None => {
-                                io::write_str(2, b"grep: option requires an argument\n");
                                 return 2;
                             }
+                            let data = io::read_all(fd);
+                            if fd != 0 {
+                                io::close(fd);
+                            }
+                            split_patterns(&data, &mut patterns);
                         }
+                        have_pattern_source = true;
                         break; // done with this cluster
                     }
                     _ => {

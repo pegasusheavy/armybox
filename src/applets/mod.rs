@@ -555,9 +555,9 @@ pub fn find_applet(name: &[u8]) -> Option<fn(i32, *const *const u8) -> i32> {
     #[cfg(feature = "hexdump")]
     if name == b"hexdump" { return Some(misc::hexdump); }
     #[cfg(feature = "hexdump")]
-    if name == b"hd" { return Some(misc::hd); }
+    if name == b"hd" { return Some(misc::hexdump); }
     #[cfg(feature = "hexdump")]
-    if name == b"xxd" { return Some(misc::xxd); }
+    if name == b"xxd" { return Some(misc::hexdump); }
     #[cfg(feature = "hash")]
     if name == b"md5sum" { return Some(misc::md5sum); }
     #[cfg(feature = "hash")]

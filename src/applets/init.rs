@@ -323,7 +323,7 @@ fn parse_inittab() -> Vec<InittabEntry> {
             // Standard format: id:runlevels:action:process
             let id = parts[0].to_vec();
             let action = parse_action(parts[2]);
-            let process = parts[3..].join(&b':').to_vec();
+            let process = join_bytes(&parts[3..], b':');
 
             if action != 0 {
                 entries.push(InittabEntry { id, action, process, pid: 0 });
@@ -331,7 +331,7 @@ fn parse_inittab() -> Vec<InittabEntry> {
         } else if parts.len() >= 3 {
             // BusyBox format: ::action:process (id and runlevels can be empty)
             let action = parse_action(parts[1]);
-            let process = parts[2..].join(&b':').to_vec();
+            let process = join_bytes(&parts[2..], b':');
 
             if action != 0 {
                 entries.push(InittabEntry { id: Vec::new(), action, process, pid: 0 });
@@ -350,24 +350,17 @@ fn trim(s: &[u8]) -> &[u8] {
     &s[start..end]
 }
 
-/// Helper trait to join byte slices
+/// Join byte slices with a separator byte.
 #[cfg(all(feature = "init", feature = "alloc"))]
-trait JoinBytes {
-    fn join(&self, sep: &u8) -> Vec<u8>;
-}
-
-#[cfg(all(feature = "init", feature = "alloc"))]
-impl JoinBytes for [&[u8]] {
-    fn join(&self, sep: &u8) -> Vec<u8> {
-        let mut result = Vec::new();
-        for (i, part) in self.iter().enumerate() {
-            if i > 0 {
-                result.push(*sep);
-            }
-            result.extend_from_slice(part);
+fn join_bytes(parts: &[&[u8]], sep: u8) -> Vec<u8> {
+    let mut result = Vec::new();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            result.push(sep);
         }
-        result
+        result.extend_from_slice(part);
     }
+    result
 }
 
 #[cfg(feature = "telinit")]

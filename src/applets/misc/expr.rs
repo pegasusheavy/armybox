@@ -123,9 +123,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let right = self.parse_and()?;
                 // `|`: left if it is neither null nor zero, otherwise right.
-                if !is_falsey(&left) {
-                    // keep left
-                } else {
+                if is_falsey(&left) {
                     left = right;
                 }
             } else {
@@ -143,9 +141,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let right = self.parse_rel()?;
                 // `&`: left if both operands are neither null nor zero, else 0.
-                if !is_falsey(&left) && !is_falsey(&right) {
-                    // keep left
-                } else {
+                if is_falsey(&left) || is_falsey(&right) {
                     left = b"0".to_vec();
                 }
             } else {

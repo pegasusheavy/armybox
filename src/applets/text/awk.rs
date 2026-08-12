@@ -45,15 +45,6 @@ fn ftrunc(x: f64) -> f64 {
     }
 }
 
-fn ffloor(x: f64) -> f64 {
-    let t = ftrunc(x);
-    if t > x {
-        t - 1.0
-    } else {
-        t
-    }
-}
-
 fn fmod(a: f64, b: f64) -> f64 {
     if b == 0.0 || !a.is_finite() {
         return f64::NAN;

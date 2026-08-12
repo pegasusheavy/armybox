@@ -21,7 +21,6 @@ exclude = ["docs/", "dist/", "fuzz/", "packaging/", "scripts/", ".github/", "tar
 default = ["alloc", "full"]
 alloc = []          # Enable heap allocation (Vec, String, Box)
 std = ["alloc"]     # Enable std (for easier testing, not required)
-android = ["alloc"] # Android/Bionic-specific compatibility
 
 # =============================================================================
 # Applet Meta-Features
