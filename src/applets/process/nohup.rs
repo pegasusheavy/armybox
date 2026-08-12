@@ -18,7 +18,8 @@ use crate::applets::get_arg;
 /// to nohup.out. SIGHUP is ignored.
 ///
 /// # Exit Status
-/// - 127: Command not found or cannot be executed
+/// - 126: Utility found but could not be executed
+/// - 127: Utility not found
 /// - Command's exit status otherwise
 pub fn nohup(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 2 {
@@ -31,7 +32,7 @@ pub fn nohup(argc: i32, argv: *const *const u8) -> i32 {
         libc::signal(libc::SIGHUP, libc::SIG_IGN);
     }
 
-    // Redirect stdout to nohup.out if it's a tty
+    // Redirect stdout to nohup.out if it's a tty (best-effort)
     if unsafe { libc::isatty(1) } != 0 {
         let fd = io::open(b"nohup.out", libc::O_WRONLY | libc::O_CREAT | libc::O_APPEND, 0o644);
         if fd >= 0 {
@@ -43,11 +44,22 @@ pub fn nohup(argc: i32, argv: *const *const u8) -> i32 {
     let cmd = unsafe { get_arg(argv, 1).unwrap() };
     let mut cmd_buf = [0u8; 4096];
     cmd_buf[..cmd.len()].copy_from_slice(cmd);
-    let cmd_ptr = cmd_buf.as_ptr() as *const i8;
-    let argv_ptrs = [cmd_ptr, core::ptr::null()];
-    unsafe { libc::execv(cmd_ptr, argv_ptrs.as_ptr()) };
-    sys::perror(b"exec");
-    127
+    cmd_buf[cmd.len()] = 0;
+
+    unsafe {
+        libc::execvp(
+            cmd_buf.as_ptr() as *const i8,
+            argv.add(1) as *const *const i8,
+        );
+    }
+
+    let err = sys::errno();
+    sys::perror(cmd);
+    if err == libc::ENOENT {
+        127
+    } else {
+        126
+    }
 }
 
 #[cfg(test)]

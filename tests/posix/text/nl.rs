@@ -19,7 +19,8 @@ fn posix_nl_basic() {
 fn posix_nl_body_all() {
     let result = run_with_stdin(&["nl", "-ba"], b"hello\n\nworld\n");
     assert_success(&result);
-    // All lines numbered including blank
+    // All lines numbered, including the blank line (counter advances on it).
+    assert_eq!(result.1, "     1\thello\n     2\t\n     3\tworld\n");
 }
 
 /// POSIX: nl -b t (only non-empty lines)
@@ -27,7 +28,18 @@ fn posix_nl_body_all() {
 fn posix_nl_body_text() {
     let result = run_with_stdin(&["nl", "-bt"], b"hello\n\nworld\n");
     assert_success(&result);
-    // Blank line should not be numbered
+    // Blank line is not numbered; the counter does not advance for it, so
+    // "world" is line 2, and the blank line is emitted with no number.
+    assert_eq!(result.1, "     1\thello\n\n     2\tworld\n");
+}
+
+/// nl -v START -i INCR: custom start and increment.
+#[test]
+fn posix_nl_start_increment() {
+    let result = run_with_stdin(&["nl", "-v100", "-i5"], b"a\nb\nc\n");
+    assert_success(&result);
+    // Numbering starts at 100 and increments by 5: 100, 105, 110.
+    assert_eq!(result.1, "   100\ta\n   105\tb\n   110\tc\n");
 }
 
 /// POSIX: nl -n format
@@ -44,7 +56,15 @@ fn posix_nl_format_rz() {
 fn posix_nl_width() {
     let result = run_with_stdin(&["nl", "-w", "3"], b"hello\n");
     assert_success(&result);
-    // Line number field width is 3
+    // Line number field width is 3, right-justified, then a TAB separator.
+    assert_eq!(result.1, "  1\thello\n");
+}
+
+/// nl rejects an unparsable -w width with a usage error (exit 2).
+#[test]
+fn posix_nl_invalid_width() {
+    let result = run_with_stdin(&["nl", "-w", "abc"], b"hello\n");
+    assert_eq!(result.0, 2);
 }
 
 /// POSIX: nl -s separator

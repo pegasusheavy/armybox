@@ -323,7 +323,7 @@ fn parse_inittab() -> Vec<InittabEntry> {
             // Standard format: id:runlevels:action:process
             let id = parts[0].to_vec();
             let action = parse_action(parts[2]);
-            let process = parts[3..].join(&b':').to_vec();
+            let process = join_bytes(&parts[3..], b':');
 
             if action != 0 {
                 entries.push(InittabEntry { id, action, process, pid: 0 });
@@ -331,7 +331,7 @@ fn parse_inittab() -> Vec<InittabEntry> {
         } else if parts.len() >= 3 {
             // BusyBox format: ::action:process (id and runlevels can be empty)
             let action = parse_action(parts[1]);
-            let process = parts[2..].join(&b':').to_vec();
+            let process = join_bytes(&parts[2..], b':');
 
             if action != 0 {
                 entries.push(InittabEntry { id: Vec::new(), action, process, pid: 0 });
@@ -350,24 +350,17 @@ fn trim(s: &[u8]) -> &[u8] {
     &s[start..end]
 }
 
-/// Helper trait to join byte slices
+/// Join byte slices with a separator byte.
 #[cfg(all(feature = "init", feature = "alloc"))]
-trait JoinBytes {
-    fn join(&self, sep: &u8) -> Vec<u8>;
-}
-
-#[cfg(all(feature = "init", feature = "alloc"))]
-impl JoinBytes for [&[u8]] {
-    fn join(&self, sep: &u8) -> Vec<u8> {
-        let mut result = Vec::new();
-        for (i, part) in self.iter().enumerate() {
-            if i > 0 {
-                result.push(*sep);
-            }
-            result.extend_from_slice(part);
+fn join_bytes(parts: &[&[u8]], sep: u8) -> Vec<u8> {
+    let mut result = Vec::new();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            result.push(sep);
         }
-        result
+        result.extend_from_slice(part);
     }
+    result
 }
 
 #[cfg(feature = "telinit")]
@@ -467,36 +460,60 @@ pub fn getty(argc: i32, argv: *const *const u8) -> i32 {
         io::close(fd);
     }
 
-    // Print login prompt
+    // Print banner. The username/password prompts are handled by /bin/login,
+    // which we exec below so that authentication actually takes place. (The
+    // login program reads stdin, which we have already pointed at the tty.)
     io::write_str(1, b"\nArmyBox Linux\n");
-    io::write_str(1, b"login: ");
 
-    // For now, just spawn a shell (no login authentication)
-    let sh = b"/bin/sh\0";
-    let dash_l = b"-l\0";
-    let argv_sh: [*const i8; 3] = [
-        sh.as_ptr() as *const i8,
-        dash_l.as_ptr() as *const i8,
+    // Exec /bin/login to authenticate the user rather than dropping straight
+    // into an unauthenticated shell.
+    let login_path = b"/bin/login\0";
+    let login_name = b"login\0";
+    let argv_login: [*const i8; 2] = [
+        login_name.as_ptr() as *const i8,
         core::ptr::null(),
     ];
 
     unsafe {
-        libc::execv(sh.as_ptr() as *const i8, argv_sh.as_ptr());
+        libc::execv(login_path.as_ptr() as *const i8, argv_login.as_ptr());
     }
 
-    io::write_str(2, b"getty: exec failed\n");
+    io::write_str(2, b"getty: exec /bin/login failed\n");
     1
 }
 
 #[cfg(feature = "sulogin")]
 pub fn sulogin(_argc: i32, _argv: *const *const u8) -> i32 {
-    // Single-user login - just spawn a root shell
-    io::write_str(1, b"Entering single-user mode...\n");
-    io::write_str(1, b"Press Enter for shell: ");
+    use crate::applets::system::login;
 
-    // Wait for input
-    let mut buf = [0u8; 1];
-    io::read(0, &mut buf);
+    io::write_str(1, b"Entering single-user mode...\n");
+
+    // Require the root password before granting the maintenance shell.
+    // Matching util-linux: if root has no password or a locked hash
+    // (`!`/`*`), grant the shell directly; otherwise prompt and verify.
+    let hash = login::get_shadow_hash(b"root");
+    let locked = hash.is_empty() || hash[0] == b'!' || hash[0] == b'*';
+    if !locked {
+        io::write_str(2, b"Give root password for maintenance\n");
+        io::write_str(2, b"(or press Control-D to continue): ");
+        let old_termios = login::disable_echo();
+        let entered = login::read_line();
+        login::restore_termios(&old_termios);
+        io::write_str(2, b"\n");
+        match entered {
+            Some(password) => {
+                if !login::verify_password(&password, &hash) {
+                    io::write_str(2, b"sulogin: Authentication failure\n");
+                    return 1;
+                }
+            }
+            None => {
+                // EOF (Control-D): reboot rather than granting a shell.
+                io::write_str(2, b"sulogin: no password entered\n");
+                return 1;
+            }
+        }
+    }
 
     // Spawn shell
     let sh = b"/bin/sh\0";

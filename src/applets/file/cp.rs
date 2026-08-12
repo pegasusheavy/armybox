@@ -7,6 +7,11 @@ use crate::io;
 use crate::sys;
 use crate::applets::{get_arg, has_opt};
 
+/// Hard cap on recursive-copy depth. Symlink cycles are already broken by
+/// recreating links instead of following them; this bounds genuinely deep real
+/// trees so `cp -R` can't exhaust the stack and crash (SIGSEGV).
+const MAX_DEPTH: usize = 4096;
+
 /// cp - copy files and directories
 ///
 /// # Synopsis
@@ -22,7 +27,10 @@ use crate::applets::{get_arg, has_opt};
 /// # Options
 /// - `-f`: Force - remove existing destination files if needed
 /// - `-i`: Interactive - prompt before overwrite (not implemented)
+/// - `-n`: No-clobber - never overwrite an existing destination
 /// - `-p`: Preserve - preserve file mode, ownership, and timestamps
+/// - `-P`: Never follow symbolic links in source (copy the link itself)
+/// - `-L`: Follow symbolic links in source (default)
 /// - `-R`, `-r`: Recursive - copy directories recursively
 ///
 /// # Exit Status
@@ -33,6 +41,9 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
     let mut force = false;
     let mut _interactive = false;
     let mut preserve = false;
+    let mut no_deref = false;
+    let mut deref_specified = false;
+    let mut no_clobber = false;
     let mut files_start = 1;
 
     // Parse options
@@ -43,11 +54,21 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
                 if has_opt(arg, b'f') { force = true; }
                 if has_opt(arg, b'i') { _interactive = true; }
                 if has_opt(arg, b'p') { preserve = true; }
+                if has_opt(arg, b'P') { no_deref = true; deref_specified = true; }
+                if has_opt(arg, b'L') { no_deref = false; deref_specified = true; }
+                if has_opt(arg, b'H') { deref_specified = true; }
+                if has_opt(arg, b'n') { no_clobber = true; }
                 files_start = i + 1;
             } else {
                 break;
             }
         }
+    }
+
+    // With -R and no explicit -H/-L/-P, symlinks in the tree are recreated as
+    // symlinks (as GNU/BSD cp do), which also prevents symlink-cycle recursion.
+    if recursive && !deref_specified {
+        no_deref = true;
     }
 
     let file_count = argc - files_start;
@@ -83,9 +104,9 @@ pub fn cp(argc: i32, argv: *const *const u8) -> i32 {
                 // Copy into directory
                 let mut dest_path = [0u8; 4096];
                 let dest_len = build_dest_path(dest, src, &mut dest_path);
-                copy_item(src, &dest_path[..dest_len], recursive, force, preserve)
+                copy_item(src, &dest_path[..dest_len], recursive, force, preserve, no_deref, no_clobber, 0)
             } else {
-                copy_item(src, dest, recursive, force, preserve)
+                copy_item(src, dest, recursive, force, preserve, no_deref, no_clobber, 0)
             };
 
             if result != 0 {
@@ -141,7 +162,34 @@ fn build_dest_path(dest_dir: &[u8], src: &[u8], buf: &mut [u8]) -> usize {
 }
 
 /// Copy a file or directory
-fn copy_item(src: &[u8], dest: &[u8], recursive: bool, force: bool, preserve: bool) -> i32 {
+fn copy_item(
+    src: &[u8],
+    dest: &[u8],
+    recursive: bool,
+    force: bool,
+    preserve: bool,
+    no_deref: bool,
+    no_clobber: bool,
+    depth: usize,
+) -> i32 {
+    // -n: if the destination already exists at all, skip this source
+    // entirely without treating it as an error.
+    if no_clobber {
+        let mut dst_st: libc::stat = unsafe { core::mem::zeroed() };
+        if io::lstat(dest, &mut dst_st) == 0 {
+            return 0;
+        }
+    }
+
+    // When -P is in effect, symbolic links are recreated as symbolic
+    // links instead of being followed.
+    if no_deref {
+        let mut lst: libc::stat = unsafe { core::mem::zeroed() };
+        if io::lstat(src, &mut lst) == 0 && (lst.st_mode & libc::S_IFMT) == libc::S_IFLNK {
+            return copy_symlink(src, dest, force);
+        }
+    }
+
     let mut st: libc::stat = unsafe { core::mem::zeroed() };
     if io::stat(src, &mut st) < 0 {
         sys::perror(src);
@@ -155,10 +203,30 @@ fn copy_item(src: &[u8], dest: &[u8], recursive: bool, force: bool, preserve: bo
             io::write_str(2, b"'\n");
             return 1;
         }
-        copy_directory(src, dest, force, preserve)
+        copy_directory(src, dest, force, preserve, no_deref, no_clobber, depth)
     } else {
         copy_file_opts(src, dest, force, preserve)
     }
+}
+
+/// Recreate a symbolic link at `dest` pointing at the same target as `src`.
+fn copy_symlink(src: &[u8], dest: &[u8], force: bool) -> i32 {
+    let mut buf = [0u8; 4096];
+    let n = io::readlink(src, &mut buf);
+    if n < 0 {
+        sys::perror(src);
+        return 1;
+    }
+
+    if force {
+        let _ = io::unlink(dest);
+    }
+
+    if io::symlink(&buf[..n as usize], dest) < 0 {
+        sys::perror(dest);
+        return 1;
+    }
+    0
 }
 
 /// Copy a single file
@@ -177,6 +245,24 @@ fn copy_file_opts(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
     // Get source stats for preserve mode
     let mut src_st: libc::stat = unsafe { core::mem::zeroed() };
     let has_stat = io::stat(src, &mut src_st) == 0;
+
+    // Refuse to copy a file onto itself (POSIX requirement): if both source
+    // and destination exist and refer to the same file (same device and
+    // inode), report the error and skip the copy without truncating.
+    let mut dest_st: libc::stat = unsafe { core::mem::zeroed() };
+    let dest_has_stat = io::stat(dest, &mut dest_st) == 0;
+    if has_stat && dest_has_stat
+        && src_st.st_dev == dest_st.st_dev
+        && src_st.st_ino == dest_st.st_ino
+    {
+        io::close(src_fd);
+        io::write_str(2, b"cp: '");
+        io::write_all(2, src);
+        io::write_str(2, b"' and '");
+        io::write_all(2, dest);
+        io::write_str(2, b"' are the same file\n");
+        return 1;
+    }
 
     // If force and dest exists, try to remove it first
     if force {
@@ -245,7 +331,24 @@ fn copy_file_opts(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
 }
 
 /// Copy a directory recursively
-fn copy_directory(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
+fn copy_directory(
+    src: &[u8],
+    dest: &[u8],
+    force: bool,
+    preserve: bool,
+    no_deref: bool,
+    no_clobber: bool,
+    depth: usize,
+) -> i32 {
+    // Bound genuine recursion depth so a pathologically deep tree stops with a
+    // diagnostic and a nonzero exit instead of overflowing the stack.
+    if depth >= MAX_DEPTH {
+        io::write_str(2, b"cp: '");
+        io::write_all(2, src);
+        io::write_str(2, b"': directory too deep\n");
+        return 1;
+    }
+
     // Create destination directory
     if io::mkdir(dest, 0o755) < 0 {
         // Check if it already exists
@@ -275,21 +378,21 @@ fn copy_directory(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
             let name = unsafe { io::cstr_to_slice(dirent.d_name.as_ptr() as *const u8) };
 
             if name != b"." && name != b".." {
-                // Build full source path
-                let mut src_path = [0u8; 4096];
-                let mut src_len = 0;
-                for &c in src { src_path[src_len] = c; src_len += 1; }
-                src_path[src_len] = b'/'; src_len += 1;
-                for &c in name { src_path[src_len] = c; src_len += 1; }
+                // Build full paths on the heap so arbitrarily deep trees can't
+                // overflow a fixed buffer.
+                let mut src_path: alloc::vec::Vec<u8> =
+                    alloc::vec::Vec::with_capacity(src.len() + 1 + name.len());
+                src_path.extend_from_slice(src);
+                src_path.push(b'/');
+                src_path.extend_from_slice(name);
 
-                // Build full dest path
-                let mut dest_path = [0u8; 4096];
-                let mut dest_len = 0;
-                for &c in dest { dest_path[dest_len] = c; dest_len += 1; }
-                dest_path[dest_len] = b'/'; dest_len += 1;
-                for &c in name { dest_path[dest_len] = c; dest_len += 1; }
+                let mut dest_path: alloc::vec::Vec<u8> =
+                    alloc::vec::Vec::with_capacity(dest.len() + 1 + name.len());
+                dest_path.extend_from_slice(dest);
+                dest_path.push(b'/');
+                dest_path.extend_from_slice(name);
 
-                if copy_item(&src_path[..src_len], &dest_path[..dest_len], true, force, preserve) != 0 {
+                if copy_item(&src_path, &dest_path, true, force, preserve, no_deref, no_clobber, depth + 1) != 0 {
                     exit_code = 1;
                 }
             }

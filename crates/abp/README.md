@@ -2,7 +2,7 @@
 
 ABP (ArmyBox Package) manager — a minimal, secure package manager for armybox-based Linux systems.
 
-Part of the [armybox](https://github.com/pegasusheavy/armybox) project.
+Part of the [armybox](https://github.com/quinnjr/armybox) project.
 
 ## Features
 

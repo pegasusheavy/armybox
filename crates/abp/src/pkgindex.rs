@@ -315,6 +315,47 @@ impl<'a> PackageIndex<'a> {
             return Err(IndexError::BadOffset);
         }
 
+        // Validate each name-index entry: `entry_idx` is attacker-controlled
+        // and is used to index the entry table during lookup. Reject any
+        // out-of-range index here so `lookup` can never panic. Also verify the
+        // index is sorted by name, which binary search relies on.
+        let pkg_count = header.pkg_count as usize;
+        let strings_start = header.strings_offset as usize;
+        let strings_size = header.strings_size as usize;
+        let mut prev_name: Option<&[u8]> = None;
+        for n in 0..pkg_count {
+            let base = header.index_offset as usize + n * INDEX_ENTRY_SIZE;
+            let entry_idx = read_u16(data, base + 6) as usize;
+            if entry_idx >= pkg_count {
+                return Err(IndexError::BadOffset);
+            }
+
+            // Resolve the name string for the sorted-order check.
+            let name_off = read_u32(data, base) as usize;
+            let name_len = read_u16(data, base + 4) as usize;
+            let name: &[u8] = if name_len == 0 {
+                b""
+            } else {
+                let start = strings_start + name_off;
+                let end = start + name_len;
+                // Name must lie within the declared string table.
+                if name_off > strings_size
+                    || name_len > strings_size - name_off
+                    || end > data.len()
+                {
+                    return Err(IndexError::BadStringRef);
+                }
+                &data[start..end]
+            };
+
+            if let Some(prev) = prev_name {
+                if name < prev {
+                    return Err(IndexError::NotSorted);
+                }
+            }
+            prev_name = Some(name);
+        }
+
         Ok(PackageIndex { data, header })
     }
 
@@ -932,5 +973,45 @@ mod tests {
         let mut data = sample_db();
         data[0] = b'X';
         assert_eq!(PackageIndex::from_bytes(&data).unwrap_err(), IndexError::BadMagic);
+    }
+
+    #[test]
+    fn test_out_of_range_entry_idx_rejected() {
+        // A crafted .abpd whose first name-index entry points at entry 0xFFFF
+        // must be rejected by from_bytes rather than panicking in lookup.
+        let mut data = sample_db();
+        let idx = PackageIndex::from_bytes(&data).unwrap();
+        let index_offset = idx.header.index_offset as usize;
+        // entry_idx is at byte offset 6 within the first 8-byte index entry.
+        let ei = index_offset + 6;
+        data[ei] = 0xFF;
+        data[ei + 1] = 0xFF;
+        assert_eq!(
+            PackageIndex::from_bytes(&data).unwrap_err(),
+            IndexError::BadOffset
+        );
+    }
+
+    #[test]
+    fn test_unsorted_index_rejected() {
+        // Swap the two 8-byte index entries at the front so the name index is
+        // no longer sorted; binary search requires sorted order.
+        let data = sample_db();
+        let idx = PackageIndex::from_bytes(&data).unwrap();
+        let io = idx.header.index_offset as usize;
+        let count = idx.header.pkg_count as usize;
+        assert!(count >= 2);
+        let mut bad = data.clone();
+        // Reverse the order of the sorted index entries.
+        for n in 0..count {
+            let src = io + n * INDEX_ENTRY_SIZE;
+            let dst = io + (count - 1 - n) * INDEX_ENTRY_SIZE;
+            bad[dst..dst + INDEX_ENTRY_SIZE]
+                .copy_from_slice(&data[src..src + INDEX_ENTRY_SIZE]);
+        }
+        assert_eq!(
+            PackageIndex::from_bytes(&bad).unwrap_err(),
+            IndexError::NotSorted
+        );
     }
 }

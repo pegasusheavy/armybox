@@ -6,7 +6,7 @@
 //! ## Features
 //!
 //! - **Truly `#[no_std]`**: No standard library dependency
-//! - **Tiny binary**: ~74KB release, ~33KB with UPX compression
+//! - **Tiny binary**: ~108KB stripped, ~54KB with UPX compression
 //! - **Embedded-ready**: Works on systems without full std support
 
 // Use no_std except during tests (which require std for test harness)

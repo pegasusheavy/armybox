@@ -20,13 +20,17 @@ pub fn get_armybox_path() -> PathBuf {
         panic!("ARMYBOX_PATH set to '{}' but file does not exist", path);
     }
 
-    // Try release first, then debug
-    let release = PathBuf::from("target/release/armybox");
+    // Resolve against the crate root as an ABSOLUTE path. Tests that use
+    // `run_in_dir` change the child's working directory, so a relative binary
+    // path would fail to execute — always return an absolute location.
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let release = root.join("target/release/armybox");
     if release.exists() {
         return release;
     }
 
-    let debug = PathBuf::from("target/debug/armybox");
+    let debug = root.join("target/debug/armybox");
     if debug.exists() {
         return debug;
     }

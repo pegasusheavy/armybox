@@ -51,11 +51,18 @@ pub(crate) fn open_write_create(path: &[u8], mode: i32) -> i32 {
     io::open(path, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, mode as u32)
 }
 
+/// Create all parent directories for `path`.
+///
+/// Returns `false` (and creates nothing) if `path` is longer than
+/// `io::PATH_MAX`, instead of silently truncating it (which previously
+/// could create directories under the wrong, truncated name).
 #[cfg(any(feature = "tar", feature = "cpio", feature = "unzip"))]
-pub(crate) fn create_parent_dirs(path: &[u8]) {
-    let mut buf = [0u8; 256];
-    let len = path.len().min(255);
-    buf[..len].copy_from_slice(&path[..len]);
+pub(crate) fn create_parent_dirs(path: &[u8]) -> bool {
+    let mut buf = [0u8; io::PATH_MAX];
+    if !io::path_to_cstr(path, &mut buf) {
+        return false;
+    }
+    let len = path.len();
 
     // Find each / and create directories
     for i in 0..len {
@@ -65,6 +72,7 @@ pub(crate) fn create_parent_dirs(path: &[u8]) {
             buf[i] = b'/';
         }
     }
+    true
 }
 
 #[cfg(any(feature = "tar", feature = "cpio"))]

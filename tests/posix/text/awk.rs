@@ -251,3 +251,221 @@ fn posix_awk_next() {
     assert_success(&result);
     assert!(!result.1.contains("skip"));
 }
+
+// ---------------------------------------------------------------------------
+// User-defined functions
+// ---------------------------------------------------------------------------
+
+/// POSIX: user-defined function with a return value
+#[test]
+fn posix_awk_user_function() {
+    let result = run_with_stdin(
+        &["awk", "function f(x){return x*2} BEGIN{print f(21)}"],
+        b"",
+    );
+    assert_success(&result);
+    assert_eq!(result.1, "42\n");
+}
+
+/// POSIX: recursive user-defined function (factorial)
+#[test]
+fn posix_awk_user_function_recursive() {
+    let result = run_with_stdin(
+        &["awk", "function fac(n){return n<=1?1:n*fac(n-1)} BEGIN{print fac(5)}"],
+        b"",
+    );
+    assert_success(&result);
+    assert_eq!(result.1, "120\n");
+}
+
+// ---------------------------------------------------------------------------
+// sub / gsub replacement semantics (single-replace, & and \&)
+// ---------------------------------------------------------------------------
+
+/// POSIX: sub() replaces only the first match and returns the count
+#[test]
+fn posix_awk_sub_single() {
+    let result = run_with_stdin(&["awk", "{n=sub(/a/,\"X\"); print n, $0}"], b"banana");
+    assert_success(&result);
+    assert_eq!(result.1, "1 bXnana\n");
+}
+
+/// POSIX: `&` in the replacement text expands to the whole match
+#[test]
+fn posix_awk_gsub_ampersand() {
+    let result = run_with_stdin(&["awk", "{gsub(/a/,\"<&>\"); print}"], b"banana");
+    assert_success(&result);
+    assert_eq!(result.1, "b<a>n<a>n<a>\n");
+}
+
+/// POSIX: `\&` in the replacement text is a literal ampersand
+#[test]
+fn posix_awk_gsub_literal_ampersand() {
+    let result = run_with_stdin(&["awk", "{gsub(/a/,\"\\&\"); print}"], b"banana");
+    assert_success(&result);
+    assert_eq!(result.1, "b&n&n&\n");
+}
+
+// ---------------------------------------------------------------------------
+// split() with a regular-expression separator
+// ---------------------------------------------------------------------------
+
+/// POSIX: split() with an ERE separator argument
+#[test]
+fn posix_awk_split_regex() {
+    let result = run_with_stdin(
+        &["awk", "{n=split($0,a,/[0-9]+/); print n, a[1], a[2], a[3]}"],
+        b"foo12bar34baz",
+    );
+    assert_success(&result);
+    assert_eq!(result.1, "3 foo bar baz\n");
+}
+
+// ---------------------------------------------------------------------------
+// Multidimensional arrays via SUBSEP
+// ---------------------------------------------------------------------------
+
+/// POSIX: a[i,j] subscripting and (i,j) in a membership
+#[test]
+fn posix_awk_multidim_array() {
+    let result = run_with_stdin(
+        &[
+            "awk",
+            "BEGIN{a[\"x\",\"y\"]=42; print a[\"x\",\"y\"]; if ((\"x\",\"y\") in a) print \"in\"}",
+        ],
+        b"",
+    );
+    assert_success(&result);
+    assert_eq!(result.1, "42\nin\n");
+}
+
+// ---------------------------------------------------------------------------
+// delete
+// ---------------------------------------------------------------------------
+
+/// POSIX: delete a single array element
+#[test]
+fn posix_awk_delete_element() {
+    let result = run_with_stdin(
+        &["awk", "BEGIN{a[1]=1;a[2]=2;delete a[1]; for(k in a) print k, a[k]}"],
+        b"",
+    );
+    assert_success(&result);
+    assert_eq!(result.1, "2 2\n");
+}
+
+/// POSIX: delete an entire array
+#[test]
+fn posix_awk_delete_all() {
+    let result = run_with_stdin(
+        &["awk", "BEGIN{a[1]=1;a[2]=2;delete a; n=0; for(k in a) n++; print n}"],
+        b"",
+    );
+    assert_success(&result);
+    assert_eq!(result.1, "0\n");
+}
+
+// ---------------------------------------------------------------------------
+// Field assignment rebuilds $0 with OFS; NF modification
+// ---------------------------------------------------------------------------
+
+/// POSIX: assigning a field rebuilds $0 using OFS
+#[test]
+fn posix_awk_field_rebuild_ofs() {
+    let result = run_with_stdin(&["awk", "BEGIN{OFS=\"-\"}{$1=$1; print}"], b"a b c");
+    assert_success(&result);
+    assert_eq!(result.1, "a-b-c\n");
+}
+
+/// POSIX: lowering NF truncates fields and rebuilds $0
+#[test]
+fn posix_awk_nf_decrease() {
+    let result = run_with_stdin(&["awk", "BEGIN{OFS=\"-\"}{NF=2; print}"], b"a b c");
+    assert_success(&result);
+    assert_eq!(result.1, "a-b\n");
+}
+
+/// POSIX: assigning a high field extends NF and pads with empty fields
+#[test]
+fn posix_awk_field_extend() {
+    let result = run_with_stdin(&["awk", "{$5=\"x\"; print NF; print}"], b"a b");
+    assert_success(&result);
+    assert_eq!(result.1, "5\na b   x\n");
+}
+
+// ---------------------------------------------------------------------------
+// printf conversions: %f, %-width %s, %c, %x
+// ---------------------------------------------------------------------------
+
+/// POSIX: printf %f with precision
+#[test]
+fn posix_awk_printf_f() {
+    let result = run_with_stdin(&["awk", "BEGIN{printf \"%.2f\\n\", 3.14159}"], b"");
+    assert_success(&result);
+    assert_eq!(result.1, "3.14\n");
+}
+
+/// POSIX: printf %s with a field width (right-justified)
+#[test]
+fn posix_awk_printf_s_width() {
+    let result = run_with_stdin(&["awk", "BEGIN{printf \"%5s|\\n\", \"hi\"}"], b"");
+    assert_success(&result);
+    assert_eq!(result.1, "   hi|\n");
+}
+
+/// POSIX: printf %c with a numeric and a string argument
+#[test]
+fn posix_awk_printf_c() {
+    let result = run_with_stdin(
+        &["awk", "BEGIN{printf \"%c%c\\n\", 65, \"hello\"}"],
+        b"",
+    );
+    assert_success(&result);
+    assert_eq!(result.1, "Ah\n");
+}
+
+/// POSIX: printf %x (unsigned hexadecimal)
+#[test]
+fn posix_awk_printf_x() {
+    let result = run_with_stdin(&["awk", "BEGIN{printf \"%x\\n\", 255}"], b"");
+    assert_success(&result);
+    assert_eq!(result.1, "ff\n");
+}
+
+// ---------------------------------------------------------------------------
+// Hardening: fatal runtime errors must flush buffered output first, bad
+// options / bad regexes / oversized intervals must be diagnosed cleanly.
+// ---------------------------------------------------------------------------
+
+/// Division by zero aborts (exit 2) but still flushes already-printed output.
+#[test]
+fn awk_div_by_zero_flushes_output() {
+    let result = run_with_stdin(&["awk", "BEGIN{print \"before\"; print 1/0}"], b"");
+    assert_eq!(result.0, 2);
+    assert_eq!(result.1, "before\n");
+    assert!(result.2.contains("division by zero"));
+}
+
+/// An unrecognized -X option is a hard error, not silent program text.
+#[test]
+fn awk_unknown_option_errors() {
+    let result = run_with_stdin(&["awk", "-Q", "BEGIN{print 1}"], b"");
+    assert_eq!(result.0, 2);
+    assert!(result.2.contains("unknown option"));
+}
+
+/// An interval bound above RE_DUP_MAX is rejected instead of overflowing.
+#[test]
+fn awk_interval_overflow_rejected() {
+    let result = run_with_stdin(&["awk", "BEGIN{ if (\"a\" ~ /a{99999}/) print 1 }"], b"");
+    assert_eq!(result.0, 2);
+    assert!(result.2.contains("regular expression"));
+}
+
+/// A malformed dynamic regex is a runtime error rather than a silent no-op.
+#[test]
+fn awk_bad_regex_errors() {
+    let result = run_with_stdin(&["awk", "{ if ($0 ~ \"a(\") print }"], b"abc");
+    assert_eq!(result.0, 2);
+    assert!(result.2.contains("regular expression"));
+}

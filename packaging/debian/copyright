@@ -1,7 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: armybox
 Upstream-Contact: Pegasus Heavy Industries <contact@pegasusheavy.industries>
-Source: https://github.com/PegasusHeavyIndustries/armybox
+Source: https://github.com/quinnjr/armybox
 
 Files: *
 Copyright: 2024-2026 Pegasus Heavy Industries

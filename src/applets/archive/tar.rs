@@ -114,6 +114,29 @@ fn write_octal(buf: &mut [u8], mut val: u64) {
     }
 }
 
+/// Returns `true` if `name` is unsafe to use as an extraction path:
+/// an absolute path, or a path containing a `..` component.
+///
+/// Detection is component-based (splitting on `/`), not a substring
+/// search, so this correctly rejects `../x`, `a/../b`, `a/..`, and `..`
+/// while allowing legitimate names that merely contain the bytes `..`
+/// as part of a longer component (e.g. `foo..bar`).
+fn is_unsafe_path(name: &[u8]) -> bool {
+    if name.starts_with(b"/") {
+        return true;
+    }
+    let mut start = 0;
+    for i in 0..=name.len() {
+        if i == name.len() || name[i] == b'/' {
+            if &name[start..i] == b".." {
+                return true;
+            }
+            start = i + 1;
+        }
+    }
+    false
+}
+
 /// tar - tape archiver
 ///
 /// # Synopsis
@@ -220,11 +243,8 @@ fn tar_create(archive: &[u8], files: &[&[u8]], verbose: bool) -> i32 {
 fn tar_add_file(fd: i32, path: &[u8], verbose: bool) -> i32 {
     // Get file info
     let mut stat_buf: libc::stat = unsafe { core::mem::zeroed() };
-    let mut path_z = [0u8; 256];
-    let len = path.len().min(255);
-    path_z[..len].copy_from_slice(&path[..len]);
 
-    if unsafe { libc::stat(path_z.as_ptr() as *const i8, &mut stat_buf) } != 0 {
+    if io::stat(path, &mut stat_buf) != 0 {
         io::write_str(2, b"tar: cannot stat ");
         io::write_all(2, path);
         io::write_str(2, b"\n");
@@ -239,10 +259,10 @@ fn tar_add_file(fd: i32, path: &[u8], verbose: bool) -> i32 {
         // Add directory and recurse
         tar_add_dir_entry(fd, path, &stat_buf, verbose);
         // Recursively add directory contents
-        let dir = unsafe { libc::opendir(path_z.as_ptr() as *const i8) };
+        let dir = io::opendir(path);
         if !dir.is_null() {
             loop {
-                let entry = unsafe { libc::readdir(dir) };
+                let entry = io::readdir(dir);
                 if entry.is_null() { break; }
                 let name = unsafe { io::cstr_to_slice((*entry).d_name.as_ptr() as *const u8) };
                 if name == b"." || name == b".." { continue; }
@@ -257,12 +277,14 @@ fn tar_add_file(fd: i32, path: &[u8], verbose: bool) -> i32 {
 
                 tar_add_file(fd, &full_path, verbose);
             }
-            unsafe { libc::closedir(dir) };
+            io::closedir(dir);
         }
     } else if is_link {
-        tar_add_link_entry(fd, path, &stat_buf, verbose);
-    } else {
-        tar_add_file_entry(fd, path, &stat_buf, verbose);
+        if tar_add_link_entry(fd, path, &stat_buf, verbose) != 0 {
+            return 1;
+        }
+    } else if tar_add_file_entry(fd, path, &stat_buf, verbose) != 0 {
+        return 1;
     }
 
     0
@@ -311,7 +333,14 @@ fn tar_add_dir_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) {
     }
 }
 
-fn tar_add_link_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) {
+fn tar_add_link_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) -> i32 {
+    if path.len() >= io::PATH_MAX {
+        io::write_str(2, b"tar: path too long, skipping ");
+        io::write_all(2, path);
+        io::write_str(2, b"\n");
+        return 1;
+    }
+
     let mut header = TarHeader::new();
 
     // Name
@@ -332,14 +361,8 @@ fn tar_add_link_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) {
     write_octal(&mut header.mtime[..11], stat.st_mtime as u64);
 
     // Read link target
-    let mut path_z = [0u8; 256];
-    let plen = path.len().min(255);
-    path_z[..plen].copy_from_slice(&path[..plen]);
-
     let mut linkbuf = [0u8; 100];
-    let link_len = unsafe {
-        libc::readlink(path_z.as_ptr() as *const i8, linkbuf.as_mut_ptr() as *mut i8, 100)
-    };
+    let link_len = io::readlink(path, &mut linkbuf);
     if link_len > 0 {
         header.linkname[..link_len as usize].copy_from_slice(&linkbuf[..link_len as usize]);
     }
@@ -362,9 +385,17 @@ fn tar_add_link_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) {
         io::write_all(1, path);
         io::write_str(1, b"\n");
     }
+    0
 }
 
-fn tar_add_file_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) {
+fn tar_add_file_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) -> i32 {
+    if path.len() >= io::PATH_MAX {
+        io::write_str(2, b"tar: path too long, skipping ");
+        io::write_all(2, path);
+        io::write_str(2, b"\n");
+        return 1;
+    }
+
     let mut header = TarHeader::new();
 
     // Name
@@ -400,11 +431,7 @@ fn tar_add_file_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) {
     io::write_all(fd, header_bytes);
 
     // Write file content
-    let mut path_z = [0u8; 256];
-    let plen = path.len().min(255);
-    path_z[..plen].copy_from_slice(&path[..plen]);
-
-    let file_fd = open_read(&path_z);
+    let file_fd = open_read(path);
     if file_fd >= 0 {
         let mut buf = [0u8; 512];
         let mut remaining = size;
@@ -428,6 +455,7 @@ fn tar_add_file_entry(fd: i32, path: &[u8], stat: &libc::stat, verbose: bool) {
         io::write_all(1, path);
         io::write_str(1, b"\n");
     }
+    0
 }
 
 fn tar_extract(archive: &[u8], files: &[&[u8]], verbose: bool) -> i32 {
@@ -438,6 +466,7 @@ fn tar_extract(archive: &[u8], files: &[&[u8]], verbose: bool) -> i32 {
     }
 
     let mut header_buf = [0u8; 512];
+    let mut exit_code = 0;
 
     loop {
         if io::read(fd, &mut header_buf) != 512 {
@@ -459,17 +488,28 @@ fn tar_extract(archive: &[u8], files: &[&[u8]], verbose: bool) -> i32 {
             name.starts_with(f) || f == name
         });
 
-        if should_extract {
+        // Reject absolute paths and paths with ".." components: extracting
+        // them could write outside the destination directory.
+        let unsafe_path = should_extract && is_unsafe_path(name);
+        if unsafe_path {
+            io::write_str(2, b"tar: skipping unsafe path\n");
+            exit_code = 1;
+        }
+        let do_extract = should_extract && !unsafe_path;
+
+        if do_extract {
             match header.typeflag {
                 b'5' | b'\0' if name.ends_with(b"/") => {
                     // Directory
-                    let mut path_z = [0u8; 256];
-                    let len = name.len().min(255);
-                    path_z[..len].copy_from_slice(&name[..len]);
-                    unsafe { libc::mkdir(path_z.as_ptr() as *const i8, mode) };
-                    if verbose {
-                        io::write_all(1, name);
-                        io::write_str(1, b"\n");
+                    if name.len() >= io::PATH_MAX {
+                        io::write_str(2, b"tar: path too long, skipping\n");
+                        exit_code = 1;
+                    } else {
+                        io::mkdir(name, mode);
+                        if verbose {
+                            io::write_all(1, name);
+                            io::write_str(1, b"\n");
+                        }
                     }
                 }
                 b'2' => {
@@ -478,21 +518,22 @@ fn tar_extract(archive: &[u8], files: &[&[u8]], verbose: bool) -> i32 {
                         let len = header.linkname.iter().position(|&c| c == 0).unwrap_or(100);
                         &header.linkname[..len]
                     };
-                    let mut name_z = [0u8; 256];
-                    let mut target_z = [0u8; 256];
-                    let nlen = name.len().min(255);
-                    let tlen = target.len().min(255);
-                    name_z[..nlen].copy_from_slice(&name[..nlen]);
-                    target_z[..tlen].copy_from_slice(&target[..tlen]);
-                    unsafe { libc::symlink(target_z.as_ptr() as *const i8, name_z.as_ptr() as *const i8) };
-                    if verbose {
-                        io::write_all(1, name);
-                        io::write_str(1, b"\n");
+                    if name.len() >= io::PATH_MAX || target.len() >= io::PATH_MAX {
+                        io::write_str(2, b"tar: path too long, skipping\n");
+                        exit_code = 1;
+                    } else {
+                        io::symlink(target, name);
+                        if verbose {
+                            io::write_all(1, name);
+                            io::write_str(1, b"\n");
+                        }
                     }
                 }
                 b'0' | b'\0' => {
                     // Regular file
-                    extract_file(name, fd, size, mode, verbose);
+                    if extract_file(name, fd, size, mode, verbose) != 0 {
+                        exit_code = 1;
+                    }
                 }
                 _ => {
                     // Skip unknown types
@@ -500,10 +541,11 @@ fn tar_extract(archive: &[u8], files: &[&[u8]], verbose: bool) -> i32 {
             }
         }
 
-        // Skip file content blocks
+        // Skip file content blocks (also needed when we rejected the entry
+        // above but it was a regular file, so the stream stays aligned).
         if size > 0 && (header.typeflag == b'0' || header.typeflag == 0) {
             let blocks = (size + 511) / 512;
-            if !should_extract {
+            if !do_extract {
                 for _ in 0..blocks {
                     io::read(fd, &mut header_buf);
                 }
@@ -512,20 +554,25 @@ fn tar_extract(archive: &[u8], files: &[&[u8]], verbose: bool) -> i32 {
     }
 
     io::close(fd);
-    0
+    exit_code
 }
 
-fn extract_file(name: &[u8], archive_fd: i32, size: u64, mode: u32, verbose: bool) {
+fn extract_file(name: &[u8], archive_fd: i32, size: u64, mode: u32, verbose: bool) -> i32 {
     // Create parent directories if needed
-    create_parent_dirs(name);
+    let parents_ok = create_parent_dirs(name);
 
-    let mut path_z = [0u8; 256];
-    let len = name.len().min(255);
-    path_z[..len].copy_from_slice(&name[..len]);
+    let fd = if parents_ok && name.len() < io::PATH_MAX {
+        open_write_create(name, mode as i32)
+    } else {
+        -1
+    };
 
-    let fd = open_write_create(&path_z, mode as i32);
     if fd < 0 {
-        io::write_str(2, b"tar: cannot create ");
+        if !parents_ok || name.len() >= io::PATH_MAX {
+            io::write_str(2, b"tar: path too long, skipping ");
+        } else {
+            io::write_str(2, b"tar: cannot create ");
+        }
         io::write_all(2, name);
         io::write_str(2, b"\n");
         // Still need to skip the blocks
@@ -534,7 +581,7 @@ fn extract_file(name: &[u8], archive_fd: i32, size: u64, mode: u32, verbose: boo
         for _ in 0..blocks {
             io::read(archive_fd, &mut skip_buf);
         }
-        return;
+        return 1;
     }
 
     let mut remaining = size;
@@ -554,6 +601,7 @@ fn extract_file(name: &[u8], archive_fd: i32, size: u64, mode: u32, verbose: boo
         io::write_all(1, name);
         io::write_str(1, b"\n");
     }
+    0
 }
 
 fn tar_list(archive: &[u8], verbose: bool) -> i32 {

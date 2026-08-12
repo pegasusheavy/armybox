@@ -21,7 +21,8 @@ use crate::applets::get_arg;
 /// # Exit Status
 /// - 0: Success (when printing niceness)
 /// - Command's exit status when running a command
-/// - >0: An error occurred
+/// - 126: Utility found but could not be executed
+/// - 127: Utility not found
 pub fn nice(argc: i32, argv: *const *const u8) -> i32 {
     let mut adjustment = 10i32;
     let mut cmd_start = 1;
@@ -31,13 +32,17 @@ pub fn nice(argc: i32, argv: *const *const u8) -> i32 {
             if arg.starts_with(b"-n") {
                 if arg.len() > 2 {
                     adjustment = sys::parse_i64(&arg[2..]).unwrap_or(10) as i32;
+                    cmd_start = 2;
                 } else if argc > 2 {
                     if let Some(n) = unsafe { get_arg(argv, 2) } {
                         adjustment = sys::parse_i64(n).unwrap_or(10) as i32;
                         cmd_start = 3;
+                    } else {
+                        cmd_start = 2;
                     }
+                } else {
+                    cmd_start = 2;
                 }
-                cmd_start = 2;
             }
         }
     }
@@ -53,11 +58,22 @@ pub fn nice(argc: i32, argv: *const *const u8) -> i32 {
     let cmd = unsafe { get_arg(argv, cmd_start).unwrap() };
     let mut cmd_buf = [0u8; 4096];
     cmd_buf[..cmd.len()].copy_from_slice(cmd);
-    let cmd_ptr = cmd_buf.as_ptr() as *const i8;
-    let argv_ptrs = [cmd_ptr, core::ptr::null()];
-    unsafe { libc::execv(cmd_ptr, argv_ptrs.as_ptr()) };
-    sys::perror(b"exec");
-    1
+    cmd_buf[cmd.len()] = 0;
+
+    unsafe {
+        libc::execvp(
+            cmd_buf.as_ptr() as *const i8,
+            argv.add(cmd_start as usize) as *const *const i8,
+        );
+    }
+
+    let err = sys::errno();
+    sys::perror(cmd);
+    if err == libc::ENOENT {
+        127
+    } else {
+        126
+    }
 }
 
 #[cfg(test)]

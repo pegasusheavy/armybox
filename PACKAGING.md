@@ -8,7 +8,7 @@ This document describes how to build and install armybox packages for various Li
 
 ```bash
 # Install latest version
-curl -fsSL https://raw.githubusercontent.com/PegasusHeavyIndustries/armybox/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/quinnjr/armybox/main/scripts/install.sh | bash
 
 # Install with symlinks
 curl -fsSL ... | bash -s -- --symlinks
@@ -24,7 +24,7 @@ curl -fsSL ... | bash -s -- --source
 
 ```bash
 # Download static binary
-wget https://github.com/PegasusHeavyIndustries/armybox/releases/download/v0.1.0/armybox-x86_64-unknown-linux-musl
+wget https://github.com/quinnjr/armybox/releases/download/v0.1.0/armybox-x86_64-unknown-linux-musl
 
 # Install
 sudo install -m 755 armybox-* /usr/local/bin/armybox
@@ -41,7 +41,7 @@ sudo armybox --install /usr/local/bin
 
 ```bash
 # Download
-wget https://github.com/PegasusHeavyIndustries/armybox/releases/download/v0.1.0/armybox_0.1.0_amd64.deb
+wget https://github.com/quinnjr/armybox/releases/download/v0.1.0/armybox_0.1.0_amd64.deb
 
 # Install
 sudo dpkg -i armybox_0.1.0_amd64.deb
@@ -70,7 +70,7 @@ sudo dpkg -i ../armybox_*.deb
 
 ```bash
 # Download
-wget https://github.com/PegasusHeavyIndustries/armybox/releases/download/v0.1.0/armybox-0.1.0-1.x86_64.rpm
+wget https://github.com/quinnjr/armybox/releases/download/v0.1.0/armybox-0.1.0-1.x86_64.rpm
 
 # Install
 sudo rpm -i armybox-0.1.0-1.x86_64.rpm
@@ -120,7 +120,7 @@ makepkg -si
 
 ```bash
 # Download static musl binary
-wget https://github.com/PegasusHeavyIndustries/armybox/releases/download/v0.1.0/armybox-x86_64-unknown-linux-musl -O armybox
+wget https://github.com/quinnjr/armybox/releases/download/v0.1.0/armybox-x86_64-unknown-linux-musl -O armybox
 
 # Install
 sudo install -m 755 armybox /usr/local/bin/
@@ -214,7 +214,7 @@ See [packaging/android/README.md](packaging/android/README.md) for detailed inst
 
 ```bash
 # Quick install
-curl -fsSL https://raw.githubusercontent.com/PegasusHeavyIndustries/armybox/main/packaging/android/install-termux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/quinnjr/armybox/main/packaging/android/install-termux.sh | bash
 ```
 
 ### Magisk Module (Root)

@@ -29,15 +29,7 @@ fn round(acc: u64, input: u64) -> u64 {
 #[inline]
 fn merge_round(acc: u64, val: u64) -> u64 {
     let val = round(0, val);
-    acc.bitxor(val).wrapping_mul(PRIME64_1).wrapping_add(PRIME64_4)
-}
-
-trait BitXor {
-    fn bitxor(self, other: Self) -> Self;
-}
-impl BitXor for u64 {
-    #[inline]
-    fn bitxor(self, other: Self) -> Self { self ^ other }
+    (acc ^ val).wrapping_mul(PRIME64_1).wrapping_add(PRIME64_4)
 }
 
 /// Compute xxHash64 of the given data with seed 0

@@ -5,7 +5,7 @@
 # using the appropriate method.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/PegasusHeavyIndustries/armybox/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/quinnjr/armybox/main/scripts/install.sh | bash
 #
 #   Or with options:
 #   curl -fsSL ... | bash -s -- --prefix=/usr/local --symlinks
@@ -15,7 +15,7 @@ set -euo pipefail
 VERSION="${ARMYBOX_VERSION:-latest}"
 PREFIX="${PREFIX:-/usr/local}"
 INSTALL_SYMLINKS="${INSTALL_SYMLINKS:-0}"
-BINARY_URL="https://github.com/PegasusHeavyIndustries/armybox/releases/download"
+BINARY_URL="https://github.com/quinnjr/armybox/releases/download"
 
 # Colors
 RED='\033[0;31m'
@@ -77,7 +77,7 @@ detect_platform() {
 # Get latest version from GitHub
 get_latest_version() {
     if [ "$VERSION" = "latest" ]; then
-        VERSION=$(curl -fsSL "https://api.github.com/repos/PegasusHeavyIndustries/armybox/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        VERSION=$(curl -fsSL "https://api.github.com/repos/quinnjr/armybox/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
         if [ -z "$VERSION" ]; then
             VERSION="v0.1.0"
         fi

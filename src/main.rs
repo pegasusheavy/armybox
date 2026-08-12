@@ -104,7 +104,7 @@ fn print_help() {
 
 /// Print version
 fn print_version() {
-    io::write_str(1, b"armybox 0.2.0\n");
+    io::write_str(1, concat!("armybox ", env!("CARGO_PKG_VERSION"), "\n").as_bytes());
     io::write_str(1, b"A #[no_std] BusyBox/Toybox clone in Rust\n");
     io::write_str(1, b"Copyright (c) 2025 Pegasus Heavy Industries\n");
 }

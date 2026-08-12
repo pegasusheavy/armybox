@@ -263,7 +263,7 @@ fn get_passwd_entry(username: &[u8]) -> Option<PasswdEntry> {
     None
 }
 
-fn get_shadow_hash(username: &[u8]) -> Vec<u8> {
+pub(crate) fn get_shadow_hash(username: &[u8]) -> Vec<u8> {
     let fd = io::open(b"/etc/shadow", libc::O_RDONLY, 0);
     if fd < 0 {
         return Vec::new();
@@ -290,7 +290,7 @@ fn get_shadow_hash(username: &[u8]) -> Vec<u8> {
     Vec::new()
 }
 
-fn verify_password(password: &[u8], hash: &[u8]) -> bool {
+pub(crate) fn verify_password(password: &[u8], hash: &[u8]) -> bool {
     // Handle locked/disabled accounts
     if hash.is_empty() || hash == b"*" || hash == b"!" || hash == b"!!" || hash == b"x" {
         return false;
@@ -915,7 +915,7 @@ fn is_nologin_shell(shell: &[u8]) -> bool {
     shell.ends_with(b"/nologin") || shell.ends_with(b"/false")
 }
 
-fn read_line() -> Option<Vec<u8>> {
+pub(crate) fn read_line() -> Option<Vec<u8>> {
     let mut buf = Vec::new();
     let mut c = [0u8; 1];
 
@@ -939,7 +939,7 @@ fn read_line() -> Option<Vec<u8>> {
     Some(buf)
 }
 
-fn disable_echo() -> libc::termios {
+pub(crate) fn disable_echo() -> libc::termios {
     let mut old: libc::termios = unsafe { core::mem::zeroed() };
     let mut new: libc::termios = unsafe { core::mem::zeroed() };
 
@@ -953,7 +953,7 @@ fn disable_echo() -> libc::termios {
     old
 }
 
-fn restore_termios(termios: &libc::termios) {
+pub(crate) fn restore_termios(termios: &libc::termios) {
     unsafe {
         libc::tcsetattr(0, libc::TCSANOW, termios);
     }

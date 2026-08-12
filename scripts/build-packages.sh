@@ -57,8 +57,8 @@ Description: BusyBox/Toybox clone written in Rust
  armybox is a modern implementation of common Unix utilities
  in a single multi-call binary, similar to BusyBox and Toybox.
  .
- Features: 163+ applets, ash-compatible shell, init system.
-Homepage: https://github.com/PegasusHeavyIndustries/armybox
+ Features: 303 applets, ash-compatible shell, init system.
+Homepage: https://github.com/quinnjr/armybox
 EOF
 
     # Post-install script
@@ -126,7 +126,7 @@ build_rpm() {
                 -n armybox \
                 -v "$VERSION" \
                 --description "BusyBox/Toybox clone written in Rust" \
-                --url "https://github.com/PegasusHeavyIndustries/armybox" \
+                --url "https://github.com/quinnjr/armybox" \
                 --license "MIT AND Apache-2.0" \
                 target/release/armybox=/usr/bin/armybox \
                 packaging/debian/armybox-install-symlinks=/usr/bin/armybox-install-symlinks

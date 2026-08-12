@@ -2,6 +2,7 @@
 //!
 //! GNU coreutils compatible implementation.
 
+use crate::io;
 use crate::sys;
 use crate::applets::{get_arg, has_opt};
 
@@ -24,6 +25,7 @@ use crate::applets::{get_arg, has_opt};
 pub fn truncate(argc: i32, argv: *const *const u8) -> i32 {
     let mut size: i64 = 0;
     let mut size_set = false;
+    let mut size_parse_failed = false;
     let mut exit_code = 0;
 
     // First pass: find size option
@@ -33,14 +35,35 @@ pub fn truncate(argc: i32, argv: *const *const u8) -> i32 {
             if arg.len() > 0 && arg[0] == b'-' {
                 if has_opt(arg, b's') && i + 1 < argc {
                     if let Some(s) = unsafe { get_arg(argv, i + 1) } {
-                        size = sys::parse_u64(s).unwrap_or(0) as i64;
-                        size_set = true;
+                        match sys::parse_u64(s) {
+                            Some(v) => {
+                                size = v as i64;
+                                size_set = true;
+                            }
+                            None => {
+                                size_parse_failed = true;
+                            }
+                        }
                         i += 1;
                     }
                 }
             }
         }
         i += 1;
+    }
+
+    if size_parse_failed {
+        io::write_str(2, b"truncate: invalid size specified for -s\n");
+        return 1;
+    }
+
+    // Refuse to truncate anything unless a size was explicitly given via
+    // -s; without it there is no safe target size, and defaulting to 0
+    // would silently zero every file argument.
+    if !size_set {
+        io::write_str(2, b"truncate: you must specify -s SIZE\n");
+        io::write_str(2, b"usage: truncate -s SIZE file...\n");
+        return 1;
     }
 
     // Second pass: process files
@@ -67,10 +90,6 @@ pub fn truncate(argc: i32, argv: *const *const u8) -> i32 {
                 exit_code = 1;
             }
         }
-    }
-
-    if !size_set {
-        // No files processed without -s
     }
 
     exit_code

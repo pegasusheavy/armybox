@@ -55,12 +55,6 @@ pub fn hexdump(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-/// hd - alias for hexdump
-pub fn hd(argc: i32, argv: *const *const u8) -> i32 { hexdump(argc, argv) }
-
-/// xxd - alias for hexdump
-pub fn xxd(argc: i32, argv: *const *const u8) -> i32 { hexdump(argc, argv) }
-
 /// od - octal dump (POSIX compliant)
 ///
 /// Usage: od [-A radix] [-t type_string] [-j skip] [-N count] [file...]

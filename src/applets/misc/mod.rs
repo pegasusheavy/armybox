@@ -94,7 +94,7 @@ pub use hash::{md5sum, sha1sum, sha256sum, sha224sum, sha384sum, sha512sum, sha3
 #[cfg(feature = "help")]
 pub use help::help;
 #[cfg(feature = "hexdump")]
-pub use hexdump::{hexdump, hd, xxd, od};
+pub use hexdump::{hexdump, od};
 #[cfg(feature = "iconv")]
 pub use iconv::iconv;
 #[cfg(feature = "mcookie")]

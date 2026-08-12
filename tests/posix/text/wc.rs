@@ -91,3 +91,23 @@ fn posix_wc_exit_error() {
     let result = run(&["wc", "/nonexistent/file"]);
     assert!(result.0 > 0);
 }
+
+/// GNU-style layout: count columns are right-justified to a common width
+/// (the digit width of the largest displayed count), so a single-digit count
+/// carries a leading space to line up under a two-digit count.
+#[test]
+fn posix_wc_column_padding() {
+    // 5 lines, 5 words, 20 bytes ("one\n","two\n","six\n","ten\n","fun\n").
+    // Largest count is 20 (two digits), so every column is width 2.
+    let result = run_with_stdin(&["wc"], b"one\ntwo\nsix\nten\nfun\n");
+    assert_success(&result);
+    assert_eq!(result.1, " 5  5 20\n");
+}
+
+/// --help prints usage and exits 0, even though 'l' is a valid short flag.
+#[test]
+fn posix_wc_help() {
+    let result = run(&["wc", "--help"]);
+    assert_eq!(result.0, 0);
+    assert!(result.1.contains("usage"));
+}

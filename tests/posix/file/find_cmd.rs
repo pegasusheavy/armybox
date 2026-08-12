@@ -109,15 +109,19 @@ fn posix_find_depth() {
 #[test]
 fn posix_find_maxdepth() {
     let dir = setup_test_env();
+    // depths: dir=0, a=1, a/top=2 & a/b=2, a/b/middle=3, a/b/c=3, a/b/c/deep=4
     fs::create_dir_all(dir.path().join("a/b/c")).unwrap();
-    fs::write(dir.path().join("a/b/c/deep"), "x").unwrap();
+    fs::write(dir.path().join("a/top"), "x").unwrap();
+    fs::write(dir.path().join("a/b/middle_file"), "x").unwrap();
+    fs::write(dir.path().join("a/b/c/deep_file"), "x").unwrap();
 
     let result = run(&["find", dir.path().to_str().unwrap(), "-maxdepth", "2"]);
-    // -maxdepth might not be POSIX but commonly supported
-    if result.0 == 0 {
-        // If supported, should not find the deeply nested file
-        // (depth 0 = start dir, 1 = a, 2 = b)
-    }
+    assert_success(&result);
+    // Depth <= 2 is included.
+    assert!(result.1.contains("top"));
+    // Depth > 2 is excluded.
+    assert!(!result.1.contains("middle_file"));
+    assert!(!result.1.contains("deep_file"));
 }
 
 /// POSIX: Exit status 0 on success
@@ -189,12 +193,15 @@ fn posix_find_perm() {
     let result = run(&[
         "find",
         dir.path().to_str().unwrap(),
+        "-type",
+        "f",
         "-perm",
         "-111",
     ]);
-    if result.0 == 0 {
-        assert!(result.1.contains("executable"));
-    }
+    // -perm -111 matches entries with all execute bits set.
+    assert_success(&result);
+    assert!(result.1.contains("executable"));
+    assert!(!result.1.contains("noexec"));
 }
 
 /// POSIX: find logical operators -a (and)
@@ -238,4 +245,150 @@ fn posix_find_or() {
     assert_success(&result);
     assert!(result.1.contains("test.txt"));
     assert!(result.1.contains("test.log"));
+}
+
+/// POSIX: find -prune stops descent into matched directories
+#[test]
+fn posix_find_prune() {
+    let dir = setup_test_env();
+    fs::write(dir.path().join("keep"), "x").unwrap();
+    fs::create_dir(dir.path().join("skip")).unwrap();
+    fs::write(dir.path().join("skip/pruned_file"), "x").unwrap();
+
+    // `-name skip -prune -o -print`: the skip directory matches and is pruned
+    // (so -print is not reached for it), while everything else is printed.
+    let result = run(&[
+        "find",
+        dir.path().to_str().unwrap(),
+        "-name",
+        "skip",
+        "-prune",
+        "-o",
+        "-print",
+    ]);
+    assert_success(&result);
+    assert!(result.1.contains("keep"));
+    // The pruned directory is never descended into.
+    assert!(!result.1.contains("pruned_file"));
+    // The pruned directory itself is not printed.
+    assert!(!result.1.lines().any(|l| l.ends_with("skip")));
+}
+
+/// POSIX: find ! (negation)
+#[test]
+fn posix_find_not() {
+    let dir = setup_test_env();
+    fs::write(dir.path().join("keep.txt"), "x").unwrap();
+    fs::write(dir.path().join("drop.log"), "x").unwrap();
+
+    let result = run(&[
+        "find",
+        dir.path().to_str().unwrap(),
+        "-type",
+        "f",
+        "!",
+        "-name",
+        "*.log",
+    ]);
+    assert_success(&result);
+    assert!(result.1.contains("keep.txt"));
+    assert!(!result.1.contains("drop.log"));
+}
+
+/// POSIX: find ( ) grouping overrides -a/-o precedence
+#[test]
+fn posix_find_group_precedence() {
+    let dir = setup_test_env();
+    fs::write(dir.path().join("a.txt"), "x").unwrap();
+    fs::write(dir.path().join("b.dat"), "x").unwrap();
+    // A directory whose name matches *.txt; -type f must still exclude it.
+    fs::create_dir(dir.path().join("c.txt")).unwrap();
+
+    // ( -name '*.txt' -o -name '*.dat' ) -type f
+    // The parentheses group the OR so the trailing -type f applies to the whole
+    // group; without them, -a would bind tighter than -o.
+    let result = run(&[
+        "find",
+        dir.path().to_str().unwrap(),
+        "(",
+        "-name",
+        "*.txt",
+        "-o",
+        "-name",
+        "*.dat",
+        ")",
+        "-type",
+        "f",
+    ]);
+    assert_success(&result);
+    assert!(result.1.contains("a.txt"));
+    assert!(result.1.contains("b.dat"));
+    // c.txt is a directory: matched by name but excluded by -type f.
+    assert!(!result.1.lines().any(|l| l.ends_with("c.txt")));
+}
+
+/// POSIX: find -size with unit suffixes (c bytes, k KiB)
+#[test]
+fn posix_find_size_suffixes() {
+    let dir = setup_test_env();
+    fs::write(dir.path().join("tiny"), "abc").unwrap(); // 3 bytes
+    fs::write(dir.path().join("big"), "x".repeat(5000)).unwrap(); // ~5 KiB
+
+    // -size -3k : rounds up to KiB units; tiny -> 1 unit (< 3), big -> 5 (not < 3)
+    let r1 = run(&[
+        "find",
+        dir.path().to_str().unwrap(),
+        "-type",
+        "f",
+        "-size",
+        "-3k",
+    ]);
+    assert_success(&r1);
+    assert!(r1.1.contains("tiny"));
+    assert!(!r1.1.contains("big"));
+
+    // -size +4k : big -> 5 units (> 4), tiny -> 1 (not > 4)
+    let r2 = run(&[
+        "find",
+        dir.path().to_str().unwrap(),
+        "-type",
+        "f",
+        "-size",
+        "+4k",
+    ]);
+    assert_success(&r2);
+    assert!(r2.1.contains("big"));
+    assert!(!r2.1.contains("tiny"));
+
+    // -size +2c : byte units; both files exceed 2 bytes.
+    let r3 = run(&[
+        "find",
+        dir.path().to_str().unwrap(),
+        "-type",
+        "f",
+        "-size",
+        "+2c",
+    ]);
+    assert_success(&r3);
+    assert!(r3.1.contains("tiny"));
+    assert!(r3.1.contains("big"));
+}
+
+/// POSIX: `-exec false ;` fails per match, so find exits nonzero.
+#[test]
+fn posix_find_exec_false_exit() {
+    let dir = setup_test_env();
+    fs::write(dir.path().join("f"), "x").unwrap();
+
+    let result = run(&[
+        "find",
+        dir.path().to_str().unwrap(),
+        "-type",
+        "f",
+        "-exec",
+        "false",
+        ";",
+    ]);
+    // `false` exits 1 for the matched file, which makes find exit 1.
+    assert_eq!(result.0, 1);
 }

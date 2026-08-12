@@ -140,7 +140,7 @@ mod blockdev;
 #[cfg(feature = "eject")]
 mod eject;
 #[cfg(feature = "login")]
-mod login;
+pub(crate) mod login;
 #[cfg(feature = "modinfo")]
 mod modinfo;
 #[cfg(feature = "readahead")]

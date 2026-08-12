@@ -14,7 +14,7 @@ pkg install armybox
 
 # Or build from source
 pkg install rust
-git clone https://github.com/PegasusHeavyIndustries/armybox
+git clone https://github.com/quinnjr/armybox
 cd armybox
 cargo build --release
 cp target/release/armybox $PREFIX/bin/
@@ -24,7 +24,7 @@ armybox --install $PREFIX/bin
 ### Quick Install Script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PegasusHeavyIndustries/armybox/main/packaging/android/install-termux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/quinnjr/armybox/main/packaging/android/install-termux.sh | bash
 ```
 
 ## Method 2: ADB Sideload (Root Required)

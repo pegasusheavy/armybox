@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Window creation and navigation
 
 #### Documentation & SEO
-- Comprehensive documentation website at pegasusheavy.github.io/armybox
+- Comprehensive documentation website at quinnjr.github.io/armybox
 - Schema.org structured data for SEO/AEO
 - FAQ schema with common questions
 - Sitemap and robots.txt
@@ -186,7 +186,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker usage guide
 - Packaging instructions
 
-[Unreleased]: https://github.com/pegasusheavy/armybox/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/pegasusheavy/armybox/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/pegasusheavy/armybox/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/pegasusheavy/armybox/releases/tag/v0.1.0
+[Unreleased]: https://github.com/quinnjr/armybox/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/quinnjr/armybox/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/quinnjr/armybox/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/quinnjr/armybox/releases/tag/v0.1.0

@@ -5,8 +5,8 @@ edition = "2024"
 rust-version = "1.85"
 authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
 description = "ABP Package Manager - a minimal, secure package manager for armybox systems"
-repository = "https://github.com/pegasusheavy/armybox"
-homepage = "https://github.com/pegasusheavy/armybox"
+repository = "https://github.com/quinnjr/armybox"
+homepage = "https://github.com/quinnjr/armybox"
 license = "MIT OR Apache-2.0"
 keywords = ["package-manager", "no_std", "embedded", "linux", "armybox"]
 categories = ["command-line-utilities", "no-std", "embedded"]
@@ -17,8 +17,16 @@ default = ["alloc"]
 alloc = []
 
 [dependencies]
+ed25519-dalek = { version = "3.0.0", default-features = false }
 libc = "0.2"
 zstd-nostd = { version = "0.1.0", path = "../zstd-nostd", features = ["alloc"] }
+
+[dev-dependencies]
+# Needed by tests/security.rs to produce *real* ed25519 signatures (SigningKey +
+# the Signer::sign trait method). These are NOT feature-gated in ed25519-dalek 3
+# — they are available with default-features = false — so no extra features are
+# required for signing; a fixed 32-byte seed is used, so no RNG feature either.
+ed25519-dalek = { version = "3.0.0", default-features = false }
 
 [[bin]]
 name = "abpd-gen"

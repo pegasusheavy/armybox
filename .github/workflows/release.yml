@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -57,18 +57,29 @@ jobs:
         if: matrix.cross
         run: cross build --release --target ${{ matrix.target }}
 
-      - name: Strip binary
+      - name: Build abpd-gen (native)
+        if: "!matrix.cross"
+        run: cargo build -p abp --bin abpd-gen --release --target ${{ matrix.target }}
+
+      - name: Build abpd-gen (cross)
+        if: matrix.cross
+        run: cross build -p abp --bin abpd-gen --release --target ${{ matrix.target }}
+
+      - name: Strip binaries
         run: |
           if command -v strip &> /dev/null; then
             strip target/${{ matrix.target }}/release/armybox || true
+            strip target/${{ matrix.target }}/release/abpd-gen || true
           fi
 
       - name: Package
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/armybox dist/armybox-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/abpd-gen dist/abpd-gen-${{ matrix.target }}
           cd dist
           sha256sum armybox-${{ matrix.target }} > armybox-${{ matrix.target }}.sha256
+          sha256sum abpd-gen-${{ matrix.target }} > abpd-gen-${{ matrix.target }}.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -85,7 +96,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Build release
         run: cargo build --release
@@ -118,7 +129,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name 'armybox-*' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name 'armybox-*' -o -name 'abpd-gen-*' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
           ls -la release/
 
       - name: Create Release

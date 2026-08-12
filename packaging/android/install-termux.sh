@@ -59,7 +59,7 @@ install_deps() {
 # Download and install
 install_armybox() {
     local arch=$(detect_arch)
-    local url="https://github.com/PegasusHeavyIndustries/armybox/releases/download/${VERSION}/armybox-${arch}"
+    local url="https://github.com/quinnjr/armybox/releases/download/${VERSION}/armybox-${arch}"
 
     log_info "Downloading armybox for $arch..."
 
@@ -100,10 +100,10 @@ build_from_source() {
     cd "$tmpdir"
 
     if command -v git &>/dev/null; then
-        git clone --depth 1 https://github.com/PegasusHeavyIndustries/armybox
+        git clone --depth 1 https://github.com/quinnjr/armybox
     else
         pkg install -y git
-        git clone --depth 1 https://github.com/PegasusHeavyIndustries/armybox
+        git clone --depth 1 https://github.com/quinnjr/armybox
     fi
 
     cd armybox

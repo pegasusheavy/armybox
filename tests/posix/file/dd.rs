@@ -164,3 +164,49 @@ fn posix_dd_conv_ucase() {
     assert_success(&result);
     assert_eq!(fs::read_to_string(&output).unwrap(), "HELLO WORLD");
 }
+
+/// POSIX: dd conv=sync zero-pads a short final block up to the input
+/// block size.
+#[test]
+fn posix_dd_conv_sync_pads_short_block() {
+    let dir = setup_test_env();
+    let input = dir.path().join("input");
+    let output = dir.path().join("output");
+    fs::write(&input, "hello").unwrap();
+
+    let result = run(&[
+        "dd",
+        &format!("if={}", input.to_str().unwrap()),
+        &format!("of={}", output.to_str().unwrap()),
+        "bs=10",
+        "conv=sync",
+    ]);
+    assert_success(&result);
+    let data = fs::read(&output).unwrap();
+    assert_eq!(data.len(), 10);
+    assert_eq!(&data[..5], b"hello");
+    assert_eq!(&data[5..], &[0u8; 5]);
+}
+
+/// POSIX: dd conv=notrunc overwrites only the copied bytes at the start
+/// of an existing output file, preserving the remainder.
+#[test]
+fn posix_dd_conv_notrunc_preserves_tail() {
+    let dir = setup_test_env();
+    let input = dir.path().join("input");
+    let output = dir.path().join("output");
+    fs::write(&input, "NEW").unwrap();
+    fs::write(&output, "OLDCONTENTHERE").unwrap();
+
+    let result = run(&[
+        "dd",
+        &format!("if={}", input.to_str().unwrap()),
+        &format!("of={}", output.to_str().unwrap()),
+        "bs=3",
+        "count=1",
+        "conv=notrunc",
+    ]);
+    assert_success(&result);
+    let data = fs::read_to_string(&output).unwrap();
+    assert_eq!(data, "NEWCONTENTHERE");
+}

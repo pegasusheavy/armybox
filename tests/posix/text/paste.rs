@@ -137,7 +137,7 @@ fn posix_paste_no_delim() {
         file1.to_str().unwrap(),
         file2.to_str().unwrap(),
     ]);
-    if result.0 == 0 {
-        assert!(result.1.contains("ab"));
-    }
+    // -d '' means "no delimiter": the fields are concatenated directly.
+    assert_success(&result);
+    assert_eq!(result.1, "ab\n");
 }

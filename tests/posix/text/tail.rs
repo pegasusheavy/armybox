@@ -102,6 +102,42 @@ fn posix_tail_f_flag_accepted() {
     // This would hang, so skip actual execution
 }
 
+/// tail -c with a negative count means "last N bytes", same as a bare
+/// positive count (a leading `-` must not be mis-parsed as a bad number).
+#[test]
+fn posix_tail_bytes_negative() {
+    let result = run_with_stdin(&["tail", "-c", "-5"], b"hello world");
+    assert_success(&result);
+    assert_eq!(result.1, "world");
+}
+
+/// tail -n with a negative count means "last N lines", same as a bare
+/// positive count.
+#[test]
+fn posix_tail_lines_negative() {
+    let input = (1..=10).map(|n| format!("line{}", n)).collect::<Vec<_>>().join("\n");
+    let result = run_with_stdin(&["tail", "-n", "-3"], input.as_bytes());
+    assert_success(&result);
+    assert_eq!(count_stdout_lines(&result), 3);
+    assert!(result.1.contains("line10"));
+}
+
+/// An unparsable -n count is a hard error, not a silent default of 10.
+#[test]
+fn posix_tail_invalid_n_exits_nonzero() {
+    let result = run_with_stdin(&["tail", "-n", "xyz"], b"hello\n");
+    assert!(result.0 != 0);
+    assert_eq!(result.1, "");
+}
+
+/// tail --help prints usage and exits 0 without reading stdin.
+#[test]
+fn posix_tail_help() {
+    let result = run_with_stdin(&["tail", "--help"], b"should not be read");
+    assert_eq!(result.0, 0);
+    assert!(result.1.to_lowercase().contains("usage"));
+}
+
 /// POSIX: tail -q quiet (no headers)
 #[test]
 fn posix_tail_quiet() {

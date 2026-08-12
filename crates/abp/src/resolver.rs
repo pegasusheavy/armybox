@@ -109,61 +109,6 @@ fn resolve_package_local(
     Ok(())
 }
 
-fn resolve_package(
-    db: &Database,
-    name: &str,
-    resolved: &mut Vec<String>,
-    seen: &mut BTreeSet<String>,
-    stack: &mut BTreeSet<String>,
-) -> Result<(), String> {
-    if seen.contains(name) {
-        return Ok(());
-    }
-
-    if stack.contains(name) {
-        return Err(format_err("circular dependency detected: ", name));
-    }
-
-    stack.insert(String::from(name));
-
-    // Get package dependencies
-    let deps = get_dependencies(db, name)?;
-
-    for dep in deps {
-        let dep_parsed = Dependency::parse(&dep);
-
-        // Check if dependency is already satisfied
-        if let Some(installed) = db.get_package(&dep_parsed.name) {
-            if dep_parsed.satisfied_by(&installed.version) {
-                // Already installed and satisfies constraint
-                continue;
-            }
-        }
-
-        // Check if dependency is available
-        if let Some(available) = db.get_available(&dep_parsed.name) {
-            if dep_parsed.satisfied_by(&available.version) {
-                resolve_package(db, &dep_parsed.name, resolved, seen, stack)?;
-                continue;
-            }
-        }
-
-        // Check if provided by another package
-        if let Some(provider) = find_provider(db, &dep_parsed.name) {
-            resolve_package(db, &provider, resolved, seen, stack)?;
-            continue;
-        }
-
-        return Err(format_err("unresolved dependency: ", &dep));
-    }
-
-    stack.remove(name);
-    seen.insert(String::from(name));
-    resolved.push(String::from(name));
-
-    Ok(())
-}
-
 fn get_dependencies(db: &Database, name: &str) -> Result<Vec<String>, String> {
     // Check if it's an available package
     if let Some(pkg) = db.get_available(name) {
@@ -190,16 +135,6 @@ fn find_provider(db: &Database, name: &str) -> Option<String> {
     // Check installed packages
     for pkg in db.list_packages() {
         if pkg.provides.iter().any(|p| p == name || p.starts_with(&format_provider(name))) {
-            return Some(pkg.name);
-        }
-    }
-
-    // Check available packages
-    for pkg in db.list_available() {
-        if pkg.depends.iter().any(|_d| {
-            // This is a simplification - in reality we'd check provides
-            false
-        }) {
             return Some(pkg.name);
         }
     }

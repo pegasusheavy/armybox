@@ -42,6 +42,7 @@ use crate::applets::get_arg;
 pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
     let mut null_delimiter = false;
     let mut delimiter = b'\n';
+    let mut explicit_delim = false;
     let mut replace_str: Option<&[u8]> = None;
     let mut max_args: Option<usize> = None;
     let mut max_procs: usize = 1;
@@ -60,15 +61,24 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
                 cmd_start = i + 1;
             } else if arg == b"-d" {
                 i += 1;
+                explicit_delim = true;
                 if let Some(d) = unsafe { get_arg(argv, i) } {
                     if !d.is_empty() {
                         delimiter = d[0];
                     }
                 }
                 cmd_start = i + 1;
+            } else if arg == b"-p" || arg == b"--interactive" {
+                // Interactive prompting is not implemented; accept and ignore.
+                cmd_start = i + 1;
             } else if arg == b"-I" || arg == b"-i" {
                 i += 1;
-                replace_str = unsafe { get_arg(argv, i) };
+                let repl = unsafe { get_arg(argv, i) };
+                if repl.map(|r| r.is_empty()).unwrap_or(true) {
+                    io::write_str(2, b"xargs: replstr may not be empty\n");
+                    return 2;
+                }
+                replace_str = repl;
                 cmd_start = i + 1;
             } else if arg.starts_with(b"-I") && arg.len() > 2 {
                 // Handle -I{} format (no space)
@@ -87,12 +97,24 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
             } else if arg == b"-P" {
                 i += 1;
                 if let Some(p) = unsafe { get_arg(argv, i) } {
-                    max_procs = sys::parse_u64(p).unwrap_or(1) as usize;
+                    match sys::parse_u64(p) {
+                        Some(v) => max_procs = v as usize,
+                        None => {
+                            io::write_str(2, b"xargs: invalid number for -P\n");
+                            return 2;
+                        }
+                    }
                 }
                 cmd_start = i + 1;
             } else if arg.starts_with(b"-P") && arg.len() > 2 {
                 // Handle -PN format (no space)
-                max_procs = sys::parse_u64(&arg[2..]).unwrap_or(1) as usize;
+                match sys::parse_u64(&arg[2..]) {
+                    Some(v) => max_procs = v as usize,
+                    None => {
+                        io::write_str(2, b"xargs: invalid number for -P\n");
+                        return 2;
+                    }
+                }
                 cmd_start = i + 1;
             } else if arg == b"-r" || arg == b"--no-run-if-empty" {
                 no_run_if_empty = true;
@@ -158,15 +180,29 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
     // Read input
     let input = io::read_all(0);
 
-    // Split input into items
-    let items: Vec<&[u8]> = if null_delimiter {
-        input.split(|&c| c == 0)
+    // Split input into items.
+    //
+    // - `-0` / `-d`: split raw on the given byte, no quote processing.
+    // - `-I`/`-i` (replace mode): each line is a single item (POSIX/GNU
+    //   xargs treats -I as implying line-at-a-time, unsplit, input).
+    // - default: split on blanks (spaces, tabs, newlines) honoring shell
+    //   quoting (', ", and backslash), matching the POSIX xargs default.
+    let items: Vec<Vec<u8>> = if null_delimiter {
+        input
+            .split(|&c| c == 0)
             .filter(|s| !s.is_empty())
+            .map(|s| s.to_vec())
             .collect()
+    } else if explicit_delim {
+        input
+            .split(|&c| c == delimiter)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_vec())
+            .collect()
+    } else if replace_str.is_some() {
+        split_lines_trimmed(&input)
     } else {
-        input.split(|&c| c == delimiter)
-            .filter(|s| !s.is_empty())
-            .collect()
+        split_whitespace_quoted(&input)
     };
 
     // Handle empty input
@@ -208,10 +244,30 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
             }
         }
     } else {
-        // Normal mode: batch items into command invocations
-        let batch_size = max_args.unwrap_or(items.len());
+        // Normal mode: batch items into command invocations, respecting
+        // -n (max args per invocation) and an ARG_MAX-derived byte budget.
+        let max_bytes = arg_max_budget(command, &initial_args);
+        let batches = compute_batches(&items, max_args, max_bytes);
 
-        for chunk in items.chunks(batch_size) {
+        for (start, end) in batches {
+            let batch_len = end - start;
+            // A single oversized item that can't fit within max_bytes on its own.
+            let is_single_oversized = batch_len == 1
+                && items[start].len() + 1 > max_bytes
+                && max_args.is_none();
+            // A `-n`-requested batch that had to be shrunk below the requested
+            // count because it would otherwise exceed max_bytes (there is more
+            // input still to come, so this wasn't just running out of items).
+            let is_shrunk_n_batch = match max_args {
+                Some(m) => batch_len < m && end < items.len(),
+                None => false,
+            };
+            if exit_on_limit && (is_single_oversized || is_shrunk_n_batch) {
+                io::write_str(2, b"xargs: argument line too long\n");
+                exit_status = 1;
+                break;
+            }
+
             // Wait if we've reached max parallel processes
             while running_pids.len() >= max_procs && max_procs > 0 {
                 let status = wait_for_any(&mut running_pids);
@@ -219,7 +275,7 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
             }
 
             let mut args = initial_args.clone();
-            args.extend(chunk.iter().copied());
+            args.extend(items[start..end].iter().map(|v| v.as_slice()));
 
             if max_procs > 1 {
                 // Run in parallel
@@ -242,24 +298,177 @@ pub fn xargs(argc: i32, argv: *const *const u8) -> i32 {
     exit_status
 }
 
-/// Build args with replacement
-fn build_replace_args(args: &[&[u8]], repl: &[u8], item: &[u8]) -> Vec<Vec<u8>> {
-    args.iter().map(|arg| {
-        if let Some(pos) = find_subsequence(arg, repl) {
-            // Replace REPLSTR with item
-            let mut new_arg = Vec::new();
-            new_arg.extend_from_slice(&arg[..pos]);
-            new_arg.extend_from_slice(item);
-            new_arg.extend_from_slice(&arg[pos + repl.len()..]);
-            new_arg
-        } else {
-            arg.to_vec()
+/// Split input on unquoted blanks (space, tab, newline), the POSIX xargs
+/// default. Single quotes, double quotes, and backslash escapes are
+/// honored so that quoted whitespace does not split an item.
+fn split_whitespace_quoted(input: &[u8]) -> Vec<Vec<u8>> {
+    let mut items: Vec<Vec<u8>> = Vec::new();
+    let mut cur: Vec<u8> = Vec::new();
+    let mut in_word = false;
+    let n = input.len();
+    let mut i = 0;
+
+    while i < n {
+        let c = input[i];
+        match c {
+            b' ' | b'\t' | b'\n' => {
+                if in_word {
+                    items.push(core::mem::take(&mut cur));
+                    in_word = false;
+                }
+                i += 1;
+            }
+            b'\'' => {
+                in_word = true;
+                i += 1;
+                while i < n && input[i] != b'\'' {
+                    cur.push(input[i]);
+                    i += 1;
+                }
+                i += 1;
+            }
+            b'"' => {
+                in_word = true;
+                i += 1;
+                while i < n && input[i] != b'"' {
+                    if input[i] == b'\\' && i + 1 < n && (input[i + 1] == b'"' || input[i + 1] == b'\\') {
+                        cur.push(input[i + 1]);
+                        i += 2;
+                    } else {
+                        cur.push(input[i]);
+                        i += 1;
+                    }
+                }
+                i += 1;
+            }
+            b'\\' => {
+                in_word = true;
+                i += 1;
+                if i < n {
+                    cur.push(input[i]);
+                    i += 1;
+                }
+            }
+            _ => {
+                in_word = true;
+                cur.push(c);
+                i += 1;
+            }
         }
-    }).collect()
+    }
+
+    if in_word {
+        items.push(cur);
+    }
+
+    items
+}
+
+/// Split input into lines (POSIX xargs `-I` mode: each line is a single,
+/// unsplit item), trimming leading/trailing blanks and dropping empty lines.
+fn split_lines_trimmed(input: &[u8]) -> Vec<Vec<u8>> {
+    input
+        .split(|&c| c == b'\n')
+        .map(|line| {
+            let start = line.iter().position(|&c| c != b' ' && c != b'\t');
+            match start {
+                Some(start) => {
+                    let end = line.iter().rposition(|&c| c != b' ' && c != b'\t').unwrap();
+                    line[start..=end].to_vec()
+                }
+                None => Vec::new(),
+            }
+        })
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+/// Estimate an available byte budget for one command invocation's
+/// argument list, derived from the system ARG_MAX, minus the space
+/// already consumed by the command name and its initial arguments.
+fn arg_max_budget(command: &[u8], initial_args: &[&[u8]]) -> usize {
+    let sys_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
+    let arg_max: usize = if sys_max > 0 { sys_max as usize } else { 128 * 1024 };
+
+    // Leave headroom for environment and the command/initial args already
+    // fixed in every invocation.
+    let mut used = command.len() + 1;
+    for a in initial_args {
+        used += a.len() + 1;
+    }
+
+    let headroom = arg_max / 4; // conservative safety margin for env, etc.
+    arg_max.saturating_sub(used).saturating_sub(headroom).max(1)
+}
+
+/// Group items into batches honoring both `-n` (max item count) and a
+/// byte-length budget (ARG_MAX-derived). Always makes progress: a single
+/// oversized item still forms its own batch.
+fn compute_batches(items: &[Vec<u8>], max_args: Option<usize>, max_bytes: usize) -> Vec<(usize, usize)> {
+    let mut batches = Vec::new();
+    let len = items.len();
+    let mut start = 0;
+
+    while start < len {
+        let mut end = start;
+        let mut bytes = 0usize;
+        let mut count = 0usize;
+
+        while end < len {
+            let item_bytes = items[end].len() + 1;
+            if count > 0 {
+                if let Some(m) = max_args {
+                    if count >= m {
+                        break;
+                    }
+                }
+                if bytes + item_bytes > max_bytes {
+                    break;
+                }
+            }
+            bytes += item_bytes;
+            count += 1;
+            end += 1;
+        }
+
+        if end == start {
+            end = start + 1;
+        }
+
+        batches.push((start, end));
+        start = end;
+    }
+
+    batches
+}
+
+/// Build args with replacement. GNU xargs replaces every occurrence of
+/// REPLSTR within each argument, not just the first.
+fn build_replace_args(args: &[&[u8]], repl: &[u8], item: &[u8]) -> Vec<Vec<u8>> {
+    args.iter().map(|arg| replace_all_subsequences(arg, repl, item)).collect()
+}
+
+/// Replace every non-overlapping occurrence of `repl` in `arg` with `item`.
+fn replace_all_subsequences(arg: &[u8], repl: &[u8], item: &[u8]) -> Vec<u8> {
+    if repl.is_empty() {
+        return arg.to_vec();
+    }
+    let mut out = Vec::new();
+    let mut rest = arg;
+    while let Some(pos) = find_subsequence(rest, repl) {
+        out.extend_from_slice(&rest[..pos]);
+        out.extend_from_slice(item);
+        rest = &rest[pos + repl.len()..];
+    }
+    out.extend_from_slice(rest);
+    out
 }
 
 /// Find subsequence in slice
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return None;
+    }
     haystack.windows(needle.len()).position(|window| window == needle)
 }
 
