@@ -18,15 +18,95 @@ use crate::io;
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
-pub fn env(_argc: i32, _argv: *const *const u8) -> i32 {
-    unsafe extern "C" { static environ: *const *const i8; }
+pub fn env(argc: i32, argv: *const *const u8) -> i32 {
+    unsafe extern "C" {
+        static environ: *const *const i8;
+    }
+
+    // NUL-terminate a byte slice for the C environment functions.
+    fn cstr(bytes: &[u8]) -> alloc::vec::Vec<u8> {
+        let mut v = alloc::vec::Vec::with_capacity(bytes.len() + 1);
+        v.extend_from_slice(bytes);
+        v.push(0);
+        v
+    }
+
+    let mut i = 1;
+
+    // --- Options: [-i] [-u NAME]... [--] ---
+    while i < argc {
+        let arg = match unsafe { super::get_arg(argv, i) } {
+            Some(a) => a,
+            None => break,
+        };
+        if arg == b"-i" || arg == b"--ignore-environment" || arg == b"-" {
+            unsafe { libc::clearenv() };
+            i += 1;
+        } else if arg == b"--" {
+            i += 1;
+            break;
+        } else if arg == b"-u" || arg == b"--unset" {
+            // Name is the following operand.
+            i += 1;
+            if let Some(name) = unsafe { super::get_arg(argv, i) } {
+                let c = cstr(name);
+                unsafe { libc::unsetenv(c.as_ptr() as *const i8) };
+                i += 1;
+            } else {
+                io::write_str(2, b"env: option requires an argument -- 'u'\n");
+                return 2;
+            }
+        } else if arg.len() > 2 && arg[0] == b'-' && arg[1] == b'u' {
+            // -uNAME form.
+            let c = cstr(&arg[2..]);
+            unsafe { libc::unsetenv(c.as_ptr() as *const i8) };
+            i += 1;
+        } else {
+            break;
+        }
+    }
+
+    // --- Assignments: NAME=VALUE ... ---
+    while i < argc {
+        let arg = match unsafe { super::get_arg(argv, i) } {
+            Some(a) => a,
+            None => break,
+        };
+        // An operand is an assignment iff it contains '='. The first operand
+        // without '=' is the utility to execute.
+        if let Some(eq) = arg.iter().position(|&b| b == b'=') {
+            let name = cstr(&arg[..eq]);
+            let value = cstr(&arg[eq + 1..]);
+            unsafe { libc::setenv(name.as_ptr() as *const i8, value.as_ptr() as *const i8, 1) };
+            i += 1;
+        } else {
+            break;
+        }
+    }
+
+    // --- Utility, or list the environment ---
+    if i < argc {
+        // Exec the utility with the remaining argv (already NUL-terminated by
+        // the OS) in the (possibly modified) environment.
+        let file = unsafe { *argv.add(i as usize) };
+        unsafe { libc::execvp(file as *const i8, argv.add(i as usize) as *const *const i8) };
+        // execvp only returns on failure.
+        let err = crate::sys::errno();
+        let name = unsafe { super::get_arg(argv, i) }.unwrap_or(b"");
+        io::write_str(2, b"env: ");
+        io::write_all(2, name);
+        io::write_str(2, b": command not found\n");
+        return if err == libc::ENOENT { 127 } else { 126 };
+    }
+
+    // List mode.
     unsafe {
-        let mut i = 0;
-        while !(*environ.add(i)).is_null() {
-            let e = io::cstr_to_slice(*environ.add(i) as *const u8);
+        let mut j = 0;
+        while !(*environ.add(j)).is_null() {
+            let e = io::cstr_to_slice(*environ.add(j) as *const u8);
             io::write_all(1, e);
             io::write_str(1, b"\n");
-            i += 1;
+            j += 1;
         }
     }
     0
