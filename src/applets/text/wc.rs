@@ -20,6 +20,7 @@ use crate::applets::has_opt;
 /// - `-c`: Write byte count
 /// - `-l`: Write line count
 /// - `-w`: Write word count
+/// - `-m`: Write character count
 ///
 /// # Exit Status
 /// - 0: Success
@@ -29,70 +30,130 @@ pub fn wc(argc: i32, argv: *const *const u8) -> i32 {
 
     let mut show_lines = false;
     let mut show_words = false;
+    let mut show_bytes = false;
     let mut show_chars = false;
+
+    #[cfg(feature = "alloc")]
+    let mut files: alloc::vec::Vec<&[u8]> = alloc::vec::Vec::new();
 
     for i in 1..argc {
         if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if arg.len() > 0 && arg[0] == b'-' {
+            if arg.len() > 1 && arg[0] == b'-' {
                 if has_opt(arg, b'l') { show_lines = true; }
                 if has_opt(arg, b'w') { show_words = true; }
-                if has_opt(arg, b'c') { show_chars = true; }
+                if has_opt(arg, b'c') { show_bytes = true; }
+                if has_opt(arg, b'm') { show_chars = true; }
+            } else {
+                #[cfg(feature = "alloc")]
+                files.push(arg);
             }
         }
     }
 
-    if !show_lines && !show_words && !show_chars {
+    if !show_lines && !show_words && !show_bytes && !show_chars {
         show_lines = true;
         show_words = true;
-        show_chars = true;
+        show_bytes = true;
     }
 
-    let mut total_lines = 0u64;
-    let mut total_words = 0u64;
-    let mut total_chars = 0u64;
-    let mut file_count = 0;
+    #[cfg(feature = "alloc")]
+    {
+        let mut total_lines = 0u64;
+        let mut total_words = 0u64;
+        let mut total_bytes = 0u64;
+        let mut total_chars = 0u64;
+        let mut had_error = false;
 
-    for i in 1..argc {
-        if let Some(path) = unsafe { get_arg(argv, i) } {
-            if path.len() > 0 && path[0] != b'-' {
-                let fd = io::open(path, libc::O_RDONLY, 0);
-                if fd >= 0 {
-                    let (l, w, c) = wc_fd(fd);
-                    total_lines += l;
-                    total_words += w;
-                    total_chars += c;
+        if files.is_empty() {
+            let (l, w, b, c) = wc_fd(0);
+            print_counts(show_lines, show_words, show_bytes, show_chars, l, w, b, c, None);
+        } else {
+            for &path in &files {
+                let fd = if path == b"-" {
+                    0
+                } else {
+                    io::open(path, libc::O_RDONLY, 0)
+                };
 
-                    if show_lines { io::write_num(1, l); io::write_str(1, b" "); }
-                    if show_words { io::write_num(1, w); io::write_str(1, b" "); }
-                    if show_chars { io::write_num(1, c); io::write_str(1, b" "); }
-                    io::write_all(1, path);
-                    io::write_str(1, b"\n");
-
-                    io::close(fd);
-                    file_count += 1;
+                if fd < 0 {
+                    io::write_str(2, b"wc: ");
+                    io::write_all(2, path);
+                    io::write_str(2, b": No such file or directory\n");
+                    had_error = true;
+                    continue;
                 }
+
+                let (l, w, b, c) = wc_fd(fd);
+                if fd != 0 { io::close(fd); }
+
+                total_lines += l;
+                total_words += w;
+                total_bytes += b;
+                total_chars += c;
+
+                print_counts(show_lines, show_words, show_bytes, show_chars, l, w, b, c, Some(path));
+            }
+
+            if files.len() > 1 {
+                print_counts(show_lines, show_words, show_bytes, show_chars, total_lines, total_words, total_bytes, total_chars, Some(b"total"));
             }
         }
+
+        if had_error { return 1; }
     }
 
-    if file_count == 0 {
-        let (l, w, c) = wc_fd(0);
-        if show_lines { io::write_num(1, l); io::write_str(1, b" "); }
-        if show_words { io::write_num(1, w); io::write_str(1, b" "); }
-        if show_chars { io::write_num(1, c); }
-        io::write_str(1, b"\n");
-    } else if file_count > 1 {
-        if show_lines { io::write_num(1, total_lines); io::write_str(1, b" "); }
-        if show_words { io::write_num(1, total_words); io::write_str(1, b" "); }
-        if show_chars { io::write_num(1, total_chars); io::write_str(1, b" "); }
-        io::write_str(1, b"total\n");
+    #[cfg(not(feature = "alloc"))]
+    {
+        let (l, w, b, c) = wc_fd(0);
+        print_counts(show_lines, show_words, show_bytes, show_chars, l, w, b, c, None);
     }
+
     0
 }
 
-fn wc_fd(fd: i32) -> (u64, u64, u64) {
+fn print_counts(
+    show_lines: bool,
+    show_words: bool,
+    show_bytes: bool,
+    show_chars: bool,
+    lines: u64,
+    words: u64,
+    bytes: u64,
+    chars: u64,
+    name: Option<&[u8]>,
+) {
+    let mut first = true;
+    if show_lines {
+        if !first { io::write_str(1, b" "); }
+        io::write_num(1, lines);
+        first = false;
+    }
+    if show_words {
+        if !first { io::write_str(1, b" "); }
+        io::write_num(1, words);
+        first = false;
+    }
+    if show_bytes {
+        if !first { io::write_str(1, b" "); }
+        io::write_num(1, bytes);
+        first = false;
+    }
+    if show_chars {
+        if !first { io::write_str(1, b" "); }
+        io::write_num(1, chars);
+        first = false;
+    }
+    if let Some(name) = name {
+        if !first { io::write_str(1, b" "); }
+        io::write_all(1, name);
+    }
+    io::write_str(1, b"\n");
+}
+
+fn wc_fd(fd: i32) -> (u64, u64, u64, u64) {
     let mut lines = 0u64;
     let mut words = 0u64;
+    let mut bytes = 0u64;
     let mut chars = 0u64;
     let mut in_word = false;
 
@@ -102,10 +163,12 @@ fn wc_fd(fd: i32) -> (u64, u64, u64) {
         if n <= 0 { break; }
 
         for &c in &buf[..n as usize] {
+            bytes += 1;
             chars += 1;
             if c == b'\n' { lines += 1; }
 
-            let is_space = c == b' ' || c == b'\n' || c == b'\t' || c == b'\r';
+            let is_space = c == b' ' || c == b'\n' || c == b'\t' || c == b'\r'
+                || c == 0x0b || c == 0x0c;
             if is_space {
                 in_word = false;
             } else if !in_word {
@@ -115,7 +178,7 @@ fn wc_fd(fd: i32) -> (u64, u64, u64) {
         }
     }
 
-    (lines, words, chars)
+    (lines, words, bytes, chars)
 }
 
 #[cfg(test)]

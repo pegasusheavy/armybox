@@ -11,7 +11,7 @@ use crate::applets::{get_arg, has_opt};
 ///
 /// # Synopsis
 /// ```text
-/// fold [-w width] [file...]
+/// fold [-bs] [-w width] [file...]
 /// ```
 ///
 /// # Description
@@ -19,45 +19,180 @@ use crate::applets::{get_arg, has_opt};
 ///
 /// # Options
 /// - `-w width`: Use width columns (default 80)
+/// - `-b`: Count width in bytes rather than columns
+/// - `-s`: Break at the last blank before the width limit, if any
 ///
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
 pub fn fold(argc: i32, argv: *const *const u8) -> i32 {
     let mut width = 80usize;
+    let mut by_bytes = false;
+    let mut break_at_blank = false;
 
-    for i in 1..argc {
+    #[cfg(feature = "alloc")]
+    let mut files: alloc::vec::Vec<&[u8]> = alloc::vec::Vec::new();
+
+    let mut i = 1;
+    while i < argc {
         if let Some(arg) = unsafe { get_arg(argv, i) } {
-            if has_opt(arg, b'w') && i + 1 < argc {
-                if let Some(w) = unsafe { get_arg(argv, i + 1) } {
-                    width = sys::parse_u64(w).unwrap_or(80) as usize;
+            if arg.len() > 1 && arg[0] == b'-' {
+                if has_opt(arg, b'b') { by_bytes = true; }
+                if has_opt(arg, b's') { break_at_blank = true; }
+                if has_opt(arg, b'w') {
+                    if arg.len() > 2 && arg[1] == b'w' {
+                        width = sys::parse_u64(&arg[2..]).unwrap_or(80) as usize;
+                    } else if i + 1 < argc {
+                        if let Some(w) = unsafe { get_arg(argv, i + 1) } {
+                            width = sys::parse_u64(w).unwrap_or(80) as usize;
+                        }
+                        i += 1;
+                    }
                 }
+            } else {
+                #[cfg(feature = "alloc")]
+                files.push(arg);
             }
         }
+        i += 1;
     }
 
-    let mut buf = [0u8; 4096];
-    let mut col = 0;
+    if width == 0 { width = 1; }
 
-    loop {
-        let n = io::read(0, &mut buf);
-        if n <= 0 { break; }
+    #[cfg(feature = "alloc")]
+    {
+        let mut had_error = false;
 
-        for &c in &buf[..n as usize] {
-            if c == b'\n' {
-                io::write_str(1, b"\n");
-                col = 0;
-            } else {
-                if col >= width {
-                    io::write_str(1, b"\n");
-                    col = 0;
+        if files.is_empty() {
+            fold_fd(0, width, by_bytes, break_at_blank);
+        } else {
+            for &path in &files {
+                let fd = if path == b"-" {
+                    0
+                } else {
+                    io::open(path, libc::O_RDONLY, 0)
+                };
+
+                if fd < 0 {
+                    io::write_str(2, b"fold: ");
+                    io::write_all(2, path);
+                    io::write_str(2, b": No such file or directory\n");
+                    had_error = true;
+                    continue;
                 }
-                io::write_all(1, &[c]);
+
+                fold_fd(fd, width, by_bytes, break_at_blank);
+                if fd != 0 { io::close(fd); }
+            }
+        }
+
+        if had_error { return 1; }
+    }
+
+    #[cfg(not(feature = "alloc"))]
+    {
+        fold_fd(0, width, by_bytes, break_at_blank);
+    }
+
+    0
+}
+
+/// Fold the content of a file descriptor to stdout.
+///
+/// `by_bytes` counts raw bytes toward the width instead of columns
+/// (they are equivalent for ASCII input, which is all this
+/// implementation targets). `break_at_blank` prefers breaking at the
+/// last blank (space or tab) seen before the width limit, if any.
+fn fold_fd(fd: i32, width: usize, by_bytes: bool, break_at_blank: bool) {
+    let _ = by_bytes;
+
+    #[cfg(feature = "alloc")]
+    {
+        use alloc::vec::Vec;
+
+        let mut col: usize = 0;
+        // Buffer of the current output line, used only when -s is active
+        // so we can back up to the last blank.
+        let mut line: Vec<u8> = Vec::new();
+        let mut last_blank: Option<usize> = None;
+
+        let mut buf = [0u8; 4096];
+        loop {
+            let n = io::read(fd, &mut buf);
+            if n <= 0 { break; }
+
+            for &c in &buf[..n as usize] {
+                if c == b'\n' {
+                    io::write_all(1, &line);
+                    io::write_str(1, b"\n");
+                    line.clear();
+                    last_blank = None;
+                    col = 0;
+                    continue;
+                }
+
+                if col >= width {
+                    if break_at_blank {
+                        if let Some(pos) = last_blank {
+                            let rest: Vec<u8> = line[pos + 1..].to_vec();
+                            io::write_all(1, &line[..=pos]);
+                            io::write_str(1, b"\n");
+                            line.clear();
+                            line.extend_from_slice(&rest);
+                            col = rest.len();
+                            last_blank = None;
+                        } else {
+                            io::write_all(1, &line);
+                            io::write_str(1, b"\n");
+                            line.clear();
+                            col = 0;
+                        }
+                    } else {
+                        io::write_all(1, &line);
+                        io::write_str(1, b"\n");
+                        line.clear();
+                        col = 0;
+                        last_blank = None;
+                    }
+                }
+
+                if c == b' ' || c == b'\t' {
+                    last_blank = Some(line.len());
+                }
+                line.push(c);
                 col += 1;
             }
         }
+
+        if !line.is_empty() {
+            io::write_all(1, &line);
+            io::write_str(1, b"\n");
+        }
     }
-    0
+
+    #[cfg(not(feature = "alloc"))]
+    {
+        let mut col = 0usize;
+        let mut buf = [0u8; 4096];
+        loop {
+            let n = io::read(fd, &mut buf);
+            if n <= 0 { break; }
+
+            for &c in &buf[..n as usize] {
+                if c == b'\n' {
+                    io::write_str(1, b"\n");
+                    col = 0;
+                } else {
+                    if col >= width {
+                        io::write_str(1, b"\n");
+                        col = 0;
+                    }
+                    io::write_all(1, &[c]);
+                    col += 1;
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

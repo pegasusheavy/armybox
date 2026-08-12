@@ -4,54 +4,194 @@
 //! Reference: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/nl.html
 
 use crate::io;
+use crate::sys;
 use crate::applets::get_arg;
 
 /// nl - number lines of files
 ///
 /// # Synopsis
 /// ```text
-/// nl [-b type] [-n format] [file]
+/// nl [-b type] [-n format] [-w width] [-s sep] [-v start] [-i incr] [file...]
 /// ```
 ///
 /// # Description
-/// Read lines from file and write them to standard output with line numbers added.
+/// Read lines from file (or standard input) and write them to standard
+/// output with line numbers added.
+///
+/// # Options
+/// - `-b a|t|n`: Number all lines, non-empty lines only (default), or no lines
+/// - `-n ln|rn|rz`: Left justified, right justified (default), or right
+///   justified with leading zeros
+/// - `-w WIDTH`: Line number field width (default 6)
+/// - `-s SEP`: Line number separator (default TAB)
+/// - `-v START`: Initial line number (default 1)
+/// - `-i INCR`: Line number increment (default 1)
 ///
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
 pub fn nl(argc: i32, argv: *const *const u8) -> i32 {
-    let fd = if argc > 1 {
-        if let Some(path) = unsafe { get_arg(argv, argc - 1) } {
-            if path.len() > 0 && path[0] != b'-' {
-                io::open(path, libc::O_RDONLY, 0)
-            } else { 0 }
-        } else { 0 }
-    } else { 0 };
+    let mut body_type = b't';
+    let mut width: usize = 6;
+    let mut sep: &[u8] = b"\t";
+    let mut start: u64 = 1;
+    let mut incr: u64 = 1;
+    let mut left_justify = false;
+    let mut zero_pad = false;
 
-    let mut line_num = 1u64;
-    let mut buf = [0u8; 4096];
-    let mut at_line_start = true;
+    #[cfg(feature = "alloc")]
+    let mut files: alloc::vec::Vec<&[u8]> = alloc::vec::Vec::new();
 
-    loop {
-        let n = io::read(fd, &mut buf);
-        if n <= 0 { break; }
+    let mut i = 1;
+    while i < argc {
+        if let Some(arg) = unsafe { get_arg(argv, i) } {
+            if arg.len() > 1 && arg[0] == b'-' {
+                let opt = arg[1];
+                let value: Option<&[u8]> = if arg.len() > 2 {
+                    Some(&arg[2..])
+                } else if i + 1 < argc {
+                    i += 1;
+                    unsafe { get_arg(argv, i) }
+                } else {
+                    None
+                };
 
-        for &c in &buf[..n as usize] {
-            if at_line_start {
-                io::write_num(1, line_num);
-                io::write_str(1, b"\t");
-                at_line_start = false;
+                match opt {
+                    b'b' => {
+                        if let Some(v) = value {
+                            if !v.is_empty() { body_type = v[0]; }
+                        }
+                    }
+                    b'w' => {
+                        if let Some(v) = value {
+                            width = sys::parse_u64(v).unwrap_or(6) as usize;
+                        }
+                    }
+                    b's' => {
+                        if let Some(v) = value { sep = v; }
+                    }
+                    b'v' => {
+                        if let Some(v) = value {
+                            start = sys::parse_u64(v).unwrap_or(1);
+                        }
+                    }
+                    b'i' => {
+                        if let Some(v) = value {
+                            incr = sys::parse_u64(v).unwrap_or(1);
+                        }
+                    }
+                    b'n' => {
+                        if let Some(v) = value {
+                            if v.len() >= 2 {
+                                left_justify = v[0] == b'l';
+                                zero_pad = v[1] == b'z';
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                #[cfg(feature = "alloc")]
+                files.push(arg);
             }
-            io::write_all(1, &[c]);
-            if c == b'\n' {
-                line_num += 1;
-                at_line_start = true;
+        }
+        i += 1;
+    }
+
+    #[cfg(feature = "alloc")]
+    {
+        use alloc::vec::Vec;
+
+        let mut content: Vec<u8> = Vec::new();
+        let mut had_error = false;
+
+        if files.is_empty() {
+            content = io::read_all(0);
+        } else {
+            for &path in &files {
+                let fd = if path == b"-" {
+                    0
+                } else {
+                    io::open(path, libc::O_RDONLY, 0)
+                };
+
+                if fd < 0 {
+                    io::write_str(2, b"nl: ");
+                    io::write_all(2, path);
+                    io::write_str(2, b": No such file or directory\n");
+                    had_error = true;
+                    continue;
+                }
+
+                content.extend_from_slice(&io::read_all(fd));
+                if fd != 0 { io::close(fd); }
             }
+        }
+
+        let mut counter = start;
+        let mut lines: Vec<&[u8]> = content.split(|&c| c == b'\n').collect();
+        if content.last() == Some(&b'\n') {
+            // Drop the trailing empty segment produced when content ends
+            // with a newline; it is not a real line.
+            lines.pop();
+        }
+
+        for seg in lines {
+            let numbered = match body_type {
+                b'a' => true,
+                b'n' => false,
+                _ => !seg.is_empty(),
+            };
+
+            if numbered {
+                write_number(width, counter, zero_pad, left_justify);
+                io::write_all(1, sep);
+                counter = counter.wrapping_add(incr);
+            }
+            io::write_all(1, seg);
+            io::write_str(1, b"\n");
+        }
+
+        if had_error { return 1; }
+    }
+
+    #[cfg(not(feature = "alloc"))]
+    {
+        let _ = (body_type, width, sep, start, incr, left_justify, zero_pad);
+        io::write_str(2, b"nl: requires alloc feature\n");
+        return 1;
+    }
+
+    0
+}
+
+fn write_number(width: usize, num: u64, zero_pad: bool, left_justify: bool) {
+    let mut buf = [0u8; 20];
+    let mut i = buf.len();
+    let mut n = num;
+
+    if n == 0 {
+        i -= 1;
+        buf[i] = b'0';
+    } else {
+        while n > 0 {
+            i -= 1;
+            buf[i] = b'0' + (n % 10) as u8;
+            n /= 10;
         }
     }
 
-    if fd != 0 { io::close(fd); }
-    0
+    let digits = &buf[i..];
+    let pad = width.saturating_sub(digits.len());
+
+    if left_justify {
+        io::write_all(1, digits);
+        for _ in 0..pad { io::write_str(1, b" "); }
+    } else {
+        let pad_char: u8 = if zero_pad { b'0' } else { b' ' };
+        for _ in 0..pad { io::write_all(1, &[pad_char]); }
+        io::write_all(1, digits);
+    }
 }
 
 #[cfg(test)]

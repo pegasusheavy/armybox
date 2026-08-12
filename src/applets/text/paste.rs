@@ -17,7 +17,9 @@ use crate::applets::get_arg;
 /// Merge corresponding or subsequent lines of files.
 ///
 /// # Options
-/// - `-d list`: Replace default delimiter TAB with list of characters
+/// - `-d list`: Replace default delimiter TAB with a cycling list of
+///   characters. Recognizes the escapes `\n`, `\t`, `\\`, and `\0`
+///   (an empty delimiter, not a NUL byte).
 /// - `-s`: Paste one file at a time instead of in parallel
 ///
 /// # Exit Status
@@ -28,31 +30,36 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
     {
         use alloc::vec::Vec;
 
-        let mut delimiter = b'\t';
+        // 0u8 is used internally as a marker for an empty ("\0") delimiter
+        // slot; it is never written to output.
+        let mut delims: Vec<u8> = alloc::vec![b'\t'];
+        let mut have_custom_delim = false;
         let mut serial = false;
         let mut files: Vec<&[u8]> = Vec::new();
 
         let mut i = 1;
         while i < argc {
             if let Some(arg) = unsafe { get_arg(argv, i) } {
-                if arg.starts_with(b"-") && arg.len() > 1 {
+                if arg == b"-" {
+                    files.push(b"-");
+                } else if arg.starts_with(b"-") && arg.len() > 1 {
                     if arg == b"-s" {
                         serial = true;
                     } else if arg == b"-d" || arg.starts_with(b"-d") {
-                        // Delimiter
-                        if arg.len() > 2 {
-                            delimiter = arg[2];
+                        let value: Option<&[u8]> = if arg.len() > 2 {
+                            Some(&arg[2..])
                         } else if i + 1 < argc {
                             i += 1;
-                            if let Some(d) = unsafe { get_arg(argv, i) } {
-                                if !d.is_empty() {
-                                    delimiter = d[0];
-                                }
-                            }
+                            unsafe { get_arg(argv, i) }
+                        } else {
+                            None
+                        };
+
+                        if let Some(v) = value {
+                            delims = parse_delims(v);
+                            have_custom_delim = true;
                         }
                     }
-                } else if arg == b"-" {
-                    files.push(b"-");
                 } else {
                     files.push(arg);
                 }
@@ -60,41 +67,47 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
             i += 1;
         }
 
+        if have_custom_delim && delims.is_empty() {
+            // -d '' means "no delimiter", represented by our empty marker.
+            delims.push(0u8);
+        }
+
         if files.is_empty() {
             files.push(b"-");
         }
 
+        let mut had_error = false;
+
         if serial {
-            // Serial mode: output each file on a single line, fields delimited
             for &file in &files {
                 let fd = if file == b"-" {
                     0
                 } else {
                     io::open(file, libc::O_RDONLY, 0)
                 };
-                if fd < 0 && file != b"-" {
-                    io::write_str(2, b"paste: cannot open file\n");
+
+                if fd < 0 {
+                    io::write_str(2, b"paste: ");
+                    io::write_all(2, file);
+                    io::write_str(2, b": No such file or directory\n");
+                    had_error = true;
                     continue;
                 }
 
                 let content = io::read_all(fd);
-                if fd > 0 { io::close(fd); }
+                if fd != 0 { io::close(fd); }
 
-                let mut first = true;
-                for line in content.split(|&c| c == b'\n') {
-                    if line.is_empty() { continue; }
-                    if !first {
-                        io::write_all(1, &[delimiter]);
+                let lines = split_lines(&content);
+                for (idx, line) in lines.iter().enumerate() {
+                    if idx > 0 {
+                        write_delim(&delims, idx - 1);
                     }
                     io::write_all(1, line);
-                    first = false;
                 }
                 io::write_str(1, b"\n");
             }
         } else {
-            // Normal mode: merge corresponding lines from each file
-            let mut file_data: Vec<Vec<u8>> = Vec::new();
-            let mut fds: Vec<i32> = Vec::new();
+            let mut contents: Vec<Vec<u8>> = Vec::new();
 
             for &file in &files {
                 let fd = if file == b"-" {
@@ -102,47 +115,97 @@ pub fn paste(argc: i32, argv: *const *const u8) -> i32 {
                 } else {
                     io::open(file, libc::O_RDONLY, 0)
                 };
-                if fd < 0 && file != b"-" {
-                    io::write_str(2, b"paste: cannot open file\n");
-                    file_data.push(Vec::new());
-                    fds.push(-1);
-                } else {
-                    let content = io::read_all(fd);
-                    if fd > 0 { io::close(fd); }
-                    file_data.push(content);
-                    fds.push(0);
+
+                if fd < 0 {
+                    io::write_str(2, b"paste: ");
+                    io::write_all(2, file);
+                    io::write_str(2, b": No such file or directory\n");
+                    had_error = true;
+                    contents.push(Vec::new());
+                    continue;
                 }
+
+                let content = io::read_all(fd);
+                if fd != 0 { io::close(fd); }
+                contents.push(content);
             }
 
-            // Convert to lines
-            let file_lines: Vec<Vec<&[u8]>> = file_data.iter()
-                .map(|d| d.split(|&c| c == b'\n').collect::<Vec<_>>())
-                .collect();
-
-            // Find max number of lines
+            let file_lines: Vec<Vec<&[u8]>> = contents.iter().map(|c| split_lines(c)).collect();
             let max_lines = file_lines.iter().map(|l| l.len()).max().unwrap_or(0);
 
             for line_idx in 0..max_lines {
                 for (file_idx, lines) in file_lines.iter().enumerate() {
                     if file_idx > 0 {
-                        io::write_all(1, &[delimiter]);
+                        write_delim(&delims, file_idx - 1);
                     }
                     if line_idx < lines.len() {
-                        io::write_all(1, lines[line_idx]);
+                        io::write_all(1, &lines[line_idx]);
                     }
                 }
                 io::write_str(1, b"\n");
             }
         }
+
+        if had_error { return 1; }
+        return 0;
     }
 
     #[cfg(not(feature = "alloc"))]
     {
+        let _ = (argc, argv);
         io::write_str(2, b"paste: requires alloc feature\n");
-        return 1;
+        1
     }
+}
 
-    0
+/// Write the cycling delimiter for gap index `gap` (0-based gap between
+/// consecutive fields). A marker byte of 0 means "no delimiter".
+#[cfg(feature = "alloc")]
+fn write_delim(delims: &[u8], gap: usize) {
+    if delims.is_empty() { return; }
+    let d = delims[gap % delims.len()];
+    if d != 0 {
+        io::write_all(1, &[d]);
+    }
+}
+
+/// Parse a `-d` delimiter list, expanding `\n`, `\t`, `\\`, and `\0`
+/// escapes. `\0` is represented internally as a literal 0 byte, which
+/// `write_delim` treats as "write nothing".
+#[cfg(feature = "alloc")]
+fn parse_delims(v: &[u8]) -> alloc::vec::Vec<u8> {
+    use alloc::vec::Vec;
+
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < v.len() {
+        if v[i] == b'\\' && i + 1 < v.len() {
+            match v[i + 1] {
+                b'n' => out.push(b'\n'),
+                b't' => out.push(b'\t'),
+                b'\\' => out.push(b'\\'),
+                b'0' => out.push(0u8),
+                other => out.push(other),
+            }
+            i += 2;
+        } else {
+            out.push(v[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Split content into lines, dropping the trailing empty segment produced
+/// when the content ends with a newline (so a trailing newline does not
+/// produce a spurious blank final line).
+#[cfg(feature = "alloc")]
+fn split_lines(content: &[u8]) -> alloc::vec::Vec<&[u8]> {
+    let mut lines: alloc::vec::Vec<&[u8]> = content.split(|&c| c == b'\n').collect();
+    if content.last() == Some(&b'\n') {
+        lines.pop();
+    }
+    lines
 }
 
 #[cfg(test)]
