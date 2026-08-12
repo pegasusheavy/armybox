@@ -2,6 +2,10 @@
 //!
 //! POSIX.1-2017 compliant text manipulation utilities.
 
+// Shared BRE/ERE regex engine used by grep and sed.
+#[cfg(any(feature = "grep", feature = "sed"))]
+pub(crate) mod regex;
+
 // Individual utility modules
 #[cfg(feature = "awk")]
 mod awk;

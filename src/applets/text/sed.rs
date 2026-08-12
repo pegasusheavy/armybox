@@ -12,583 +12,8 @@ use crate::io;
 use crate::applets::get_arg;
 
 use alloc::vec::Vec;
-use alloc::boxed::Box;
+use super::regex::{Captures, Regex, Syntax};
 
-// ---------------------------------------------------------------------------
-// Regex engine
-// ---------------------------------------------------------------------------
-
-#[derive(Clone)]
-struct Class {
-    negated: bool,
-    ranges: Vec<(u8, u8)>,
-}
-
-impl Class {
-    fn matches(&self, b: u8, icase: bool) -> bool {
-        let hit = |x: u8| self.ranges.iter().any(|&(lo, hi)| x >= lo && x <= hi);
-        let mut m = hit(b);
-        if icase && !m {
-            m = hit(other_case(b));
-        }
-        if self.negated { !m } else { m }
-    }
-}
-
-#[derive(Clone)]
-enum Inst {
-    Char(u8),
-    Any,
-    Class(Class),
-    Save(usize),
-    Jmp(usize),
-    Split(usize, usize),
-    Start,
-    End,
-    Match,
-}
-
-#[derive(Clone)]
-enum Ast {
-    Empty,
-    Char(u8),
-    Any,
-    Class(Class),
-    Start,
-    End,
-    Concat(Vec<Ast>),
-    Alt(Vec<Ast>),
-    Group(usize, Box<Ast>),
-    Star(Box<Ast>),
-    Plus(Box<Ast>),
-    Quest(Box<Ast>),
-    Repeat(Box<Ast>, usize, Option<usize>),
-}
-
-fn other_case(x: u8) -> u8 {
-    if x.is_ascii_lowercase() {
-        x.to_ascii_uppercase()
-    } else if x.is_ascii_uppercase() {
-        x.to_ascii_lowercase()
-    } else {
-        x
-    }
-}
-
-fn eqc(a: u8, b: u8, icase: bool) -> bool {
-    a == b || (icase && a.to_ascii_lowercase() == b.to_ascii_lowercase())
-}
-
-fn is_alt_op(b: &[u8], p: usize, ere: bool) -> bool {
-    p < b.len()
-        && ((ere && b[p] == b'|')
-            || (!ere && b[p] == b'\\' && p + 1 < b.len() && b[p + 1] == b'|'))
-}
-
-fn is_group_close(b: &[u8], p: usize, ere: bool) -> bool {
-    p < b.len()
-        && ((ere && b[p] == b')')
-            || (!ere && b[p] == b'\\' && p + 1 < b.len() && b[p + 1] == b')'))
-}
-
-fn is_group_open(b: &[u8], p: usize, ere: bool) -> bool {
-    p < b.len()
-        && ((ere && b[p] == b'(')
-            || (!ere && b[p] == b'\\' && p + 1 < b.len() && b[p + 1] == b'('))
-}
-
-/// POSIX RE_DUP_MAX: maximum permitted count in a `{n,m}` interval.
-const RE_DUP_MAX: usize = 32767;
-/// Maximum parser nesting depth for groups/alternation (parse-error backstop).
-const MAX_NEST: usize = 200;
-/// Maximum recursion depth for the matcher (stack-overflow backstop on long lines).
-const RE_MAX_DEPTH: usize = 40_000;
-
-struct Parser<'a> {
-    b: &'a [u8],
-    pos: usize,
-    ere: bool,
-    gc: usize,
-    depth: usize,
-}
-
-impl<'a> Parser<'a> {
-    fn alt(&mut self) -> Result<Ast, ()> {
-        self.depth += 1;
-        if self.depth > MAX_NEST {
-            return Err(());
-        }
-        let mut br: Vec<Ast> = Vec::new();
-        br.push(self.concat()?);
-        while is_alt_op(self.b, self.pos, self.ere) {
-            self.pos += if self.ere { 1 } else { 2 };
-            br.push(self.concat()?);
-        }
-        self.depth -= 1;
-        Ok(if br.len() == 1 {
-            br.pop().unwrap()
-        } else {
-            Ast::Alt(br)
-        })
-    }
-
-    fn concat(&mut self) -> Result<Ast, ()> {
-        let mut items: Vec<Ast> = Vec::new();
-        while self.pos < self.b.len()
-            && !is_alt_op(self.b, self.pos, self.ere)
-            && !is_group_close(self.b, self.pos, self.ere)
-        {
-            let first = items.is_empty();
-            let a = self.atom(first)?;
-            let a = self.quant(a)?;
-            items.push(a);
-        }
-        Ok(if items.is_empty() {
-            Ast::Empty
-        } else if items.len() == 1 {
-            items.pop().unwrap()
-        } else {
-            Ast::Concat(items)
-        })
-    }
-
-    fn atom(&mut self, first: bool) -> Result<Ast, ()> {
-        let b = self.b;
-        if is_group_open(b, self.pos, self.ere) {
-            self.pos += if self.ere { 1 } else { 2 };
-            self.gc += 1;
-            let idx = self.gc;
-            let inner = self.alt()?;
-            if is_group_close(b, self.pos, self.ere) {
-                self.pos += if self.ere { 1 } else { 2 };
-            } else {
-                // Unterminated group: `\(` (BRE) or `(` (ERE) with no close.
-                return Err(());
-            }
-            return Ok(Ast::Group(idx, Box::new(inner)));
-        }
-        let c = b[self.pos];
-        if c == b'^' && first {
-            self.pos += 1;
-            return Ok(Ast::Start);
-        }
-        if c == b'$' {
-            let nx = self.pos + 1;
-            let end = nx >= b.len()
-                || is_alt_op(b, nx, self.ere)
-                || is_group_close(b, nx, self.ere);
-            if end {
-                self.pos += 1;
-                return Ok(Ast::End);
-            }
-        }
-        if c == b'.' {
-            self.pos += 1;
-            return Ok(Ast::Any);
-        }
-        if c == b'[' {
-            return self.class();
-        }
-        if c == b'\\' && self.pos + 1 < b.len() {
-            let nx = b[self.pos + 1];
-            self.pos += 2;
-            let ch = match nx {
-                b'n' => b'\n',
-                b't' => b'\t',
-                b'r' => b'\r',
-                _ => nx,
-            };
-            return Ok(Ast::Char(ch));
-        }
-        self.pos += 1;
-        Ok(Ast::Char(c))
-    }
-
-    fn quant(&mut self, mut a: Ast) -> Result<Ast, ()> {
-        loop {
-            if self.pos >= self.b.len() {
-                break;
-            }
-            let c = self.b[self.pos];
-            if c == b'*' {
-                self.pos += 1;
-                a = Ast::Star(Box::new(a));
-                continue;
-            }
-            if self.ere {
-                if c == b'+' {
-                    self.pos += 1;
-                    a = Ast::Plus(Box::new(a));
-                    continue;
-                }
-                if c == b'?' {
-                    self.pos += 1;
-                    a = Ast::Quest(Box::new(a));
-                    continue;
-                }
-                if c == b'{' {
-                    if let Some((mn, mx)) = self.interval(self.pos + 1, false)? {
-                        a = Ast::Repeat(Box::new(a), mn, mx);
-                        continue;
-                    }
-                }
-            } else if c == b'\\' && self.pos + 1 < self.b.len() {
-                let nx = self.b[self.pos + 1];
-                if nx == b'+' {
-                    self.pos += 2;
-                    a = Ast::Plus(Box::new(a));
-                    continue;
-                }
-                if nx == b'?' {
-                    self.pos += 2;
-                    a = Ast::Quest(Box::new(a));
-                    continue;
-                }
-                if nx == b'{' {
-                    if let Some((mn, mx)) = self.interval(self.pos + 2, true)? {
-                        a = Ast::Repeat(Box::new(a), mn, mx);
-                        continue;
-                    }
-                }
-            }
-            break;
-        }
-        Ok(a)
-    }
-
-    /// Parse a `{n}` / `{n,}` / `{n,m}` interval starting at `start`.
-    /// `Ok(None)` means "not a well-formed interval here" (treat `{` literally);
-    /// `Err(())` means a syntactically-present interval with an illegal bound
-    /// (overflow / count > RE_DUP_MAX / n > m).
-    fn interval(&mut self, start: usize, bre: bool) -> Result<Option<(usize, Option<usize>)>, ()> {
-        let b = self.b;
-        let mut p = start;
-        let mut mn: usize = 0;
-        let mut mn_overflow = false;
-        let mut got = false;
-        while p < b.len() && b[p].is_ascii_digit() {
-            mn = mn.saturating_mul(10).saturating_add((b[p] - b'0') as usize);
-            if mn > RE_DUP_MAX {
-                mn_overflow = true;
-            }
-            p += 1;
-            got = true;
-        }
-        if !got {
-            return Ok(None);
-        }
-        let mut mx_overflow = false;
-        let mx;
-        if p < b.len() && b[p] == b',' {
-            p += 1;
-            if p < b.len() && b[p].is_ascii_digit() {
-                let mut m: usize = 0;
-                while p < b.len() && b[p].is_ascii_digit() {
-                    m = m.saturating_mul(10).saturating_add((b[p] - b'0') as usize);
-                    if m > RE_DUP_MAX {
-                        mx_overflow = true;
-                    }
-                    p += 1;
-                }
-                mx = Some(m);
-            } else {
-                mx = None;
-            }
-        } else {
-            mx = Some(mn);
-        }
-        // Require the closing brace before deciding this is an interval at all.
-        if bre {
-            if p + 1 < b.len() && b[p] == b'\\' && b[p + 1] == b'}' {
-                p += 2;
-            } else {
-                return Ok(None);
-            }
-        } else if p < b.len() && b[p] == b'}' {
-            p += 1;
-        } else {
-            return Ok(None);
-        }
-        // Syntactically an interval: now validate the bounds.
-        if mn_overflow || mx_overflow {
-            return Err(());
-        }
-        if let Some(m) = mx {
-            if mn > m {
-                return Err(());
-            }
-        }
-        self.pos = p;
-        Ok(Some((mn, mx)))
-    }
-
-    fn class(&mut self) -> Result<Ast, ()> {
-        let b = self.b;
-        self.pos += 1; // consume '['
-        let mut negated = false;
-        if self.pos < b.len() && b[self.pos] == b'^' {
-            negated = true;
-            self.pos += 1;
-        }
-        let mut ranges: Vec<(u8, u8)> = Vec::new();
-        let mut first = true;
-        let mut closed = false;
-        while self.pos < b.len() {
-            let c = b[self.pos];
-            if c == b']' && !first {
-                self.pos += 1;
-                closed = true;
-                break;
-            }
-            first = false;
-            if self.pos + 2 < b.len() && b[self.pos + 1] == b'-' && b[self.pos + 2] != b']' {
-                ranges.push((c, b[self.pos + 2]));
-                self.pos += 3;
-            } else {
-                ranges.push((c, c));
-                self.pos += 1;
-            }
-        }
-        if !closed {
-            // Unterminated bracket expression.
-            return Err(());
-        }
-        Ok(Ast::Class(Class { negated, ranges }))
-    }
-}
-
-fn emit(ast: &Ast, prog: &mut Vec<Inst>) {
-    match ast {
-        Ast::Empty => {}
-        Ast::Char(c) => prog.push(Inst::Char(*c)),
-        Ast::Any => prog.push(Inst::Any),
-        Ast::Class(cl) => prog.push(Inst::Class(cl.clone())),
-        Ast::Start => prog.push(Inst::Start),
-        Ast::End => prog.push(Inst::End),
-        Ast::Concat(v) => {
-            for a in v {
-                emit(a, prog);
-            }
-        }
-        Ast::Group(n, inner) => {
-            prog.push(Inst::Save(2 * n));
-            emit(inner, prog);
-            prog.push(Inst::Save(2 * n + 1));
-        }
-        Ast::Alt(v) => {
-            let mut jmps: Vec<usize> = Vec::new();
-            for (i, a) in v.iter().enumerate() {
-                if i + 1 < v.len() {
-                    let sp = prog.len();
-                    prog.push(Inst::Split(0, 0));
-                    let astart = prog.len();
-                    emit(a, prog);
-                    let jp = prog.len();
-                    prog.push(Inst::Jmp(0));
-                    jmps.push(jp);
-                    let next = prog.len();
-                    prog[sp] = Inst::Split(astart, next);
-                } else {
-                    emit(a, prog);
-                }
-            }
-            let end = prog.len();
-            for jp in jmps {
-                prog[jp] = Inst::Jmp(end);
-            }
-        }
-        Ast::Star(inner) => {
-            let sp = prog.len();
-            prog.push(Inst::Split(0, 0));
-            let body = prog.len();
-            emit(inner, prog);
-            prog.push(Inst::Jmp(sp));
-            let out = prog.len();
-            prog[sp] = Inst::Split(body, out);
-        }
-        Ast::Plus(inner) => {
-            let body = prog.len();
-            emit(inner, prog);
-            let sp = prog.len();
-            prog.push(Inst::Split(0, 0));
-            prog[sp] = Inst::Split(body, prog.len());
-        }
-        Ast::Quest(inner) => {
-            let sp = prog.len();
-            prog.push(Inst::Split(0, 0));
-            let body = prog.len();
-            emit(inner, prog);
-            let out = prog.len();
-            prog[sp] = Inst::Split(body, out);
-        }
-        Ast::Repeat(inner, mn, mx) => {
-            for _ in 0..*mn {
-                emit(inner, prog);
-            }
-            match mx {
-                None => emit(&Ast::Star(inner.clone()), prog),
-                Some(m) => {
-                    for _ in *mn..*m {
-                        emit(&Ast::Quest(inner.clone()), prog);
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct Regex {
-    prog: Vec<Inst>,
-    nslots: usize,
-    icase: bool,
-}
-
-/// Backtracking matcher.
-///
-/// `memo[pc*(len+1)+pos]` records that `(pc, pos)` has already been entered
-/// during the current match attempt. Revisiting it can never succeed (any
-/// successful continuation would have been found the first time), so we prune
-/// it. This bounds catastrophic backtracking (ReDoS) and also serves as the
-/// empty-loop progress guard: a nullable star that loops back to its own
-/// `Split` at the same `pos` hits the memo and terminates instead of recursing
-/// forever. `depth` is a hard stack-overflow backstop on very long lines.
-///
-/// The pattern language has no back-references, so captures never gate whether
-/// the remainder matches; pruning by `(pc, pos)` alone is therefore sound, and
-/// the greedy-first exploration still records greedy-correct capture slots.
-#[allow(clippy::too_many_arguments)]
-fn re_run(
-    prog: &[Inst],
-    icase: bool,
-    pc: usize,
-    text: &[u8],
-    pos: usize,
-    saves: &mut Vec<Option<usize>>,
-    memo: &mut [bool],
-    depth: usize,
-) -> Option<usize> {
-    if depth > RE_MAX_DEPTH {
-        return None;
-    }
-    let len = text.len();
-    let key = pc * (len + 1) + pos;
-    if memo[key] {
-        return None;
-    }
-    memo[key] = true;
-    let d = depth + 1;
-    match &prog[pc] {
-        Inst::Match => Some(pos),
-        Inst::Char(c) => {
-            if pos < text.len() && eqc(text[pos], *c, icase) {
-                re_run(prog, icase, pc + 1, text, pos + 1, saves, memo, d)
-            } else {
-                None
-            }
-        }
-        Inst::Any => {
-            if pos < text.len() {
-                re_run(prog, icase, pc + 1, text, pos + 1, saves, memo, d)
-            } else {
-                None
-            }
-        }
-        Inst::Class(cl) => {
-            if pos < text.len() && cl.matches(text[pos], icase) {
-                re_run(prog, icase, pc + 1, text, pos + 1, saves, memo, d)
-            } else {
-                None
-            }
-        }
-        Inst::Start => {
-            if pos == 0 {
-                re_run(prog, icase, pc + 1, text, pos, saves, memo, d)
-            } else {
-                None
-            }
-        }
-        Inst::End => {
-            if pos == text.len() {
-                re_run(prog, icase, pc + 1, text, pos, saves, memo, d)
-            } else {
-                None
-            }
-        }
-        Inst::Jmp(x) => re_run(prog, icase, *x, text, pos, saves, memo, d),
-        Inst::Split(a, b) => {
-            // No snapshot of `saves` is needed: every `Save` frame restores its
-            // own touched slot when its subtree fails, so on a `None` return all
-            // capture slots are already back to their pre-call values.
-            if let Some(e) = re_run(prog, icase, *a, text, pos, saves, memo, d) {
-                return Some(e);
-            }
-            re_run(prog, icase, *b, text, pos, saves, memo, d)
-        }
-        Inst::Save(k) => {
-            let old = saves[*k];
-            saves[*k] = Some(pos);
-            match re_run(prog, icase, pc + 1, text, pos, saves, memo, d) {
-                Some(e) => Some(e),
-                None => {
-                    saves[*k] = old;
-                    None
-                }
-            }
-        }
-    }
-}
-
-impl Regex {
-    fn compile(src: &[u8], ere: bool, icase: bool) -> Result<Regex, ()> {
-        let mut p = Parser {
-            b: src,
-            pos: 0,
-            ere,
-            gc: 0,
-            depth: 0,
-        };
-        let ast = p.alt()?;
-        // Leftover input means an unmatched group close (e.g. a stray `\)` / `)`).
-        if p.pos != src.len() {
-            return Err(());
-        }
-        let ngroups = p.gc;
-        let mut prog: Vec<Inst> = Vec::new();
-        prog.push(Inst::Save(0));
-        emit(&ast, &mut prog);
-        prog.push(Inst::Save(1));
-        prog.push(Inst::Match);
-        Ok(Regex {
-            prog,
-            nslots: 2 * (ngroups + 1),
-            icase,
-        })
-    }
-
-    fn search_from(&self, text: &[u8], start: usize) -> Option<Vec<Option<usize>>> {
-        let len = text.len();
-        let cells = self.prog.len() * (len + 1);
-        let mut memo: Vec<bool> = Vec::new();
-        memo.resize(cells, false);
-        let mut s = start;
-        while s <= len {
-            for e in memo.iter_mut() {
-                *e = false;
-            }
-            let mut saves: Vec<Option<usize>> = Vec::new();
-            saves.resize(self.nslots, None);
-            if re_run(&self.prog, self.icase, 0, text, s, &mut saves, &mut memo, 0).is_some() {
-                return Some(saves);
-            }
-            s += 1;
-        }
-        None
-    }
-
-    fn is_match(&self, text: &[u8]) -> bool {
-        self.search_from(text, 0).is_some()
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Replacement text
@@ -626,21 +51,14 @@ fn parse_repl(src: &[u8]) -> Vec<ReplPart> {
     out
 }
 
-fn apply_repl(parts: &[ReplPart], text: &[u8], saves: &[Option<usize>], out: &mut Vec<u8>) {
+fn apply_repl(parts: &[ReplPart], text: &[u8], cap: &Captures, out: &mut Vec<u8>) {
     for p in parts {
         match p {
             ReplPart::Lit(b) => out.push(*b),
-            ReplPart::Amp => {
-                if let (Some(s), Some(e)) = (saves[0], saves[1]) {
-                    out.extend_from_slice(&text[s..e]);
-                }
-            }
+            ReplPart::Amp => out.extend_from_slice(cap.whole(text)),
             ReplPart::Group(n) => {
-                let i = 2 * n;
-                if i + 1 < saves.len() {
-                    if let (Some(s), Some(e)) = (saves[i], saves[i + 1]) {
-                        out.extend_from_slice(&text[s..e]);
-                    }
+                if let Some(g) = cap.group(*n, text) {
+                    out.extend_from_slice(g);
                 }
             }
         }
@@ -660,19 +78,19 @@ fn substitute(
     let mut count = 0usize;
     let mut changed = false;
     loop {
-        match re.search_from(text, i) {
+        match re.search(text, i) {
             None => {
                 out.extend_from_slice(&text[i..]);
                 break;
             }
-            Some(saves) => {
-                let ms = saves[0].unwrap();
-                let me = saves[1].unwrap();
+            Some(cap) => {
+                let ms = cap.start();
+                let me = cap.end();
                 out.extend_from_slice(&text[i..ms]);
                 count += 1;
                 let do_it = if global { count >= nth } else { count == nth };
                 if do_it {
-                    apply_repl(repl, text, &saves, &mut out);
+                    apply_repl(repl, text, &cap, &mut out);
                     changed = true;
                 } else {
                     out.extend_from_slice(&text[ms..me]);
@@ -808,7 +226,14 @@ fn parse_addr(b: &[u8], pos: &mut usize, ere: bool) -> Result<Option<Addr>, ()> 
     } else if c == b'/' {
         *pos += 1;
         let raw = read_delim(b, pos, b'/').ok_or(())?;
-        Ok(Some(Addr::Rx(Regex::compile(&raw, ere, false)?)))
+        Ok(Some(Addr::Rx(Regex::compile(
+            &raw,
+            Syntax {
+                ere,
+                icase: false,
+                translate_escapes: true,
+            },
+        )?)))
     } else {
         Ok(None)
     }
@@ -1001,7 +426,14 @@ fn parse_script(src: &[u8], ere: bool) -> Result<Vec<Command>, ()> {
                     nth = 1;
                 }
                 Cmd::Subst {
-                    re: Regex::compile(&pat, ere, icase)?,
+                    re: Regex::compile(
+                        &pat,
+                        Syntax {
+                            ere,
+                            icase,
+                            translate_escapes: true,
+                        },
+                    )?,
                     repl: parse_repl(&rep),
                     global,
                     nth,
@@ -1153,7 +585,7 @@ fn addr_matches(a: &Addr, line_no: usize, is_last: bool, ps: &[u8]) -> bool {
     match a {
         Addr::Line(n) => *n == line_no,
         Addr::Last => is_last,
-        Addr::Rx(r) => r.is_match(ps),
+        Addr::Rx(r) => r.search(ps, 0).is_some(),
     }
 }
 
@@ -1172,7 +604,7 @@ fn compute_selection(cmd: &mut Command, line_no: usize, is_last: bool, ps: &[u8]
             match a2 {
                 Addr::Line(n) => line_no >= *n,
                 Addr::Last => is_last,
-                Addr::Rx(r) => r.is_match(ps),
+                Addr::Rx(r) => r.search(ps, 0).is_some(),
             }
         };
         if end {
