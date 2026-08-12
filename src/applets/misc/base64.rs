@@ -21,66 +21,161 @@ use super::has_opt;
 /// # Exit Status
 /// - 0: Success
 pub fn base64(argc: i32, argv: *const *const u8) -> i32 {
+    use alloc::vec::Vec;
+
     let mut decode = false;
+    let mut ignore_garbage = false;
+    let mut files: Vec<&[u8]> = Vec::new();
+
     for i in 1..argc {
         if let Some(arg) = unsafe { super::get_arg(argv, i) } {
-            if has_opt(arg, b'd') { decode = true; }
+            if arg == b"-d" || arg == b"--decode" {
+                decode = true;
+            } else if arg == b"-i" || arg == b"--ignore-garbage" {
+                ignore_garbage = true;
+            } else if arg.len() > 1 && arg[0] == b'-' && arg != b"-" {
+                // Combined short options, e.g. -di
+                if has_opt(arg, b'd') { decode = true; }
+                if has_opt(arg, b'i') { ignore_garbage = true; }
+            } else {
+                files.push(arg);
+            }
         }
     }
 
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-    if decode {
-        // Decode
-        let mut buf = [0u8; 4096];
-        let n = io::read(0, &mut buf);
-        if n > 0 {
-            let mut i = 0;
-            while i + 4 <= n as usize {
-                let a = ALPHABET.iter().position(|&c| c == buf[i]).unwrap_or(0);
-                let b = ALPHABET.iter().position(|&c| c == buf[i+1]).unwrap_or(0);
-                let c = if buf[i+2] != b'=' { ALPHABET.iter().position(|&x| x == buf[i+2]).unwrap_or(0) } else { 0 };
-                let d = if buf[i+3] != b'=' { ALPHABET.iter().position(|&x| x == buf[i+3]).unwrap_or(0) } else { 0 };
-
-                io::write_all(1, &[((a << 2) | (b >> 4)) as u8]);
-                if buf[i+2] != b'=' { io::write_all(1, &[(((b & 0xf) << 4) | (c >> 2)) as u8]); }
-                if buf[i+3] != b'=' { io::write_all(1, &[(((c & 0x3) << 6) | d) as u8]); }
-                i += 4;
-            }
-        }
+    // Gather input: concatenate all FILE operands, or stdin if none/`-`.
+    let mut content: Vec<u8> = Vec::new();
+    if files.is_empty() {
+        content = io::read_all(0);
     } else {
-        // Encode
-        let mut buf = [0u8; 4096];
-        loop {
-            let n = io::read(0, &mut buf);
-            if n <= 0 { break; }
-
-            let mut i = 0;
-            while i + 3 <= n as usize {
-                let a = buf[i];
-                let b = buf[i+1];
-                let c = buf[i+2];
-                io::write_all(1, &[ALPHABET[(a >> 2) as usize]]);
-                io::write_all(1, &[ALPHABET[(((a & 0x3) << 4) | (b >> 4)) as usize]]);
-                io::write_all(1, &[ALPHABET[(((b & 0xf) << 2) | (c >> 6)) as usize]]);
-                io::write_all(1, &[ALPHABET[(c & 0x3f) as usize]]);
-                i += 3;
+        for path in &files {
+            if *path == b"-" {
+                content.extend_from_slice(&io::read_all(0));
+                continue;
             }
+            let fd = io::open(path, libc::O_RDONLY, 0);
+            if fd < 0 {
+                io::write_str(2, b"base64: ");
+                io::write_all(2, path);
+                io::write_str(2, b": No such file or directory\n");
+                return 1;
+            }
+            content.extend_from_slice(&io::read_all(fd));
+            io::close(fd);
+        }
+    }
 
-            if i < n as usize {
-                let a = buf[i];
-                let b = if i + 1 < n as usize { buf[i+1] } else { 0 };
-                io::write_all(1, &[ALPHABET[(a >> 2) as usize]]);
-                io::write_all(1, &[ALPHABET[(((a & 0x3) << 4) | (b >> 4)) as usize]]);
-                if i + 1 < n as usize {
-                    io::write_all(1, &[ALPHABET[((b & 0xf) << 2) as usize]]);
-                    io::write_str(1, b"=");
-                } else {
-                    io::write_str(1, b"==");
+    if decode {
+        // Decode: skip whitespace/newlines, honor '=' padding, validate alphabet.
+        let mut sextets: Vec<u8> = Vec::new();
+        let mut pad_count = 0usize;
+
+        for &c in &content {
+            match c {
+                b'\n' | b'\r' | b' ' | b'\t' => continue,
+                b'=' => {
+                    pad_count += 1;
+                    continue;
+                }
+                _ => {
+                    if pad_count > 0 {
+                        // '=' padding followed by more data is invalid.
+                        if !ignore_garbage {
+                            io::write_str(2, b"base64: invalid input\n");
+                            return 1;
+                        }
+                        continue;
+                    }
+                    match ALPHABET.iter().position(|&a| a == c) {
+                        Some(v) => sextets.push(v as u8),
+                        None => {
+                            if !ignore_garbage {
+                                io::write_str(2, b"base64: invalid input\n");
+                                return 1;
+                            }
+                        }
+                    }
                 }
             }
         }
-        io::write_str(1, b"\n");
+
+        let mut output: Vec<u8> = Vec::new();
+        let mut i = 0;
+        while i + 4 <= sextets.len() {
+            let a = sextets[i] as u32;
+            let b = sextets[i + 1] as u32;
+            let c = sextets[i + 2] as u32;
+            let d = sextets[i + 3] as u32;
+            output.push(((a << 2) | (b >> 4)) as u8);
+            output.push((((b & 0xf) << 4) | (c >> 2)) as u8);
+            output.push((((c & 0x3) << 6) | d) as u8);
+            i += 4;
+        }
+        let rem = sextets.len() - i;
+        if rem == 2 {
+            let a = sextets[i] as u32;
+            let b = sextets[i + 1] as u32;
+            output.push(((a << 2) | (b >> 4)) as u8);
+        } else if rem == 3 {
+            let a = sextets[i] as u32;
+            let b = sextets[i + 1] as u32;
+            let c = sextets[i + 2] as u32;
+            output.push(((a << 2) | (b >> 4)) as u8);
+            output.push((((b & 0xf) << 4) | (c >> 2)) as u8);
+        } else if rem == 1 {
+            if !ignore_garbage {
+                io::write_str(2, b"base64: invalid input\n");
+                return 1;
+            }
+        }
+
+        io::write_all(1, &output);
+    } else {
+        // Encode the whole input at once so 3-byte groups never split
+        // across a read boundary. Line-wrap at 76 columns (GNU default).
+        let mut out: Vec<u8> = Vec::new();
+        let mut col = 0usize;
+        let mut i = 0;
+        while i + 3 <= content.len() {
+            let a = content[i];
+            let b = content[i + 1];
+            let c = content[i + 2];
+            out.push(ALPHABET[(a >> 2) as usize]);
+            out.push(ALPHABET[(((a & 0x3) << 4) | (b >> 4)) as usize]);
+            out.push(ALPHABET[(((b & 0xf) << 2) | (c >> 6)) as usize]);
+            out.push(ALPHABET[(c & 0x3f) as usize]);
+            i += 3;
+        }
+        if i < content.len() {
+            let a = content[i];
+            let b = if i + 1 < content.len() { content[i + 1] } else { 0 };
+            out.push(ALPHABET[(a >> 2) as usize]);
+            out.push(ALPHABET[(((a & 0x3) << 4) | (b >> 4)) as usize]);
+            if i + 1 < content.len() {
+                out.push(ALPHABET[((b & 0xf) << 2) as usize]);
+                out.push(b'=');
+            } else {
+                out.push(b'=');
+                out.push(b'=');
+            }
+        }
+
+        // Write with 76-column line wrapping.
+        let mut written: Vec<u8> = Vec::new();
+        for &b in &out {
+            written.push(b);
+            col += 1;
+            if col == 76 {
+                written.push(b'\n');
+                col = 0;
+            }
+        }
+        io::write_all(1, &written);
+        if col > 0 || out.is_empty() {
+            io::write_str(1, b"\n");
+        }
     }
     0
 }

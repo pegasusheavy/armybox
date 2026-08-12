@@ -35,6 +35,13 @@ pub struct PackageRecord {
     pub depends: Vec<String>,
     pub provides: Vec<String>,
     pub files: Vec<String>,
+    /// Per-file SHA-256 checksums, parallel to `files` (same order). Populated
+    /// from the package manifest at install time so `abp verify` can detect
+    /// content tampering, not just missing files. May be empty for records
+    /// written by an older abp that did not persist checksums (the trailing
+    /// checksum block is optional and absent records deserialize with an empty
+    /// vec, keeping the on-disk format backward-compatible in both directions).
+    pub checksums: Vec<[u8; 32]>,
 }
 
 impl PackageRecord {
@@ -49,6 +56,7 @@ impl PackageRecord {
             depends: meta.depends.clone(),
             provides: meta.provides.clone(),
             files: manifest.entries.iter().map(|e| e.path.clone()).collect(),
+            checksums: manifest.entries.iter().map(|e| e.checksum).collect(),
         }
     }
 
@@ -87,6 +95,14 @@ impl PackageRecord {
             buf.extend_from_slice(file.as_bytes());
         }
 
+        // Per-file checksums (trailing, optional block). Older readers stop
+        // after the file list and simply ignore these bytes; newer readers
+        // that reach end-of-data before this block treat it as absent.
+        buf.extend_from_slice(&(self.checksums.len() as u32).to_le_bytes());
+        for c in &self.checksums {
+            buf.extend_from_slice(c);
+        }
+
         buf
     }
 
@@ -118,6 +134,11 @@ impl PackageRecord {
         let provides = read_string_list(data, &mut pos)?;
         let files = read_string_list(data, &mut pos)?;
 
+        // Trailing checksum block is optional: records written by an older abp
+        // end right after the file list. `read_checksum_list` returns an empty
+        // vec when there is no (or an incomplete) block, so both formats parse.
+        let checksums = read_checksum_list(data, &mut pos);
+
         Some(PackageRecord {
             name,
             version,
@@ -127,8 +148,32 @@ impl PackageRecord {
             depends,
             provides,
             files,
+            checksums,
         })
     }
+}
+
+/// Read an optional trailing per-file checksum block: a u32 count followed by
+/// that many 32-byte hashes. Returns an empty vec if the block is absent or
+/// truncated, so legacy records (no block) and forward reads both stay safe.
+fn read_checksum_list(data: &[u8], pos: &mut usize) -> Vec<[u8; 32]> {
+    if *pos + 4 > data.len() {
+        return Vec::new();
+    }
+    let count = u32::from_le_bytes([data[*pos], data[*pos+1], data[*pos+2], data[*pos+3]]) as usize;
+    *pos += 4;
+
+    let mut list = Vec::with_capacity(count);
+    for _ in 0..count {
+        if *pos + 32 > data.len() {
+            break;
+        }
+        let mut c = [0u8; 32];
+        c.copy_from_slice(&data[*pos..*pos + 32]);
+        *pos += 32;
+        list.push(c);
+    }
+    list
 }
 
 fn read_cstring(data: &[u8], pos: &mut usize) -> Option<String> {
@@ -809,7 +854,56 @@ pub fn current_time() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use super::valid_pkg_name;
+
+    #[test]
+    fn test_record_checksum_roundtrip() {
+        let rec = PackageRecord {
+            name: String::from("pkg"),
+            version: String::from("1.0"),
+            description: String::from("desc"),
+            install_time: 123,
+            install_size: 456,
+            depends: alloc_vec(&["dep1"]),
+            provides: alloc_vec(&["prov1"]),
+            files: alloc_vec(&["/usr/bin/a", "/usr/bin/b"]),
+            checksums: vec![[7u8; 32], [9u8; 32]],
+        };
+        let bytes = rec.to_bytes();
+        let parsed = PackageRecord::from_bytes(&bytes).expect("must parse");
+        assert_eq!(parsed.files, rec.files);
+        assert_eq!(parsed.checksums, rec.checksums);
+    }
+
+    #[test]
+    fn test_record_backward_compat_no_checksums() {
+        // Simulate a legacy record: serialize a record with an empty checksum
+        // block, then strip the trailing 4-byte count to mimic a record from an
+        // abp version that never wrote the block at all. Both must parse with
+        // an empty checksums vec (and identical files).
+        let rec = PackageRecord {
+            name: String::from("legacy"),
+            version: String::from("2.0"),
+            description: String::from("d"),
+            install_time: 1,
+            install_size: 2,
+            depends: Vec::new(),
+            provides: Vec::new(),
+            files: alloc_vec(&["/x"]),
+            checksums: Vec::new(),
+        };
+        let mut bytes = rec.to_bytes();
+        // Drop the trailing empty-checksum-count word (4 bytes) => truly legacy.
+        bytes.truncate(bytes.len() - 4);
+        let parsed = PackageRecord::from_bytes(&bytes).expect("legacy record must parse");
+        assert_eq!(parsed.files, rec.files);
+        assert!(parsed.checksums.is_empty());
+    }
+
+    fn alloc_vec(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| String::from(*s)).collect()
+    }
 
     #[test]
     fn test_valid_pkg_name_accepts_normal_names() {

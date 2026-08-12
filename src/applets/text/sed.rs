@@ -12,7 +12,7 @@ use crate::io;
 use crate::applets::get_arg;
 
 use alloc::vec::Vec;
-use super::regex::{Captures, Regex, Syntax};
+use crate::applets::regex::{Captures, Regex, Syntax};
 
 
 // ---------------------------------------------------------------------------

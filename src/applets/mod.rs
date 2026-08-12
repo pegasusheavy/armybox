@@ -27,6 +27,10 @@ mod file;
 ))]
 mod text;
 
+// Shared BRE/ERE regex engine used by grep, sed, awk (text/) and expr (misc/).
+#[cfg(any(feature = "grep", feature = "sed", feature = "awk", feature = "expr"))]
+pub(crate) mod regex;
+
 #[cfg(any(
     feature = "uname", feature = "hostname", feature = "whoami", feature = "id",
     feature = "groups", feature = "who", feature = "w", feature = "users",
