@@ -78,7 +78,7 @@ fn verify_package_signature(pkg: &AbpPackage, trusted_keys: &[PublicKey]) -> Res
 /// (extra), if the manifest lists a file that is not in the payload (missing),
 /// or if any file's contents do not match its recorded checksum (mismatch).
 fn verify_package_integrity(pkg: &AbpPackage) -> Result<(), String> {
-    use crate::install::{parse_tar_name, parse_tar_size};
+    use crate::install::TarWalker;
 
     let payload = match pkg.decompressed_payload() {
         Some(p) => p,
@@ -91,24 +91,24 @@ fn verify_package_integrity(pkg: &AbpPackage) -> Result<(), String> {
         matched.push(false);
     }
 
-    let mut pos = 0;
-    while pos + 512 <= payload.len() {
-        let header = &payload[pos..pos + 512];
+    // Walk with the SAME strict iterator the installer uses, so GNU long names,
+    // pax `path=`/`size=` overrides and base-256 sizes are interpreted
+    // identically here and at install time. A member's effective name/size are
+    // already resolved by the walker.
+    let mut walker = TarWalker::new(&payload);
+    loop {
+        let entry = match walker.next() {
+            None => break,
+            Some(Ok(e)) => e,
+            Some(Err(e)) => return Err(e),
+        };
 
-        // End of archive (zero block).
-        if header.iter().all(|&b| b == 0) {
-            break;
-        }
-
-        let name = parse_tar_name(header);
+        let name = entry.name;
         if name.is_empty() {
-            break;
+            continue;
         }
-
-        let size = parse_tar_size(&header[124..136]);
-        let typeflag = header[156];
-
-        pos += 512;
+        let typeflag = entry.typeflag;
+        let size = entry.size;
 
         // Classify the member. Only regular files carry checksummed contents
         // described by the manifest; directories are structural and need no
@@ -120,11 +120,12 @@ fn verify_package_integrity(pkg: &AbpPackage) -> Result<(), String> {
         let is_dir = typeflag == b'5' || (typeflag == 0 && name.ends_with(b"/"));
 
         if is_regular {
-            let data_end = pos + size as usize;
+            let data_start = entry.data_offset;
+            let data_end = data_start + size as usize;
             if data_end > payload.len() {
                 return Err(String::from("truncated payload"));
             }
-            let data = &payload[pos..data_end];
+            let data = &payload[data_start..data_end];
 
             let norm_name = normalize_member_path(&name);
             let mut found = false;
@@ -148,9 +149,6 @@ fn verify_package_integrity(pkg: &AbpPackage) -> Result<(), String> {
                 "package contains disallowed non-regular member (symlink/hardlink/device)",
             ));
         }
-
-        // Advance past this member's data (rounded up to a 512-byte boundary).
-        pos += ((size + 511) / 512 * 512) as usize;
     }
 
     // Any manifest entry not encountered in the payload is missing.
@@ -226,8 +224,17 @@ pub fn verify_installed(packages: &[&[u8]]) -> i32 {
         io::write_all(1, pkg.version.as_bytes());
         io::write_str(1, b"... ");
 
-        // Note: checksums are not stored in PackageRecord - verify file existence only
-        let result = verify_package_files(&pkg.name, &pkg.files, &[]);
+        // Compare each file against the checksum persisted in the DB record at
+        // install time (from the package manifest). Older records with no
+        // stored checksums yield an empty list, degrading gracefully to an
+        // existence-only check.
+        let checksums: Vec<(String, [u8; 32])> = pkg
+            .files
+            .iter()
+            .zip(pkg.checksums.iter())
+            .map(|(path, hash)| (path.clone(), *hash))
+            .collect();
+        let result = verify_package_files(&pkg.name, &pkg.files, &checksums);
 
         if result.files_missing.is_empty() && result.files_modified.is_empty() {
             io::write_str(1, b"OK\n");
@@ -483,4 +490,53 @@ pub fn generate_manifest(files: &[(String, Vec<u8>)]) -> Vec<ManifestEntry> {
             mode: 0o644,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::sha256;
+
+    fn temp_file(tag: &str, contents: &[u8]) -> Vec<u8> {
+        let base = std::env::temp_dir();
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = base.join(std::format!("abp-verify-{}-{}-{}", tag, pid, nanos));
+        std::fs::write(&path, contents).unwrap();
+        path.into_os_string().into_encoded_bytes()
+    }
+
+    // Item 4: content check. A file whose bytes still hash to the stored
+    // checksum is OK; after tampering, verify must flag it as modified.
+    #[test]
+    fn test_verify_detects_tampered_content() {
+        let original = b"the original installed file contents\n";
+        let path_bytes = temp_file("tamper", original);
+        let path_str = String::from(core::str::from_utf8(&path_bytes).unwrap());
+
+        let files = vec![path_str.clone()];
+        let checksums = vec![(path_str.clone(), sha256(original))];
+
+        // Untampered: reported OK, nothing modified/missing.
+        let ok = verify_package_files("pkg", &files, &checksums);
+        assert_eq!(ok.files_ok, 1);
+        assert!(ok.files_modified.is_empty());
+        assert!(ok.files_missing.is_empty());
+
+        // Tamper with the on-disk content, keeping the stored checksum.
+        std::fs::write(
+            std::path::Path::new(&path_str),
+            b"malicious replacement contents!!\n",
+        )
+        .unwrap();
+
+        let bad = verify_package_files("pkg", &files, &checksums);
+        assert_eq!(bad.files_modified, vec![path_str.clone()]);
+        assert!(bad.files_missing.is_empty());
+
+        std::fs::remove_file(std::path::Path::new(&path_str)).ok();
+    }
 }

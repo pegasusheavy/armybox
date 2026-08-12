@@ -101,7 +101,7 @@ pub fn remove_packages(packages: &[&[u8]], purge: bool, force: bool) -> i32 {
 }
 
 /// Remove a single package
-fn remove_single_package(db: &Database, name: &str, purge: bool) -> bool {
+pub(crate) fn remove_single_package(db: &Database, name: &str, purge: bool) -> bool {
     let pkg = match db.get_package(name) {
         Some(p) => p,
         None => {
