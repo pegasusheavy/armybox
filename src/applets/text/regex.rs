@@ -1,20 +1,30 @@
 //! Shared BRE/ERE regex engine for `grep` and `sed`.
 //!
-//! A self-contained, `#[no_std]` (alloc) backtracking regex engine supporting
-//! POSIX Basic Regular Expressions (BRE, default) and Extended Regular
-//! Expressions (ERE). It is a capture-capable, memoized bytecode VM: the same
-//! compiled program serves both grep's boolean search (with `-w` word and `-x`
-//! whole-line match modes) and sed's leftmost search with capture-group spans
-//! (for `\1`..`\9` and `&` in the replacement).
+//! A self-contained, `#[no_std]` (alloc) regex engine supporting POSIX Basic
+//! Regular Expressions (BRE, default) and Extended Regular Expressions (ERE).
+//! It is a capture-capable bytecode VM: the same compiled program serves both
+//! grep's boolean search (with `-w` word and `-x` whole-line match modes) and
+//! sed's leftmost search with capture-group spans (for `\1`..`\9` and `&` in
+//! the replacement).
+//!
+//! The matcher is an **iterative priority-thread Pike VM** (a Thompson NFA
+//! simulation with capture tracking). It runs in `O(program × text)` time and
+//! `O(program)` space with no recursion whose depth is tied to the input
+//! length, so it cannot overflow the stack on a very long line and has no
+//! exponential-backtracking blow-up. Threads are kept in strict backtracking
+//! priority order — the higher-priority alternative / greedy-repeat branch is
+//! explored first, and the first thread to reach `Match` wins — which
+//! reproduces the exact leftmost-greedy submatch results of a classic
+//! backtracker (as opposed to POSIX leftmost-longest, which would differ on
+//! e.g. `a|ab` against "ab"). Empty-loop safety (`\(a*\)*`) comes from a
+//! per-input-position dedup set: each program counter is added to the thread
+//! list at most once per position, so nullable stars terminate.
 //!
 //! Hardening (all covered by the grep/sed test suites):
 //!   * `{n,m}` counts are capped at [`RE_DUP_MAX`] with a compile *error* (never
 //!     a panic) on overflow or inverted bounds, and a [`MAX_PROG_LEN`] backstop
 //!     on total interval-expanded program size.
-//!   * The matcher is memoized on `(pc, pos)`, so a nullable star such as
-//!     `\(a*\)*` cannot loop forever and catastrophic backtracking is bounded.
-//!   * A recursion-depth cap ([`RE_MAX_DEPTH`]) backstops the stack on very long
-//!     input lines, and a parser nesting cap ([`MAX_NEST`]) bounds group depth.
+//!   * A parser nesting cap ([`MAX_NEST`]) bounds group depth.
 
 use alloc::boxed::Box;
 use alloc::vec;
@@ -32,8 +42,6 @@ const RE_DUP_MAX: usize = 32767;
 const MAX_PROG_LEN: usize = 1 << 20;
 /// Maximum parser nesting depth for groups (parse-error backstop).
 const MAX_NEST: usize = 1000;
-/// Maximum recursion depth for the matcher (stack-overflow backstop).
-const RE_MAX_DEPTH: usize = 100_000;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -495,7 +503,7 @@ fn add_named_class(bm: &mut [u8; 32], name: &[u8]) -> Result<(), ()> {
 }
 
 // ---------------------------------------------------------------------------
-// Compiled program (backtracking VM instructions)
+// Compiled program (Pike VM instructions)
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -627,43 +635,157 @@ fn class_match(bm: &[u8; 32], neg: bool, c: u8, ic: bool) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Matcher
+// Pike VM matcher
 // ---------------------------------------------------------------------------
 
-/// Backtracking matcher context.
+/// A single NFA thread: a program counter plus its capture slots.
 ///
-/// `memo[pc*(len+1)+pos]` records that `(pc, pos)` has already been entered
-/// during the current match attempt. Revisiting it can never succeed (any
-/// successful continuation would have been found the first time), so we prune
-/// it. This bounds catastrophic backtracking (ReDoS) and also serves as the
-/// empty-loop progress guard: a nullable star that loops back to its own
-/// `Split` at the same `pos` hits the memo and terminates instead of recursing
-/// forever. `depth` is a hard stack-overflow backstop on very long lines.
-///
-/// The pattern language has no back-references, so captures never gate whether
-/// the remainder matches; pruning by `(pc, pos)` alone is therefore sound.
-/// grep's `-w`/`-x` acceptance depends only on `start` (fixed per attempt) and
-/// the final `pos`, so it too is a pure function of the end state and does not
-/// break the pruning argument.
-struct Matcher<'a> {
-    prog: &'a [Inst],
-    icase: bool,
-    text: &'a [u8],
-    whole_line: bool,
-    word: bool,
-    start: usize,
+/// The slots array carries this thread's tentative submatch offsets; slot 0 is
+/// always the thread's start position (set by `Save(0)` at seed time), which
+/// grep's `-w`/`-x` acceptance consults.
+#[derive(Clone)]
+struct Thread {
+    pc: usize,
+    saves: Vec<Option<usize>>,
 }
 
-impl<'a> Matcher<'a> {
-    /// grep `-x` (whole-line) and `-w` (word-boundary) acceptance at match end.
-    fn accept(&self, end: usize) -> bool {
-        let len = self.text.len();
-        if self.whole_line && !(self.start == 0 && end == len) {
+/// An ordered, priority-preserving list of threads for one input position.
+///
+/// Threads are kept in strict backtracking priority order (index 0 is highest
+/// priority). The allocation is reused across positions via [`ThreadList::clear`].
+struct ThreadList {
+    threads: Vec<Thread>,
+}
+
+impl ThreadList {
+    fn new() -> ThreadList {
+        ThreadList {
+            threads: Vec::new(),
+        }
+    }
+    #[inline]
+    fn clear(&mut self) {
+        self.threads.clear();
+    }
+    #[inline]
+    fn len(&self) -> usize {
+        self.threads.len()
+    }
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.threads.is_empty()
+    }
+}
+
+/// Per-position "already added" set over program counters, with O(1) clear.
+///
+/// A program counter is added to a given [`ThreadList`] at most once per input
+/// position. This is what makes the Pike VM terminate on nullable stars such as
+/// `\(a*\)*` (an empty loop revisits its own `Split` at the same position and is
+/// dropped) and keeps the priority ordering deterministic (the first, i.e.
+/// highest-priority, path to reach a pc wins its captures). Clearing walks only
+/// the marked entries, so the cost is O(threads added), never O(program).
+struct SeenSet {
+    mark: Vec<bool>,
+    marked: Vec<usize>,
+}
+
+impl SeenSet {
+    fn new(n: usize) -> SeenSet {
+        SeenSet {
+            mark: vec![false; n],
+            marked: Vec::new(),
+        }
+    }
+    fn clear(&mut self) {
+        for &p in &self.marked {
+            self.mark[p] = false;
+        }
+        self.marked.clear();
+    }
+    /// Returns true if `pc` was already present; otherwise records it.
+    #[inline]
+    fn test_and_set(&mut self, pc: usize) -> bool {
+        if self.mark[pc] {
+            true
+        } else {
+            self.mark[pc] = true;
+            self.marked.push(pc);
+            false
+        }
+    }
+}
+
+impl Regex {
+    /// Follow the epsilon-closure from `(pc0, saves0)` at input position `pos`,
+    /// appending the reached consuming/`Match` instructions to `list` as new
+    /// threads, in priority (backtracking) order.
+    ///
+    /// Iterative (explicit stack), so its depth is bounded by the program size
+    /// and never by the input length. `Split(a, b)` explores `a` before `b`
+    /// (the greedy / first-alternative branch first); `seen` deduplicates on the
+    /// program counter so each pc is added at most once per position.
+    fn add_thread(
+        &self,
+        list: &mut ThreadList,
+        seen: &mut SeenSet,
+        pc0: usize,
+        saves0: Vec<Option<usize>>,
+        pos: usize,
+        len: usize,
+    ) {
+        // DFS with an explicit stack. To visit `a` before `b` under LIFO order,
+        // push `b` first and `a` second so `a` pops (and closes) first.
+        let mut stack: Vec<(usize, Vec<Option<usize>>)> = vec![(pc0, saves0)];
+        while let Some((pc, saves)) = stack.pop() {
+            if seen.test_and_set(pc) {
+                continue;
+            }
+            match &self.prog[pc] {
+                Inst::Jmp(x) => stack.push((*x, saves)),
+                Inst::Split(a, b) => {
+                    stack.push((*b, saves.clone()));
+                    stack.push((*a, saves));
+                }
+                Inst::Save(k) => {
+                    let mut s2 = saves;
+                    if *k < s2.len() {
+                        s2[*k] = Some(pos);
+                    }
+                    stack.push((pc + 1, s2));
+                }
+                Inst::Start => {
+                    if pos == 0 {
+                        stack.push((pc + 1, saves));
+                    }
+                }
+                Inst::End => {
+                    if pos == len {
+                        stack.push((pc + 1, saves));
+                    }
+                }
+                // Consuming instructions and Match become live threads.
+                Inst::Char(_) | Inst::Any | Inst::Class(_, _) | Inst::Match => {
+                    list.threads.push(Thread { pc, saves });
+                }
+            }
+        }
+    }
+
+    /// grep `-x` (whole-line) and `-w` (word-boundary) acceptance for a match
+    /// spanning `start..end`. Evaluated per thread when it reaches `Match`, so a
+    /// rejected thread simply dies and lower-priority threads keep running (as a
+    /// backtracker would keep searching) — never a post-hoc filter that would
+    /// clobber the priority-thread ordering.
+    #[inline]
+    fn accept(&self, text: &[u8], start: usize, end: usize, whole_line: bool, word: bool) -> bool {
+        let len = text.len();
+        if whole_line && !(start == 0 && end == len) {
             return false;
         }
-        if self.word {
-            let before = self.start == 0 || !is_word(self.text[self.start - 1]);
-            let after = end == len || !is_word(self.text[end]);
+        if word {
+            let before = start == 0 || !is_word(text[start - 1]);
+            let after = end == len || !is_word(text[end]);
             if !(before && after) {
                 return false;
             }
@@ -671,91 +793,101 @@ impl<'a> Matcher<'a> {
         true
     }
 
-    fn run(
+    /// The core Pike VM. Returns the winning thread's capture slots, or `None`.
+    ///
+    /// Seeds a start thread at every input position from `from` onward (lowest
+    /// priority at each position, so an earlier start out-ranks a later one and
+    /// the result is leftmost), stopping once a match is recorded. When
+    /// `anchored`, only a single start thread is seeded at `from` (used by grep
+    /// `-x`). When a thread reaches `Match`, its captures are recorded and the
+    /// remaining lower-priority threads at that position are cut; higher-priority
+    /// threads already carried forward keep running and may overwrite the record
+    /// with a more-preferred (greedier / earlier-starting) match.
+    fn exec(
         &self,
-        pc: usize,
-        pos: usize,
-        saves: &mut [Option<usize>],
-        memo: &mut [bool],
-        depth: usize,
-    ) -> Option<usize> {
-        if depth > RE_MAX_DEPTH {
+        text: &[u8],
+        from: usize,
+        anchored: bool,
+        whole_line: bool,
+        word: bool,
+    ) -> Option<Vec<Option<usize>>> {
+        let len = text.len();
+        if from > len {
             return None;
         }
-        let len = self.text.len();
-        let key = pc * (len + 1) + pos;
-        if memo[key] {
-            return None;
-        }
-        memo[key] = true;
-        let d = depth + 1;
-        match &self.prog[pc] {
-            Inst::Match => {
-                if self.accept(pos) {
-                    Some(pos)
-                } else {
-                    None
-                }
+        let mut clist = ThreadList::new();
+        let mut nlist = ThreadList::new();
+        let mut seen_c = SeenSet::new(self.prog.len());
+        let mut seen_n = SeenSet::new(self.prog.len());
+        let mut matched: Option<Vec<Option<usize>>> = None;
+
+        let mut pos = from;
+        loop {
+            // Seed a fresh start thread at this position, at lowest priority
+            // (appended after any threads carried forward from the previous
+            // step, which share `seen_c`). Stop seeding once matched, or after
+            // the first position when anchored.
+            if matched.is_none() && (!anchored || pos == from) {
+                let saves = vec![None; self.nslots];
+                self.add_thread(&mut clist, &mut seen_c, 0, saves, pos, len);
             }
-            Inst::Char(c) => {
-                if pos < len
-                    && (self.text[pos] == *c
-                        || (self.icase && other_case(self.text[pos]) == *c))
-                {
-                    self.run(pc + 1, pos + 1, saves, memo, d)
-                } else {
-                    None
-                }
+
+            // Nothing left to advance and no more seeds to add: done.
+            if clist.is_empty() && (matched.is_some() || anchored || pos >= len) {
+                break;
             }
-            Inst::Any => {
-                if pos < len {
-                    self.run(pc + 1, pos + 1, saves, memo, d)
-                } else {
-                    None
-                }
-            }
-            Inst::Class(bm, neg) => {
-                if pos < len && class_match(bm, *neg, self.text[pos], self.icase) {
-                    self.run(pc + 1, pos + 1, saves, memo, d)
-                } else {
-                    None
-                }
-            }
-            Inst::Start => {
-                if pos == 0 {
-                    self.run(pc + 1, pos, saves, memo, d)
-                } else {
-                    None
-                }
-            }
-            Inst::End => {
-                if pos == len {
-                    self.run(pc + 1, pos, saves, memo, d)
-                } else {
-                    None
-                }
-            }
-            Inst::Jmp(x) => self.run(*x, pos, saves, memo, d),
-            Inst::Split(a, b) => {
-                // No snapshot of `saves` is needed: every `Save` frame restores
-                // its own touched slot when its subtree fails.
-                if let Some(e) = self.run(*a, pos, saves, memo, d) {
-                    return Some(e);
-                }
-                self.run(*b, pos, saves, memo, d)
-            }
-            Inst::Save(k) => {
-                let old = saves[*k];
-                saves[*k] = Some(pos);
-                match self.run(pc + 1, pos, saves, memo, d) {
-                    Some(e) => Some(e),
-                    None => {
-                        saves[*k] = old;
-                        None
+
+            // Build the next position's thread list.
+            seen_n.clear();
+            nlist.clear();
+            let mut i = 0;
+            while i < clist.len() {
+                let pc = clist.threads[i].pc;
+                match &self.prog[pc] {
+                    Inst::Char(c) => {
+                        if pos < len
+                            && (text[pos] == *c || (self.icase && other_case(text[pos]) == *c))
+                        {
+                            let saves = clist.threads[i].saves.clone();
+                            self.add_thread(&mut nlist, &mut seen_n, pc + 1, saves, pos + 1, len);
+                        }
                     }
+                    Inst::Any => {
+                        if pos < len {
+                            let saves = clist.threads[i].saves.clone();
+                            self.add_thread(&mut nlist, &mut seen_n, pc + 1, saves, pos + 1, len);
+                        }
+                    }
+                    Inst::Class(bm, neg) => {
+                        if pos < len && class_match(bm, *neg, text[pos], self.icase) {
+                            let saves = clist.threads[i].saves.clone();
+                            self.add_thread(&mut nlist, &mut seen_n, pc + 1, saves, pos + 1, len);
+                        }
+                    }
+                    Inst::Match => {
+                        let start = clist.threads[i].saves[0].unwrap_or(pos);
+                        if self.accept(text, start, pos, whole_line, word) {
+                            matched = Some(clist.threads[i].saves.clone());
+                            // Cut all lower-priority threads at this position.
+                            break;
+                        }
+                    }
+                    // Epsilon instructions never appear as live threads: they are
+                    // resolved during `add_thread`.
+                    _ => {}
                 }
+                i += 1;
             }
+
+            if pos >= len {
+                break;
+            }
+            core::mem::swap(&mut clist, &mut nlist);
+            core::mem::swap(&mut seen_c, &mut seen_n);
+            pos += 1;
         }
+
+        matched
     }
 }
 
@@ -804,55 +936,15 @@ impl Regex {
     /// Leftmost match at or after `from`, with overall + capture-group spans.
     /// Used by sed for `s///` and address matching.
     pub fn search(&self, text: &[u8], from: usize) -> Option<Captures> {
-        let len = text.len();
-        let cells = self.prog.len() * (len + 1);
-        let mut memo: Vec<bool> = vec![false; cells];
-        let mut s = from;
-        while s <= len {
-            for e in memo.iter_mut() {
-                *e = false;
-            }
-            let mut saves: Vec<Option<usize>> = vec![None; self.nslots];
-            let m = Matcher {
-                prog: &self.prog,
-                icase: self.icase,
-                text,
-                whole_line: false,
-                word: false,
-                start: s,
-            };
-            if m.run(0, s, &mut saves, &mut memo, 0).is_some() {
-                return Some(Captures { slots: saves });
-            }
-            s += 1;
-        }
-        None
+        self.exec(text, from, false, false, false)
+            .map(|slots| Captures { slots })
     }
 
     /// Boolean search used by grep. `whole_line` implements `-x` and `word`
     /// implements `-w`.
     pub fn is_match(&self, text: &[u8], whole_line: bool, word: bool) -> bool {
-        let len = text.len();
-        let mut memo: Vec<bool> = vec![false; self.prog.len() * (len + 1)];
-        // For -x the match must begin at column 0, so only try start 0.
-        let last_start = if whole_line { 0 } else { len };
-        for start in 0..=last_start {
-            for e in memo.iter_mut() {
-                *e = false;
-            }
-            let mut saves: Vec<Option<usize>> = vec![None; self.nslots];
-            let m = Matcher {
-                prog: &self.prog,
-                icase: self.icase,
-                text,
-                whole_line,
-                word,
-                start,
-            };
-            if m.run(0, start, &mut saves, &mut memo, 0).is_some() {
-                return true;
-            }
-        }
-        false
+        // For -x the match must begin at column 0, so seed a single anchored
+        // start thread; `accept` additionally requires it to end at the line end.
+        self.exec(text, 0, whole_line, whole_line, word).is_some()
     }
 }
