@@ -3,7 +3,7 @@ members = [".", "crates/abp", "crates/zstd-nostd"]
 
 [package]
 name = "armybox"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
@@ -465,8 +465,8 @@ abp = ["alloc", "dep:abp"]  # Armybox Package Manager (ABP)
 [dependencies]
 # Core dependency - provides syscall interface
 libc = "0.2"
-abp = { version = "0.1.0", path = "crates/abp", optional = true, default-features = false, features = ["alloc"] }
-zstd-nostd = { version = "0.1.0", path = "crates/zstd-nostd", optional = true, default-features = false, features = ["alloc"] }
+abp = { version = "0.2.0", path = "crates/abp", optional = true, default-features = false, features = ["alloc"] }
+zstd-nostd = { version = "0.2.0", path = "crates/zstd-nostd", optional = true, default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 # For testing only - benchmarks are in crates/benchmarks

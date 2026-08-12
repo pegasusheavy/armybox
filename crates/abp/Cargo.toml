@@ -1,6 +1,6 @@
 [package]
 name = "abp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Pegasus Heavy Industries <contact@pegasusheavy.industries>"]
@@ -19,7 +19,7 @@ alloc = []
 [dependencies]
 ed25519-dalek = { version = "3.0.0", default-features = false }
 libc = "0.2"
-zstd-nostd = { version = "0.1.0", path = "../zstd-nostd", features = ["alloc"] }
+zstd-nostd = { version = "0.2.0", path = "../zstd-nostd", features = ["alloc"] }
 
 [dev-dependencies]
 # Needed by tests/security.rs to produce *real* ed25519 signatures (SigningKey +

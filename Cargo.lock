@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "abp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ed25519-dalek",
  "libc",
@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "armybox"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "abp",
  "libc",
@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "zstd-nostd"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ruzstd",
 ]
