@@ -440,6 +440,13 @@ pub struct AbpPackage {
     pub payload: Vec<u8>,
     pub signature: Option<[u8; 64]>,
     pub key_id: Option<[u8; 32]>,
+    /// The exact on-disk bytes the signature covers: `data[0..payload_end]`,
+    /// i.e. header ‖ metadata ‖ manifest ‖ payload as they appeared in the
+    /// file, excluding the trailing signature + key-id. Populated only by
+    /// [`AbpPackage::from_bytes`]; `None` for packages built in memory (which
+    /// therefore cannot be signature-verified, as there is no authenticated
+    /// byte representation to check).
+    pub signed_region: Option<Vec<u8>>,
 }
 
 impl AbpPackage {
@@ -523,6 +530,11 @@ impl AbpPackage {
             (None, None)
         };
 
+        // Capture the exact bytes the signature covers (everything before the
+        // signature trailer) so verification checks the received bytes rather
+        // than a re-serialization of the parsed structures.
+        let signed_region = Some(data[..payload_end].to_vec());
+
         Some(AbpPackage {
             header,
             metadata,
@@ -530,6 +542,7 @@ impl AbpPackage {
             payload,
             signature,
             key_id,
+            signed_region,
         })
     }
 
@@ -630,14 +643,15 @@ impl AbpPackage {
             }
         }
 
-        // Build signed data (header + metadata + manifest + payload)
-        let mut signed_data = Vec::new();
-        signed_data.extend_from_slice(&self.header.to_bytes());
-        signed_data.extend_from_slice(&self.metadata.to_toml());
-        signed_data.extend_from_slice(&self.manifest.to_bytes());
-        signed_data.extend_from_slice(&self.payload);
+        // Verify over the exact on-disk bytes the signature covers. Only a
+        // package parsed from bytes has this; an in-memory package has no
+        // authenticated representation and cannot be verified.
+        let signed_data = match &self.signed_region {
+            Some(region) => region,
+            None => return false,
+        };
 
-        verify_signature(public_key, &signed_data, signature)
+        verify_signature(public_key, signed_data, signature)
     }
 
     /// Verify file checksums in manifest
@@ -919,6 +933,7 @@ mod tests {
             payload: payload.to_vec(),
             signature: None,
             key_id: None,
+            signed_region: None,
         };
 
         // Serialize - should compress the payload
@@ -971,6 +986,7 @@ mod tests {
             payload: compressed.clone(),
             signature: None,
             key_id: None,
+            signed_region: None,
         };
 
         // Serialize
@@ -986,5 +1002,76 @@ mod tests {
         // Decompress should give original
         let decompressed = loaded.decompressed_payload().unwrap();
         assert_eq!(&decompressed, &original_payload[..]);
+    }
+
+    // The captured signed_region must be exactly the on-disk bytes preceding
+    // the signature trailer — this is what makes signature verification
+    // byte-exact rather than a re-serialization of parsed structures.
+    #[test]
+    fn test_signed_region_is_exact_on_disk_bytes() {
+        let mut meta = PackageMetadata::default();
+        meta.name = String::from("sig-region");
+        meta.version = String::from("1.0.0");
+        let pkg = AbpPackage {
+            header: AbpHeader {
+                version_major: ABP_VERSION_MAJOR,
+                version_minor: ABP_VERSION_MINOR,
+                flags: 0,
+                metadata_offset: 0,
+                metadata_size: 0,
+                manifest_offset: 0,
+                manifest_size: 0,
+                payload_offset: 0,
+                payload_size: 0,
+            },
+            metadata: meta,
+            manifest: Manifest { entries: Vec::new() },
+            payload: b"hello payload contents".to_vec(),
+            signature: None,
+            key_id: None,
+            signed_region: None,
+        };
+        let serialized = pkg.to_bytes();
+        let loaded = AbpPackage::from_bytes(&serialized).unwrap();
+
+        // payload_end = payload_offset + payload_size, from the parsed header.
+        let payload_end =
+            (loaded.header.payload_offset + loaded.header.payload_size) as usize;
+        let region = loaded.signed_region.as_ref().expect("parsed package has a signed_region");
+        assert_eq!(
+            region.as_slice(),
+            &serialized[..payload_end],
+            "signed_region must equal the on-disk bytes before the signature trailer"
+        );
+    }
+
+    // An in-memory package (never parsed from bytes) has no authenticated
+    // representation, so signature verification must refuse it rather than
+    // fabricating one from re-serialized fields.
+    #[test]
+    fn test_verify_signature_false_for_in_memory_package() {
+        let mut meta = PackageMetadata::default();
+        meta.name = String::from("no-region");
+        meta.version = String::from("1.0.0");
+        let pkg = AbpPackage {
+            header: AbpHeader {
+                version_major: ABP_VERSION_MAJOR,
+                version_minor: ABP_VERSION_MINOR,
+                flags: flags::SIGNED,
+                metadata_offset: 0,
+                metadata_size: 0,
+                manifest_offset: 0,
+                manifest_size: 0,
+                payload_offset: 0,
+                payload_size: 0,
+            },
+            metadata: meta,
+            manifest: Manifest { entries: Vec::new() },
+            payload: Vec::new(),
+            signature: Some([0u8; 64]),
+            key_id: Some([0u8; 32]),
+            signed_region: None,
+        };
+        assert!(!pkg.verify_signature(&[0u8; 32]));
     }
 }

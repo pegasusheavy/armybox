@@ -311,517 +311,22 @@ pub fn sha512(data: &[u8]) -> [u8; 64] {
 // Ed25519 Implementation
 // =============================================================================
 
-/// Field element modulo p = 2^255 - 19
-/// Represented as 10 limbs of 25.5 bits each (alternating 26 and 25 bits)
-#[derive(Clone, Copy)]
-struct Fe([i64; 10]);
+//
+// Signature verification delegates to the audited `ed25519-dalek` crate.
+// (The previous hand-rolled ref10 field/group/scalar arithmetic was broken —
+// it overflowed in field multiplication and never reduced scalars — so it was
+// removed in favour of a reviewed implementation.)
 
-impl Fe {
-    const ZERO: Fe = Fe([0; 10]);
-    const ONE: Fe = Fe([1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-
-    fn from_bytes(s: &[u8; 32]) -> Fe {
-        let mut h = [0i64; 10];
-        h[0] = load_4(&s[0..4]) as i64;
-        h[1] = (load_3(&s[4..7]) << 6) as i64;
-        h[2] = (load_3(&s[7..10]) << 5) as i64;
-        h[3] = (load_3(&s[10..13]) << 3) as i64;
-        h[4] = (load_3(&s[13..16]) << 2) as i64;
-        h[5] = load_4(&s[16..20]) as i64;
-        h[6] = (load_3(&s[20..23]) << 7) as i64;
-        h[7] = (load_3(&s[23..26]) << 5) as i64;
-        h[8] = (load_3(&s[26..29]) << 4) as i64;
-        h[9] = ((load_3(&s[29..32]) & 0x7fffff) << 2) as i64;
-        Fe(h)
-    }
-
-    fn to_bytes(&self) -> [u8; 32] {
-        let h = self.reduce();
-        let mut s = [0u8; 32];
-
-        s[0] = h.0[0] as u8;
-        s[1] = (h.0[0] >> 8) as u8;
-        s[2] = (h.0[0] >> 16) as u8;
-        s[3] = ((h.0[0] >> 24) | (h.0[1] << 2)) as u8;
-        s[4] = (h.0[1] >> 6) as u8;
-        s[5] = (h.0[1] >> 14) as u8;
-        s[6] = ((h.0[1] >> 22) | (h.0[2] << 3)) as u8;
-        s[7] = (h.0[2] >> 5) as u8;
-        s[8] = (h.0[2] >> 13) as u8;
-        s[9] = ((h.0[2] >> 21) | (h.0[3] << 5)) as u8;
-        s[10] = (h.0[3] >> 3) as u8;
-        s[11] = (h.0[3] >> 11) as u8;
-        s[12] = ((h.0[3] >> 19) | (h.0[4] << 6)) as u8;
-        s[13] = (h.0[4] >> 2) as u8;
-        s[14] = (h.0[4] >> 10) as u8;
-        s[15] = (h.0[4] >> 18) as u8;
-        s[16] = h.0[5] as u8;
-        s[17] = (h.0[5] >> 8) as u8;
-        s[18] = (h.0[5] >> 16) as u8;
-        s[19] = ((h.0[5] >> 24) | (h.0[6] << 1)) as u8;
-        s[20] = (h.0[6] >> 7) as u8;
-        s[21] = (h.0[6] >> 15) as u8;
-        s[22] = ((h.0[6] >> 23) | (h.0[7] << 3)) as u8;
-        s[23] = (h.0[7] >> 5) as u8;
-        s[24] = (h.0[7] >> 13) as u8;
-        s[25] = ((h.0[7] >> 21) | (h.0[8] << 4)) as u8;
-        s[26] = (h.0[8] >> 4) as u8;
-        s[27] = (h.0[8] >> 12) as u8;
-        s[28] = ((h.0[8] >> 20) | (h.0[9] << 6)) as u8;
-        s[29] = (h.0[9] >> 2) as u8;
-        s[30] = (h.0[9] >> 10) as u8;
-        s[31] = (h.0[9] >> 18) as u8;
-
-        s
-    }
-
-    fn reduce(&self) -> Fe {
-        let mut h = self.0;
-        let mut carry: i64;
-
-        // First reduction pass
-        for _ in 0..2 {
-            carry = (h[0] + (1 << 25)) >> 26; h[1] += carry; h[0] -= carry << 26;
-            carry = (h[1] + (1 << 24)) >> 25; h[2] += carry; h[1] -= carry << 25;
-            carry = (h[2] + (1 << 25)) >> 26; h[3] += carry; h[2] -= carry << 26;
-            carry = (h[3] + (1 << 24)) >> 25; h[4] += carry; h[3] -= carry << 25;
-            carry = (h[4] + (1 << 25)) >> 26; h[5] += carry; h[4] -= carry << 26;
-            carry = (h[5] + (1 << 24)) >> 25; h[6] += carry; h[5] -= carry << 25;
-            carry = (h[6] + (1 << 25)) >> 26; h[7] += carry; h[6] -= carry << 26;
-            carry = (h[7] + (1 << 24)) >> 25; h[8] += carry; h[7] -= carry << 25;
-            carry = (h[8] + (1 << 25)) >> 26; h[9] += carry; h[8] -= carry << 26;
-            carry = (h[9] + (1 << 24)) >> 25; h[0] += carry * 19; h[9] -= carry << 25;
-        }
-
-        Fe(h)
-    }
-
-    fn add(&self, rhs: &Fe) -> Fe {
-        Fe([
-            self.0[0] + rhs.0[0], self.0[1] + rhs.0[1], self.0[2] + rhs.0[2],
-            self.0[3] + rhs.0[3], self.0[4] + rhs.0[4], self.0[5] + rhs.0[5],
-            self.0[6] + rhs.0[6], self.0[7] + rhs.0[7], self.0[8] + rhs.0[8],
-            self.0[9] + rhs.0[9],
-        ])
-    }
-
-    fn sub(&self, rhs: &Fe) -> Fe {
-        Fe([
-            self.0[0] - rhs.0[0], self.0[1] - rhs.0[1], self.0[2] - rhs.0[2],
-            self.0[3] - rhs.0[3], self.0[4] - rhs.0[4], self.0[5] - rhs.0[5],
-            self.0[6] - rhs.0[6], self.0[7] - rhs.0[7], self.0[8] - rhs.0[8],
-            self.0[9] - rhs.0[9],
-        ])
-    }
-
-    fn mul(&self, rhs: &Fe) -> Fe {
-        let f = &self.0;
-        let g = &rhs.0;
-
-        let g1_19 = 19 * g[1];
-        let g2_19 = 19 * g[2];
-        let g3_19 = 19 * g[3];
-        let g4_19 = 19 * g[4];
-        let g5_19 = 19 * g[5];
-        let g6_19 = 19 * g[6];
-        let g7_19 = 19 * g[7];
-        let g8_19 = 19 * g[8];
-        let g9_19 = 19 * g[9];
-
-        let f1_2 = 2 * f[1];
-        let f3_2 = 2 * f[3];
-        let f5_2 = 2 * f[5];
-        let f7_2 = 2 * f[7];
-        let f9_2 = 2 * f[9];
-
-        let h0 = f[0]*g[0] + f1_2*g9_19 + f[2]*g8_19 + f3_2*g7_19 + f[4]*g6_19 + f5_2*g5_19 + f[6]*g4_19 + f7_2*g3_19 + f[8]*g2_19 + f9_2*g1_19;
-        let h1 = f[0]*g[1] + f[1]*g[0] + f[2]*g9_19 + f[3]*g8_19 + f[4]*g7_19 + f[5]*g6_19 + f[6]*g5_19 + f[7]*g4_19 + f[8]*g3_19 + f[9]*g2_19;
-        let h2 = f[0]*g[2] + f1_2*g[1] + f[2]*g[0] + f3_2*g9_19 + f[4]*g8_19 + f5_2*g7_19 + f[6]*g6_19 + f7_2*g5_19 + f[8]*g4_19 + f9_2*g3_19;
-        let h3 = f[0]*g[3] + f[1]*g[2] + f[2]*g[1] + f[3]*g[0] + f[4]*g9_19 + f[5]*g8_19 + f[6]*g7_19 + f[7]*g6_19 + f[8]*g5_19 + f[9]*g4_19;
-        let h4 = f[0]*g[4] + f1_2*g[3] + f[2]*g[2] + f3_2*g[1] + f[4]*g[0] + f5_2*g9_19 + f[6]*g8_19 + f7_2*g7_19 + f[8]*g6_19 + f9_2*g5_19;
-        let h5 = f[0]*g[5] + f[1]*g[4] + f[2]*g[3] + f[3]*g[2] + f[4]*g[1] + f[5]*g[0] + f[6]*g9_19 + f[7]*g8_19 + f[8]*g7_19 + f[9]*g6_19;
-        let h6 = f[0]*g[6] + f1_2*g[5] + f[2]*g[4] + f3_2*g[3] + f[4]*g[2] + f5_2*g[1] + f[6]*g[0] + f7_2*g9_19 + f[8]*g8_19 + f9_2*g7_19;
-        let h7 = f[0]*g[7] + f[1]*g[6] + f[2]*g[5] + f[3]*g[4] + f[4]*g[3] + f[5]*g[2] + f[6]*g[1] + f[7]*g[0] + f[8]*g9_19 + f[9]*g8_19;
-        let h8 = f[0]*g[8] + f1_2*g[7] + f[2]*g[6] + f3_2*g[5] + f[4]*g[4] + f5_2*g[3] + f[6]*g[2] + f7_2*g[1] + f[8]*g[0] + f9_2*g9_19;
-        let h9 = f[0]*g[9] + f[1]*g[8] + f[2]*g[7] + f[3]*g[6] + f[4]*g[5] + f[5]*g[4] + f[6]*g[3] + f[7]*g[2] + f[8]*g[1] + f[9]*g[0];
-
-        Fe([h0, h1, h2, h3, h4, h5, h6, h7, h8, h9]).reduce()
-    }
-
-    fn square(&self) -> Fe {
-        self.mul(self)
-    }
-
-    fn neg(&self) -> Fe {
-        Fe([
-            -self.0[0], -self.0[1], -self.0[2], -self.0[3], -self.0[4],
-            -self.0[5], -self.0[6], -self.0[7], -self.0[8], -self.0[9],
-        ])
-    }
-
-    fn pow22523(&self) -> Fe {
-        let mut t0 = self.square();
-        let mut t1 = t0.square();
-        t1 = t1.square();
-        t1 = self.mul(&t1);
-        t0 = t0.mul(&t1);
-        let mut t2 = t0.square();
-        t1 = t1.mul(&t2);
-        t2 = t1.square();
-        for _ in 1..5 { t2 = t2.square(); }
-        t1 = t2.mul(&t1);
-        t2 = t1.square();
-        for _ in 1..10 { t2 = t2.square(); }
-        t2 = t2.mul(&t1);
-        let mut t3 = t2.square();
-        for _ in 1..20 { t3 = t3.square(); }
-        t2 = t3.mul(&t2);
-        t2 = t2.square();
-        for _ in 1..10 { t2 = t2.square(); }
-        t1 = t2.mul(&t1);
-        t2 = t1.square();
-        for _ in 1..50 { t2 = t2.square(); }
-        t2 = t2.mul(&t1);
-        t3 = t2.square();
-        for _ in 1..100 { t3 = t3.square(); }
-        t2 = t3.mul(&t2);
-        t2 = t2.square();
-        for _ in 1..50 { t2 = t2.square(); }
-        t1 = t2.mul(&t1);
-        t1 = t1.square();
-        t1 = t1.square();
-        self.mul(&t1)
-    }
-
-    fn invert(&self) -> Fe {
-        let mut t0 = self.square();
-        let mut t1 = t0.square();
-        t1 = t1.square();
-        t1 = self.mul(&t1);
-        t0 = t0.mul(&t1);
-        let mut t2 = t0.square();
-        t1 = t1.mul(&t2);
-        t2 = t1.square();
-        for _ in 1..5 { t2 = t2.square(); }
-        t1 = t2.mul(&t1);
-        t2 = t1.square();
-        for _ in 1..10 { t2 = t2.square(); }
-        t2 = t2.mul(&t1);
-        let mut t3 = t2.square();
-        for _ in 1..20 { t3 = t3.square(); }
-        t2 = t3.mul(&t2);
-        t2 = t2.square();
-        for _ in 1..10 { t2 = t2.square(); }
-        t1 = t2.mul(&t1);
-        t2 = t1.square();
-        for _ in 1..50 { t2 = t2.square(); }
-        t2 = t2.mul(&t1);
-        t3 = t2.square();
-        for _ in 1..100 { t3 = t3.square(); }
-        t2 = t3.mul(&t2);
-        t2 = t2.square();
-        for _ in 1..50 { t2 = t2.square(); }
-        t1 = t2.mul(&t1);
-        t1 = t1.square();
-        for _ in 1..5 { t1 = t1.square(); }
-        t0.mul(&t1)
-    }
-
-    fn is_negative(&self) -> bool {
-        let s = self.to_bytes();
-        (s[0] & 1) != 0
-    }
-
-    fn is_nonzero(&self) -> bool {
-        let s = self.to_bytes();
-        s.iter().any(|&b| b != 0)
-    }
-}
-
-fn load_3(s: &[u8]) -> u64 {
-    (s[0] as u64) | ((s[1] as u64) << 8) | ((s[2] as u64) << 16)
-}
-
-fn load_4(s: &[u8]) -> u64 {
-    (s[0] as u64) | ((s[1] as u64) << 8) | ((s[2] as u64) << 16) | ((s[3] as u64) << 24)
-}
-
-/// Extended point on Ed25519 curve: (X:Y:Z:T) where x=X/Z, y=Y/Z, xy=T/Z
-#[derive(Clone, Copy)]
-struct GeP3 {
-    x: Fe,
-    y: Fe,
-    z: Fe,
-    t: Fe,
-}
-
-/// Precomputed point for scalar multiplication
-#[derive(Clone, Copy)]
-struct GePrecomp {
-    y_plus_x: Fe,
-    y_minus_x: Fe,
-    xy2d: Fe,
-}
-
-/// Completed point
-#[derive(Clone, Copy)]
-struct GeP1P1 {
-    x: Fe,
-    y: Fe,
-    z: Fe,
-    t: Fe,
-}
-
-/// Projective point (X:Y:Z)
-#[derive(Clone, Copy)]
-struct GeP2 {
-    x: Fe,
-    y: Fe,
-    z: Fe,
-}
-
-// Ed25519 curve constant d = -121665/121666
-const D: Fe = Fe([-10913610, 13857413, -15372611, 6949391, 114729, -8787816, -6275908, -3247719, -18696448, -12055116]);
-const D2: Fe = Fe([-21827239, -5839606, -30745221, 13898782, 229458, 15978800, -12551817, -6495438, 29715968, 9444199]);
-
-// Base point
-const GE_BASE: GeP3 = GeP3 {
-    x: Fe([25485296, 5318399, 8791791, -8299916, -14349720, 6939349, -3324311, -7717049, 7287234, -6577708]),
-    y: Fe([4681988, -8166562, -10693013, -11121599, 7737700, 14451890, -1014863, 3006620, -26694491, 7618120]),
-    z: Fe::ONE,
-    t: Fe([14039342, -3989192, 18450192, 4031302, -15985090, 8247003, 3499359, 15190292, 12809553, 1466107]),
-};
-
-impl GeP3 {
-    const ZERO: GeP3 = GeP3 {
-        x: Fe::ZERO,
-        y: Fe::ONE,
-        z: Fe::ONE,
-        t: Fe::ZERO,
-    };
-
-    fn from_bytes(s: &[u8; 32]) -> Option<GeP3> {
-        let y = Fe::from_bytes(s);
-        let z = Fe::ONE;
-        let y2 = y.square();
-        let u = y2.sub(&Fe::ONE);
-        let v = y2.mul(&D).add(&Fe::ONE);
-        let v3 = v.square().mul(&v);
-        let uv3 = u.mul(&v3);
-        let uv7 = uv3.mul(&v3.square());
-        let x = uv3.mul(&uv7.pow22523());
-
-        let vx2 = x.square().mul(&v);
-        let check = vx2.sub(&u);
-        let check2 = vx2.add(&u);
-
-        let mut x = if check.is_nonzero() {
-            if check2.is_nonzero() {
-                return None;
-            }
-            // sqrt(-1) = 2^((p-1)/4) mod p
-            let sqrtm1 = Fe([-32595792, -7943725, 9377950, 3500415, 12389472, -272473, -25146209, -2005654, 326686, 11406482]);
-            x.mul(&sqrtm1)
-        } else {
-            x
-        };
-
-        if x.is_negative() != ((s[31] >> 7) != 0) {
-            x = x.neg();
-        }
-
-        let t = x.mul(&y);
-
-        Some(GeP3 { x, y, z, t })
-    }
-
-    fn to_bytes(&self) -> [u8; 32] {
-        let zinv = self.z.invert();
-        let x = self.x.mul(&zinv);
-        let y = self.y.mul(&zinv);
-        let mut s = y.to_bytes();
-        s[31] ^= (x.is_negative() as u8) << 7;
-        s
-    }
-
-    fn double(&self) -> GeP1P1 {
-        let p2 = GeP2 { x: self.x, y: self.y, z: self.z };
-        p2.double()
-    }
-
-    fn add(&self, q: &GePrecomp) -> GeP1P1 {
-        let y_plus_x = self.y.add(&self.x);
-        let y_minus_x = self.y.sub(&self.x);
-        let a = y_plus_x.mul(&q.y_plus_x);
-        let b = y_minus_x.mul(&q.y_minus_x);
-        let c = q.xy2d.mul(&self.t);
-        let d = self.z.add(&self.z);
-        let e = a.sub(&b);
-        let f = d.sub(&c);
-        let g = d.add(&c);
-        let h = a.add(&b);
-        GeP1P1 { x: e.mul(&f), y: h.mul(&g), z: g.mul(&f), t: e.mul(&h) }
-    }
-
-    fn sub(&self, q: &GePrecomp) -> GeP1P1 {
-        let y_plus_x = self.y.add(&self.x);
-        let y_minus_x = self.y.sub(&self.x);
-        let a = y_plus_x.mul(&q.y_minus_x);
-        let b = y_minus_x.mul(&q.y_plus_x);
-        let c = q.xy2d.mul(&self.t);
-        let d = self.z.add(&self.z);
-        let e = a.sub(&b);
-        let f = d.add(&c);
-        let g = d.sub(&c);
-        let h = a.add(&b);
-        GeP1P1 { x: e.mul(&f), y: h.mul(&g), z: g.mul(&f), t: e.mul(&h) }
-    }
-}
-
-impl GeP1P1 {
-    fn to_p3(&self) -> GeP3 {
-        GeP3 {
-            x: self.x.mul(&self.t),
-            y: self.y.mul(&self.z),
-            z: self.z.mul(&self.t),
-            t: self.x.mul(&self.y),
-        }
-    }
-
-    fn to_p2(&self) -> GeP2 {
-        GeP2 {
-            x: self.x.mul(&self.t),
-            y: self.y.mul(&self.z),
-            z: self.z.mul(&self.t),
-        }
-    }
-}
-
-impl GeP2 {
-    fn double(&self) -> GeP1P1 {
-        let xx = self.x.square();
-        let yy = self.y.square();
-        let b = self.z.square().add(&self.z.square());
-        let a = self.x.add(&self.y);
-        let aa = a.square();
-        let y_plus_x = yy.add(&xx);
-        let y_minus_x = yy.sub(&xx);
-        let xy2 = aa.sub(&y_plus_x);
-        let z = y_minus_x.sub(&b);
-        GeP1P1 {
-            x: xy2.mul(&z),
-            y: y_plus_x.mul(&y_minus_x),
-            z: y_minus_x.mul(&z),
-            t: xy2.mul(&y_plus_x),
-        }
-    }
-}
-
-/// Scalar multiplication: computes [s]B where B is the base point
-fn ge_scalarmult_base(s: &[u8; 32]) -> GeP3 {
-    let mut r = GeP3::ZERO;
-
-    // Simple double-and-add (not constant-time, but OK for signature verification)
-    for i in (0..256).rev() {
-        let byte_idx = i / 8;
-        let bit_idx = i % 8;
-        let bit = (s[byte_idx] >> bit_idx) & 1;
-
-        r = r.double().to_p3();
-        if bit == 1 {
-            let precomp = GePrecomp {
-                y_plus_x: GE_BASE.y.add(&GE_BASE.x),
-                y_minus_x: GE_BASE.y.sub(&GE_BASE.x),
-                xy2d: GE_BASE.t.mul(&D2),
-            };
-            r = r.add(&precomp).to_p3();
-        }
-    }
-
-    r
-}
-
-/// Variable-base scalar multiplication: computes [s]P
-fn ge_scalarmult(s: &[u8; 32], p: &GeP3) -> GeP3 {
-    let mut r = GeP3::ZERO;
-
-    for i in (0..256).rev() {
-        let byte_idx = i / 8;
-        let bit_idx = i % 8;
-        let bit = (s[byte_idx] >> bit_idx) & 1;
-
-        r = r.double().to_p3();
-        if bit == 1 {
-            let precomp = GePrecomp {
-                y_plus_x: p.y.add(&p.x),
-                y_minus_x: p.y.sub(&p.x),
-                xy2d: p.t.mul(&D2),
-            };
-            r = r.add(&precomp).to_p3();
-        }
-    }
-
-    r
-}
-
-/// Reduce a 64-byte scalar modulo the group order L
-fn sc_reduce(s: &mut [u8; 64]) {
-    // Group order L = 2^252 + 27742317777372353535851937790883648493
-    // For simplicity, we use a less optimized but correct reduction
-    // This is only used in verification, so constant-time is not critical
-
-    let mut t = [0i64; 64];
-    for i in 0..64 {
-        t[i] = s[i] as i64;
-    }
-
-    // Reduce modulo L using the relation 2^252 = -27742317777372353535851937790883648493 mod L
-    for i in (32..64).rev() {
-        // Coefficient for 2^(8*i) needs to be reduced
-        let carry = t[i] >> 8;
-        t[i] &= 255;
-
-        // Reduce by subtracting appropriate multiple of L
-        // L = 2^252 + c where c = 27742317777372353535851937790883648493
-        // So 2^256 = -c * 2^4 mod L, etc.
-
-        // For now, use simple carry propagation
-        if i < 63 {
-            t[i + 1] += carry;
-        }
-    }
-
-    // Pack back
-    for i in 0..32 {
-        s[i] = t[i] as u8;
-    }
-    for i in 32..64 {
-        s[i] = 0;
-    }
-}
-
-/// Compute s = H(R || A || M) mod L
-fn hash_to_scalar(r: &[u8; 32], a: &[u8; 32], m: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha512::new();
-    hasher.update(r);
-    hasher.update(a);
-    hasher.update(m);
-    let mut h = hasher.finalize();
-    sc_reduce(&mut h);
-    let mut result = [0u8; 32];
-    result.copy_from_slice(&h[..32]);
-    result
-}
+use ed25519_dalek::{Signature, VerifyingKey};
 
 /// Ed25519 public key
 pub struct PublicKey([u8; 32]);
 
 impl PublicKey {
-    /// Create public key from bytes
+    /// Create a public key from bytes, rejecting encodings that are not a
+    /// valid point on the curve.
     pub fn from_bytes(bytes: &[u8; 32]) -> Option<PublicKey> {
-        // Verify the point is on the curve
-        GeP3::from_bytes(bytes)?;
-        Some(PublicKey(*bytes))
+        VerifyingKey::from_bytes(bytes).ok().map(|_| PublicKey(*bytes))
     }
 
     /// Get the key bytes
@@ -829,63 +334,21 @@ impl PublicKey {
         &self.0
     }
 
-    /// Verify a signature
+    /// Verify a signature over `message`.
+    ///
+    /// Uses `verify_strict`, which rejects non-canonical `R`/`s` encodings and
+    /// small-order public keys, giving non-malleable verification.
     pub fn verify(&self, message: &[u8], signature: &[u8; 64]) -> bool {
-        // Parse signature (R, s)
-        let mut r_bytes = [0u8; 32];
-        let mut s_bytes = [0u8; 32];
-        r_bytes.copy_from_slice(&signature[..32]);
-        s_bytes.copy_from_slice(&signature[32..]);
-
-        // Check s < L (malleability check)
-        // L = 2^252 + 27742317777372353535851937790883648493
-        if s_bytes[31] & 0xf0 != 0 {
-            // s is definitely >= 2^252, so >= L
-            // (This is a simplified check; a full check would compare all bytes)
-        }
-
-        // Parse R
-        let _r = match GeP3::from_bytes(&r_bytes) {
-            Some(p) => p,
-            None => return false,
+        let vk = match VerifyingKey::from_bytes(&self.0) {
+            Ok(vk) => vk,
+            Err(_) => return false,
         };
-
-        // Parse A (public key)
-        let a = match GeP3::from_bytes(&self.0) {
-            Some(p) => p,
-            None => return false,
-        };
-
-        // Compute h = H(R || A || M) mod L
-        let h = hash_to_scalar(&r_bytes, &self.0, message);
-
-        // Verify: [s]B = R + [h]A
-        // Equivalently: [s]B - [h]A = R
-        let sb = ge_scalarmult_base(&s_bytes);
-        let ha = ge_scalarmult(&h, &a);
-
-        // Compute [s]B - [h]A
-        let ha_neg = GeP3 {
-            x: ha.x.neg(),
-            y: ha.y,
-            z: ha.z,
-            t: ha.t.neg(),
-        };
-
-        let ha_precomp = GePrecomp {
-            y_plus_x: ha_neg.y.add(&ha_neg.x),
-            y_minus_x: ha_neg.y.sub(&ha_neg.x),
-            xy2d: ha_neg.t.mul(&D2),
-        };
-
-        let check = sb.add(&ha_precomp).to_p3();
-
-        // Check if result equals R
-        check.to_bytes() == r_bytes
+        let sig = Signature::from_bytes(signature);
+        vk.verify_strict(message, &sig).is_ok()
     }
 }
 
-/// Verify an Ed25519 signature
+/// Verify an Ed25519 signature.
 pub fn verify_signature(public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool {
     match PublicKey::from_bytes(public_key) {
         Some(pk) => pk.verify(message, signature),
@@ -960,5 +423,52 @@ mod tests {
         let hash = sha512(b"");
         assert_eq!(hash[0], 0xcf);
         assert_eq!(hash[1], 0x83);
+    }
+
+    fn hex32(h: &[u8]) -> [u8; 32] {
+        let v = from_hex(h).unwrap();
+        let mut a = [0u8; 32];
+        a.copy_from_slice(&v);
+        a
+    }
+
+    fn hex64(h: &[u8]) -> [u8; 64] {
+        let v = from_hex(h).unwrap();
+        let mut a = [0u8; 64];
+        a.copy_from_slice(&v);
+        a
+    }
+
+    // RFC 8032 section 7.1, Test 1 (empty message).
+    #[test]
+    fn test_ed25519_rfc8032_test1_empty() {
+        let pk = hex32(b"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+        let sig = hex64(b"e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b");
+        assert!(verify_signature(&pk, b"", &sig), "valid RFC 8032 test-1 signature must verify");
+    }
+
+    // RFC 8032 section 7.1, Test 2 (1-byte message 0x72).
+    #[test]
+    fn test_ed25519_rfc8032_test2_onebyte() {
+        let pk = hex32(b"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c");
+        let sig = hex64(b"92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00");
+        assert!(verify_signature(&pk, &[0x72], &sig), "valid RFC 8032 test-2 signature must verify");
+    }
+
+    // Tampering with the message must make a previously-valid signature fail.
+    #[test]
+    fn test_ed25519_rejects_tampered_message() {
+        let pk = hex32(b"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c");
+        let sig = hex64(b"92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00");
+        assert!(!verify_signature(&pk, &[0x73], &sig), "signature must not verify for a different message");
+    }
+
+    // Flipping one signature bit must fail.
+    #[test]
+    fn test_ed25519_rejects_tampered_signature() {
+        let pk = hex32(b"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+        let mut sig = hex64(b"e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b");
+        sig[0] ^= 0x01;
+        assert!(!verify_signature(&pk, b"", &sig), "bit-flipped signature must not verify");
     }
 }

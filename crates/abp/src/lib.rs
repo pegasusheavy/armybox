@@ -22,7 +22,10 @@
 //!
 //! # Database Layout
 //! ```text
-//! /var/lib/abp/abp.db     # redb database
+//! /var/lib/abp/packages/  # One record file per installed package
+//! /var/lib/abp/files.idx  # File -> package index (append log)
+//! /var/lib/abp/repos/     # Cached repository metadata
+//! /var/lib/abp/available/ # Known-available package records
 //! /var/cache/abp/         # Downloaded packages
 //! /etc/abp/abp.conf       # Configuration
 //! /etc/abp/repos.d/       # Repository definitions
