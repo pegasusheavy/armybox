@@ -16,5 +16,5 @@ pub mod compress;
 pub mod xxhash;
 
 pub use common::ZstdError;
-pub use decompress::decompress;
+pub use decompress::{decompress, decompress_bounded};
 pub use compress::compress;

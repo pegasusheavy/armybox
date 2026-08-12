@@ -244,9 +244,15 @@ fn install_single_package(db: &Database, pkg: &AbpPackage, _force: bool) -> bool
         return false;
     }
 
-    // Register files in database
+    // Register files in database. A failed registration leaves the on-disk
+    // state and the database out of sync, so treat it as an install failure.
     for entry in &pkg.manifest.entries {
-        db.register_file(&entry.path, &pkg.metadata.name);
+        if !db.register_file(&entry.path, &pkg.metadata.name) {
+            io::write_str(2, b"abp: failed to register file: ");
+            io::write_all(2, entry.path.as_bytes());
+            io::write_str(2, b"\n");
+            return false;
+        }
     }
 
     // Create package record
@@ -284,7 +290,17 @@ fn extract_payload(payload: &[u8], root: &[u8], _manifest: &super::format::Manif
 
         let size = parse_tar_size(&header[124..136]);
         let typeflag = header[156];
-        let mode = parse_tar_mode(&header[100..108]);
+        // Strip the setuid/setgid/sticky bits (S_ISUID|S_ISGID|S_ISVTX =
+        // 0o7000) from the archived mode before it reaches open()/mkdir().
+        // Honoring them would let a package drop a root-owned setuid binary on
+        // the system. Only the permission bits are trusted.
+        let mode = parse_tar_mode(&header[100..108]) & !0o7000;
+
+        // Number of bytes this member's data occupies in the archive, rounded
+        // up to a 512-byte block. Non-regular members (dirs, symlinks, unknown
+        // types) are normally zero-length, but a hostile archive can set a
+        // nonzero size on them to desync the walk unless we always advance.
+        let data_blocks = ((size + 511) / 512 * 512) as usize;
 
         pos += 512; // Move past header
 
@@ -297,7 +313,7 @@ fn extract_payload(payload: &[u8], root: &[u8], _manifest: &super::format::Manif
             io::write_all(2, &name);
             io::write_str(2, b"\n");
             success = false;
-            pos += ((size + 511) / 512 * 512) as usize;
+            pos += data_blocks;
             continue;
         }
 
@@ -311,17 +327,40 @@ fn extract_payload(payload: &[u8], root: &[u8], _manifest: &super::format::Manif
         match typeflag {
             // A '5' typeflag is a directory regardless of a trailing slash.
             b'5' => {
-                io::mkdir(&full_path, mode);
+                if !mkdir_ok(&full_path, mode) {
+                    io::write_str(2, b"abp: failed to create directory: ");
+                    io::write_all(2, &full_path);
+                    io::write_str(2, b"\n");
+                    success = false;
+                }
             }
             // A legacy '\0' typeflag with a trailing slash is also a directory.
             0 if name.ends_with(b"/") => {
-                io::mkdir(&full_path, mode);
+                if !mkdir_ok(&full_path, mode) {
+                    io::write_str(2, b"abp: failed to create directory: ");
+                    io::write_all(2, &full_path);
+                    io::write_str(2, b"\n");
+                    success = false;
+                }
             }
             b'0' | 0 => {
                 // Regular file
-                create_parent_dirs(&full_path);
+                if !create_parent_dirs(&full_path) {
+                    io::write_str(2, b"abp: failed to create parent directories for: ");
+                    io::write_all(2, &full_path);
+                    io::write_str(2, b"\n");
+                    success = false;
+                }
 
-                let fd = io::open(&full_path, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, mode);
+                // O_NOFOLLOW refuses to open through an existing symlink at the
+                // final path component: if a hostile earlier member planted a
+                // symlink here, the open fails (ELOOP) instead of writing
+                // through it and escaping the install root.
+                let fd = io::open(
+                    &full_path,
+                    libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC | libc::O_NOFOLLOW,
+                    mode,
+                );
                 if fd >= 0 {
                     let data_end = pos + size as usize;
                     if data_end <= payload.len() {
@@ -343,28 +382,52 @@ fn extract_payload(payload: &[u8], root: &[u8], _manifest: &super::format::Manif
                     }
                     io::close(fd);
                 } else {
+                    // A failure here includes ELOOP from O_NOFOLLOW (an existing
+                    // symlink at this path). Treat any open failure as a hard
+                    // error rather than silently succeeding.
                     io::write_str(2, b"abp: failed to create file: ");
                     io::write_all(2, &full_path);
                     io::write_str(2, b"\n");
                     success = false;
                 }
-
-                // Skip file data (rounded up to 512 bytes)
-                pos += ((size + 511) / 512 * 512) as usize;
             }
             b'2' => {
-                // Symlink
+                // Symlink. Validate the TARGET (linkname) with the same rules as
+                // member names: an absolute target or one containing a ".."
+                // component could point the link outside the install root, so a
+                // later write through it (e.g. `x -> /etc`, then `x/cron.d/...`)
+                // would escape as root. Reject such symlinks entirely.
                 let linkname = parse_tar_name(&header[157..257]);
-                if !linkname.is_empty() {
-                    create_parent_dirs(&full_path);
-                    io::symlink(&linkname, &full_path);
+                if is_unsafe_member_name(&linkname) {
+                    io::write_str(2, b"abp: refusing unsafe symlink target in package: ");
+                    io::write_all(2, &linkname);
+                    io::write_str(2, b"\n");
+                    success = false;
+                } else if !linkname.is_empty() {
+                    if !create_parent_dirs(&full_path) {
+                        io::write_str(2, b"abp: failed to create parent directories for: ");
+                        io::write_all(2, &full_path);
+                        io::write_str(2, b"\n");
+                        success = false;
+                    }
+                    if io::symlink(&linkname, &full_path) != 0 {
+                        io::write_str(2, b"abp: failed to create symlink: ");
+                        io::write_all(2, &full_path);
+                        io::write_str(2, b"\n");
+                        success = false;
+                    }
                 }
             }
             _ => {
-                // Skip unknown types
-                pos += ((size + 511) / 512 * 512) as usize;
+                // Unknown/unsupported member type: nothing to create.
             }
         }
+
+        // Advance past this member's data for EVERY member type. Directories,
+        // symlinks and unknown types are normally zero-length, but always
+        // advancing by the declared (block-rounded) size keeps the walk in sync
+        // even if a hostile archive attaches data to a non-regular member.
+        pos += data_blocks;
     }
 
     success
@@ -416,13 +479,35 @@ fn parse_tar_mode(field: &[u8]) -> u32 {
     result
 }
 
-fn create_parent_dirs(path: &[u8]) {
+/// Current value of the C `errno`.
+fn errno() -> i32 {
+    unsafe { *libc::__errno_location() }
+}
+
+/// Create a directory, treating an already-existing directory as success.
+/// Returns `false` only for a genuine failure (a non-EEXIST error), so callers
+/// can propagate real problems without tripping over pre-existing directories.
+fn mkdir_ok(path: &[u8], mode: u32) -> bool {
+    if io::mkdir(path, mode) == 0 {
+        return true;
+    }
+    errno() == libc::EEXIST
+}
+
+/// Create every parent directory of `path`. Returns `false` if any component
+/// could not be created (ignoring already-existing directories), so the caller
+/// can mark the extraction as failed instead of writing into a broken tree.
+fn create_parent_dirs(path: &[u8]) -> bool {
+    let mut ok = true;
     for i in 0..path.len() {
         if path[i] == b'/' && i > 0 {
             let parent = &path[..i];
-            io::mkdir(parent, 0o755);
+            if !mkdir_ok(parent, 0o755) {
+                ok = false;
+            }
         }
     }
+    ok
 }
 
 /// Upgrade all installed packages

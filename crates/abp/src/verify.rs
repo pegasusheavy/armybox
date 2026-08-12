@@ -52,16 +52,16 @@ fn verify_package_signature(pkg: &AbpPackage, trusted_keys: &[PublicKey]) -> Res
         let kid = key_id(key.as_bytes());
         if &kid == sig_key_id {
             // Found a matching trusted key. Delegate to the package's own
-            // signature check, which now verifies over the exact on-disk bytes
+            // signature check, which verifies over the exact on-disk bytes
             // captured during parsing (`AbpPackage::signed_region` =
             // header ‖ metadata ‖ manifest ‖ payload, excluding the signature
             // trailer) rather than a re-serialization of the parsed structures.
             //
-            // NOTE: the Ed25519 primitive itself (`crypto::verify_signature`)
-            // is currently broken — it overflows in field arithmetic (see the
-            // ignored RFC 8032 known-answer tests in crypto.rs). Until that is
-            // repaired, this returns false for any real signature, so package
-            // installation is fail-closed, not actually authenticated.
+            // The Ed25519 verification is active and real: `crypto` now uses
+            // ed25519-dalek, whose RFC 8032 known-answer tests pass. A genuine
+            // signature from this trusted key authenticates the package; a
+            // forged or mismatched one returns false and the install is
+            // rejected.
             let _ = signature;
             return Ok(pkg.verify_signature(key.as_bytes()));
         }
@@ -110,8 +110,14 @@ fn verify_package_integrity(pkg: &AbpPackage) -> Result<(), String> {
 
         pos += 512;
 
-        // Only regular files carry checksummed contents.
+        // Classify the member. Only regular files carry checksummed contents
+        // described by the manifest; directories are structural and need no
+        // manifest entry. Every other member type (symlink, hardlink, char /
+        // block device, fifo, or any unknown flag) is not describable by the
+        // manifest format, so an attacker could smuggle one past a check that
+        // only inspects regular files. Reject the whole package outright.
         let is_regular = typeflag == b'0' || (typeflag == 0 && !name.ends_with(b"/"));
+        let is_dir = typeflag == b'5' || (typeflag == 0 && name.ends_with(b"/"));
 
         if is_regular {
             let data_end = pos + size as usize;
@@ -135,6 +141,12 @@ fn verify_package_integrity(pkg: &AbpPackage) -> Result<(), String> {
             if !found {
                 return Err(String::from("payload contains file not in manifest"));
             }
+        } else if !is_dir {
+            // Symlink / hardlink / device / fifo / unknown: not accounted for
+            // by the manifest, so reject rather than silently trust it.
+            return Err(String::from(
+                "package contains disallowed non-regular member (symlink/hardlink/device)",
+            ));
         }
 
         // Advance past this member's data (rounded up to a 512-byte boundary).

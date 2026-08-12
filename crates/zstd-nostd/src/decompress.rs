@@ -15,8 +15,22 @@ use crate::fse::{FseTable, build_predefined_table};
 use crate::huff::{self, HuffTable};
 use crate::xxhash::xxhash64;
 
-/// Decompress a zstd frame (or multiple concatenated frames)
+/// Decompress a zstd frame (or multiple concatenated frames).
+///
+/// This grows the output `Vec` without any size limit and is therefore
+/// vulnerable to decompression bombs from untrusted input. Prefer
+/// [`decompress_bounded`] when the input is not fully trusted.
 pub fn decompress(input: &[u8]) -> Result<Vec<u8>, ZstdError> {
+    decompress_bounded(input, usize::MAX)
+}
+
+/// Decompress a zstd frame (or multiple concatenated frames), refusing to
+/// produce more than `max_output` bytes.
+///
+/// Returns [`ZstdError::OutputTooLarge`] as soon as the decoded output would
+/// exceed `max_output`, instead of allocating without bound. This is the
+/// safe entry point for untrusted input (e.g. package payloads).
+pub fn decompress_bounded(input: &[u8], max_output: usize) -> Result<Vec<u8>, ZstdError> {
     let mut output = Vec::new();
     let mut pos = 0;
 
@@ -28,7 +42,7 @@ pub fn decompress(input: &[u8]) -> Result<Vec<u8>, ZstdError> {
         let magic = read_le32(input, pos);
 
         if magic == ZSTD_MAGIC {
-            let consumed = decode_frame(input, pos, &mut output)?;
+            let consumed = decode_frame(input, pos, &mut output, max_output)?;
             pos += consumed;
         } else if magic >= SKIPPABLE_MAGIC_LOW && magic <= SKIPPABLE_MAGIC_HIGH {
             // Skippable frame
@@ -185,8 +199,16 @@ impl BlockState {
     }
 }
 
-/// Decode one frame, return total bytes consumed from input
-fn decode_frame(data: &[u8], offset: usize, output: &mut Vec<u8>) -> Result<usize, ZstdError> {
+/// Decode one frame, return total bytes consumed from input.
+///
+/// `max_output` caps the total length of `output`; if decoding would exceed
+/// it, [`ZstdError::OutputTooLarge`] is returned.
+fn decode_frame(
+    data: &[u8],
+    offset: usize,
+    output: &mut Vec<u8>,
+    max_output: usize,
+) -> Result<usize, ZstdError> {
     let header = parse_frame_header(data, offset)?;
     let mut pos = offset + header.header_size;
 
@@ -215,12 +237,18 @@ fn decode_frame(data: &[u8], offset: usize, output: &mut Vec<u8>) -> Result<usiz
 
         match block_type {
             BlockType::Raw => {
+                if output.len().saturating_add(block_size) > max_output {
+                    return Err(ZstdError::OutputTooLarge);
+                }
                 output.extend_from_slice(&data[pos..pos + block_size]);
                 pos += block_size;
             }
             BlockType::Rle => {
                 if pos >= data.len() {
                     return Err(ZstdError::CorruptData);
+                }
+                if output.len().saturating_add(block_size) > max_output {
+                    return Err(ZstdError::OutputTooLarge);
                 }
                 let byte = data[pos];
                 pos += 1;
@@ -230,7 +258,7 @@ fn decode_frame(data: &[u8], offset: usize, output: &mut Vec<u8>) -> Result<usiz
             }
             BlockType::Compressed => {
                 let block_data = &data[pos..pos + block_size];
-                decode_compressed_block(block_data, output, &mut state)?;
+                decode_compressed_block(block_data, output, &mut state, max_output)?;
                 pos += block_size;
             }
             BlockType::Reserved => {
@@ -272,6 +300,7 @@ fn decode_compressed_block(
     data: &[u8],
     output: &mut Vec<u8>,
     state: &mut BlockState,
+    max_output: usize,
 ) -> Result<(), ZstdError> {
     let mut pos = 0;
 
@@ -282,6 +311,9 @@ fn decode_compressed_block(
     // 2. Sequences section
     if pos >= data.len() {
         // No sequences — all literals
+        if output.len().saturating_add(literals.len()) > max_output {
+            return Err(ZstdError::OutputTooLarge);
+        }
         output.extend_from_slice(&literals);
         return Ok(());
     }
@@ -290,7 +322,7 @@ fn decode_compressed_block(
     let _ = seq_consumed;
 
     // 3. Execute sequences
-    execute_sequences(output, &literals, &sequences, state)?;
+    execute_sequences(output, &literals, &sequences, state, max_output)?;
 
     Ok(())
 }
@@ -595,6 +627,7 @@ fn execute_sequences(
     literals: &[u8],
     sequences: &[Sequence],
     state: &mut BlockState,
+    max_output: usize,
 ) -> Result<(), ZstdError> {
     let mut lit_pos = 0;
 
@@ -603,6 +636,9 @@ fn execute_sequences(
         let lit_end = lit_pos + seq.lit_len as usize;
         if lit_end > literals.len() {
             return Err(ZstdError::CorruptData);
+        }
+        if output.len().saturating_add(seq.lit_len as usize) > max_output {
+            return Err(ZstdError::OutputTooLarge);
         }
         output.extend_from_slice(&literals[lit_pos..lit_end]);
         lit_pos = lit_end;
@@ -614,6 +650,9 @@ fn execute_sequences(
         if actual_offset == 0 || actual_offset as usize > output.len() {
             return Err(ZstdError::CorruptData);
         }
+        if output.len().saturating_add(seq.match_len as usize) > max_output {
+            return Err(ZstdError::OutputTooLarge);
+        }
 
         let match_start = output.len() - actual_offset as usize;
         for i in 0..seq.match_len as usize {
@@ -624,6 +663,9 @@ fn execute_sequences(
 
     // Copy remaining literals after all sequences
     if lit_pos < literals.len() {
+        if output.len().saturating_add(literals.len() - lit_pos) > max_output {
+            return Err(ZstdError::OutputTooLarge);
+        }
         output.extend_from_slice(&literals[lit_pos..]);
     }
 

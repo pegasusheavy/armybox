@@ -46,6 +46,13 @@ pub const ABP_SIGNATURE_SIZE: usize = 64;
 /// Key ID size (SHA256)
 pub const ABP_KEY_ID_SIZE: usize = 32;
 
+/// Maximum decompressed payload size (256 MiB).
+///
+/// Bounds zstd decompression to defend against decompression bombs in
+/// untrusted packages. Decompression that would exceed this cap fails
+/// rather than allocating without limit.
+pub const ABP_MAX_PAYLOAD: usize = 256 * 1024 * 1024;
+
 /// Package flags
 pub mod flags {
     pub const SIGNED: u16 = 0x0001;
@@ -478,8 +485,14 @@ impl AbpPackage {
 
         // Extract metadata
         let meta_start = header.metadata_offset as usize;
-        let meta_end = meta_start + header.metadata_size as usize;
-        if meta_end > data.len() {
+        if meta_start < ABP_HEADER_SIZE {
+            return None;
+        }
+        // `start + size` can overflow usize (values come straight off disk),
+        // wrapping past the `end > data.len()` guard into an OOB slice panic.
+        // Use checked_add and bound both endpoints against the buffer length.
+        let meta_end = meta_start.checked_add(header.metadata_size as usize)?;
+        if meta_start > data.len() || meta_end > data.len() {
             return None;
         }
         let meta_data = &data[meta_start..meta_end];
@@ -496,16 +509,22 @@ impl AbpPackage {
 
         // Extract manifest
         let manifest_start = header.manifest_offset as usize;
-        let manifest_end = manifest_start + header.manifest_size as usize;
-        if manifest_end > data.len() {
+        if manifest_start < ABP_HEADER_SIZE {
+            return None;
+        }
+        let manifest_end = manifest_start.checked_add(header.manifest_size as usize)?;
+        if manifest_start > data.len() || manifest_end > data.len() {
             return None;
         }
         let manifest = Manifest::from_bytes(&data[manifest_start..manifest_end])?;
 
         // Extract payload
         let payload_start = header.payload_offset as usize;
-        let payload_end = payload_start + header.payload_size as usize;
-        if payload_end > data.len() {
+        if payload_start < ABP_HEADER_SIZE {
+            return None;
+        }
+        let payload_end = payload_start.checked_add(header.payload_size as usize)?;
+        if payload_start > data.len() || payload_end > data.len() {
             return None;
         }
         let payload = data[payload_start..payload_end].to_vec();
@@ -513,10 +532,11 @@ impl AbpPackage {
         // Extract signature if present
         let (signature, key_id) = if header.is_signed() {
             let sig_start = payload_end;
-            let key_start = sig_start + ABP_SIGNATURE_SIZE;
-            let key_end = key_start + ABP_KEY_ID_SIZE;
+            // Each trailer offset can overflow usize as well; bound them all.
+            let key_start = sig_start.checked_add(ABP_SIGNATURE_SIZE)?;
+            let key_end = key_start.checked_add(ABP_KEY_ID_SIZE)?;
 
-            if key_end > data.len() {
+            if sig_start > data.len() || key_start > data.len() || key_end > data.len() {
                 return None;
             }
 
@@ -622,7 +642,7 @@ impl AbpPackage {
     /// decompressed. Otherwise, the raw payload is returned.
     pub fn decompressed_payload(&self) -> Option<Vec<u8>> {
         if self.header.flags & flags::COMPRESSED_PAYLOAD != 0 {
-            zstd_nostd::decompress(&self.payload).ok()
+            zstd_nostd::decompress_bounded(&self.payload, ABP_MAX_PAYLOAD).ok()
         } else {
             Some(self.payload.clone())
         }

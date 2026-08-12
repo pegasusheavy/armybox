@@ -310,6 +310,9 @@ impl Database {
 
     /// Get a package record by name
     pub fn get_package(&self, name: &str) -> Option<PackageRecord> {
+        if !valid_pkg_name(name.as_bytes()) {
+            return None;
+        }
         let mut path = self.path.clone();
         path.extend_from_slice(b"/packages/");
         path.extend_from_slice(name.as_bytes());
@@ -327,25 +330,23 @@ impl Database {
 
     /// Store a package record
     pub fn put_package(&self, record: &PackageRecord) -> bool {
+        if !valid_pkg_name(record.name.as_bytes()) {
+            return false;
+        }
         let mut path = self.path.clone();
         path.extend_from_slice(b"/packages/");
         path.extend_from_slice(record.name.as_bytes());
 
         let data = record.to_bytes();
 
-        let fd = io::open(&path, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
-        if fd < 0 {
-            return false;
-        }
-
-        let written = io::write_all(fd, &data);
-        io::close(fd);
-
-        written == data.len() as isize
+        atomic_write(&path, &data)
     }
 
     /// Delete a package record
     pub fn delete_package(&self, name: &str) -> bool {
+        if !valid_pkg_name(name.as_bytes()) {
+            return false;
+        }
         let mut path = self.path.clone();
         path.extend_from_slice(b"/packages/");
         path.extend_from_slice(name.as_bytes());
@@ -466,15 +467,9 @@ impl Database {
             }
         }
 
-        let fd = io::open(&idx_path, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
-        if fd < 0 {
-            return false;
-        }
-
-        let written = io::write_all(fd, &new_data);
-        io::close(fd);
-
-        written == new_data.len() as isize
+        // Atomically replace the whole index: this rewrites ownership data for
+        // ALL packages, so a crash mid-write must not corrupt it.
+        atomic_write(&idx_path, &new_data)
     }
 
     /// Unregister a single file from the index
@@ -506,15 +501,8 @@ impl Database {
             }
         }
 
-        let fd = io::open(&idx_path, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
-        if fd < 0 {
-            return false;
-        }
-
-        let written = io::write_all(fd, &new_data);
-        io::close(fd);
-
-        written == new_data.len() as isize
+        // Atomically replace the index to avoid corrupting it on a crash.
+        atomic_write(&idx_path, &new_data)
     }
 
     /// Get repository record
@@ -732,9 +720,124 @@ fn ensure_dir(path: &[u8]) {
     io::mkdir(path, 0o755);
 }
 
+/// Validate a package/record name used to build an on-disk path.
+///
+/// Prevents path traversal: `name` is concatenated onto a database
+/// subdirectory, so an unvalidated `../../etc/...` would escape the
+/// database. A valid name is non-empty, contains only
+/// `[A-Za-z0-9._+-]` (no `/`), does not start with `.`, and contains
+/// no `..` sequence.
+fn valid_pkg_name(name: &[u8]) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    if name[0] == b'.' {
+        return false;
+    }
+    for (i, &c) in name.iter().enumerate() {
+        let ok = c.is_ascii_alphanumeric()
+            || c == b'.'
+            || c == b'_'
+            || c == b'+'
+            || c == b'-';
+        if !ok {
+            return false;
+        }
+        // Reject any ".." sequence.
+        if c == b'.' && i + 1 < name.len() && name[i + 1] == b'.' {
+            return false;
+        }
+    }
+    true
+}
+
+/// Atomically write `data` to `path`.
+///
+/// Writes to a temporary file (`<path>.tmp.<pid>`) then `rename()`s it
+/// over the target, which is atomic on POSIX. On any failure the temp
+/// file is unlinked and `false` is returned, leaving the original
+/// target untouched. This prevents a crash mid-write from corrupting
+/// the record.
+fn atomic_write(path: &[u8], data: &[u8]) -> bool {
+    let pid = unsafe { libc::getpid() } as u64;
+
+    let mut tmp = Vec::with_capacity(path.len() + 20);
+    tmp.extend_from_slice(path);
+    tmp.extend_from_slice(b".tmp.");
+    // Append the PID as decimal digits (no_std / no format machinery).
+    let mut n = pid;
+    if n == 0 {
+        tmp.push(b'0');
+    } else {
+        let mut digits = [0u8; 20];
+        let mut i = digits.len();
+        while n > 0 {
+            i -= 1;
+            digits[i] = b'0' + (n % 10) as u8;
+            n /= 10;
+        }
+        tmp.extend_from_slice(&digits[i..]);
+    }
+
+    let fd = io::open(&tmp, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
+    if fd < 0 {
+        return false;
+    }
+
+    let written = io::write_all(fd, data);
+    io::close(fd);
+
+    if written != data.len() as isize {
+        io::unlink(&tmp);
+        return false;
+    }
+
+    if io::rename(&tmp, path) != 0 {
+        io::unlink(&tmp);
+        return false;
+    }
+
+    true
+}
+
 /// Get current timestamp
 pub fn current_time() -> u64 {
     let mut tv: libc::timeval = unsafe { core::mem::zeroed() };
     unsafe { libc::gettimeofday(&mut tv, core::ptr::null_mut()) };
     tv.tv_sec as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_pkg_name;
+
+    #[test]
+    fn test_valid_pkg_name_accepts_normal_names() {
+        assert!(valid_pkg_name(b"ripgrep"));
+        assert!(valid_pkg_name(b"musl-dev"));
+        assert!(valid_pkg_name(b"gcc-13.2.0"));
+        assert!(valid_pkg_name(b"lib_foo"));
+        assert!(valid_pkg_name(b"g++"));
+        assert!(valid_pkg_name(b"a"));
+    }
+
+    #[test]
+    fn test_valid_pkg_name_rejects_traversal() {
+        // Empty
+        assert!(!valid_pkg_name(b""));
+        // Path separators escape the packages dir.
+        assert!(!valid_pkg_name(b"../../etc/cron.d/x"));
+        assert!(!valid_pkg_name(b"foo/bar"));
+        assert!(!valid_pkg_name(b"/etc/passwd"));
+        // Parent-dir components.
+        assert!(!valid_pkg_name(b".."));
+        assert!(!valid_pkg_name(b"foo..bar"));
+        // Leading dot (hidden / relative).
+        assert!(!valid_pkg_name(b"."));
+        assert!(!valid_pkg_name(b".hidden"));
+        // Disallowed characters.
+        assert!(!valid_pkg_name(b"foo bar"));
+        assert!(!valid_pkg_name(b"foo\0bar"));
+        assert!(!valid_pkg_name(b"foo$bar"));
+    }
 }
