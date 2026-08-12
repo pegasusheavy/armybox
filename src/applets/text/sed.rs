@@ -4,8 +4,9 @@
 //! Reference: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sed.html
 //!
 //! Implements a self-contained backtracking BRE/ERE regex engine (with capture
-//! groups) plus a full sed cycle: addresses (line, `$`, `/re/`, ranges, `!`),
-//! and the commands `s y d p a i c q n N = b t :`.
+//! groups, memoized to bound catastrophic backtracking) plus a full sed cycle:
+//! addresses (line, `$`, `/re/`, ranges, `0,/re/`, `!`), address-scoped `{ }`
+//! blocks, and the commands `s y d p a i c q n N g G h H x = b t : { }`.
 
 use crate::io;
 use crate::applets::get_arg;
@@ -96,64 +97,80 @@ fn is_group_open(b: &[u8], p: usize, ere: bool) -> bool {
             || (!ere && b[p] == b'\\' && p + 1 < b.len() && b[p + 1] == b'('))
 }
 
-struct P<'a> {
+/// POSIX RE_DUP_MAX: maximum permitted count in a `{n,m}` interval.
+const RE_DUP_MAX: usize = 32767;
+/// Maximum parser nesting depth for groups/alternation (parse-error backstop).
+const MAX_NEST: usize = 200;
+/// Maximum recursion depth for the matcher (stack-overflow backstop on long lines).
+const RE_MAX_DEPTH: usize = 40_000;
+
+struct Parser<'a> {
     b: &'a [u8],
     pos: usize,
     ere: bool,
     gc: usize,
+    depth: usize,
 }
 
-impl<'a> P<'a> {
-    fn alt(&mut self) -> Ast {
+impl<'a> Parser<'a> {
+    fn alt(&mut self) -> Result<Ast, ()> {
+        self.depth += 1;
+        if self.depth > MAX_NEST {
+            return Err(());
+        }
         let mut br: Vec<Ast> = Vec::new();
-        br.push(self.concat());
+        br.push(self.concat()?);
         while is_alt_op(self.b, self.pos, self.ere) {
             self.pos += if self.ere { 1 } else { 2 };
-            br.push(self.concat());
+            br.push(self.concat()?);
         }
-        if br.len() == 1 {
+        self.depth -= 1;
+        Ok(if br.len() == 1 {
             br.pop().unwrap()
         } else {
             Ast::Alt(br)
-        }
+        })
     }
 
-    fn concat(&mut self) -> Ast {
+    fn concat(&mut self) -> Result<Ast, ()> {
         let mut items: Vec<Ast> = Vec::new();
         while self.pos < self.b.len()
             && !is_alt_op(self.b, self.pos, self.ere)
             && !is_group_close(self.b, self.pos, self.ere)
         {
             let first = items.is_empty();
-            let a = self.atom(first);
-            let a = self.quant(a);
+            let a = self.atom(first)?;
+            let a = self.quant(a)?;
             items.push(a);
         }
-        if items.is_empty() {
+        Ok(if items.is_empty() {
             Ast::Empty
         } else if items.len() == 1 {
             items.pop().unwrap()
         } else {
             Ast::Concat(items)
-        }
+        })
     }
 
-    fn atom(&mut self, first: bool) -> Ast {
+    fn atom(&mut self, first: bool) -> Result<Ast, ()> {
         let b = self.b;
         if is_group_open(b, self.pos, self.ere) {
             self.pos += if self.ere { 1 } else { 2 };
             self.gc += 1;
             let idx = self.gc;
-            let inner = self.alt();
+            let inner = self.alt()?;
             if is_group_close(b, self.pos, self.ere) {
                 self.pos += if self.ere { 1 } else { 2 };
+            } else {
+                // Unterminated group: `\(` (BRE) or `(` (ERE) with no close.
+                return Err(());
             }
-            return Ast::Group(idx, Box::new(inner));
+            return Ok(Ast::Group(idx, Box::new(inner)));
         }
         let c = b[self.pos];
         if c == b'^' && first {
             self.pos += 1;
-            return Ast::Start;
+            return Ok(Ast::Start);
         }
         if c == b'$' {
             let nx = self.pos + 1;
@@ -162,12 +179,12 @@ impl<'a> P<'a> {
                 || is_group_close(b, nx, self.ere);
             if end {
                 self.pos += 1;
-                return Ast::End;
+                return Ok(Ast::End);
             }
         }
         if c == b'.' {
             self.pos += 1;
-            return Ast::Any;
+            return Ok(Ast::Any);
         }
         if c == b'[' {
             return self.class();
@@ -181,13 +198,13 @@ impl<'a> P<'a> {
                 b'r' => b'\r',
                 _ => nx,
             };
-            return Ast::Char(ch);
+            return Ok(Ast::Char(ch));
         }
         self.pos += 1;
-        Ast::Char(c)
+        Ok(Ast::Char(c))
     }
 
-    fn quant(&mut self, mut a: Ast) -> Ast {
+    fn quant(&mut self, mut a: Ast) -> Result<Ast, ()> {
         loop {
             if self.pos >= self.b.len() {
                 break;
@@ -210,7 +227,7 @@ impl<'a> P<'a> {
                     continue;
                 }
                 if c == b'{' {
-                    if let Some((mn, mx)) = self.interval(self.pos + 1, false) {
+                    if let Some((mn, mx)) = self.interval(self.pos + 1, false)? {
                         a = Ast::Repeat(Box::new(a), mn, mx);
                         continue;
                     }
@@ -228,7 +245,7 @@ impl<'a> P<'a> {
                     continue;
                 }
                 if nx == b'{' {
-                    if let Some((mn, mx)) = self.interval(self.pos + 2, true) {
+                    if let Some((mn, mx)) = self.interval(self.pos + 2, true)? {
                         a = Ast::Repeat(Box::new(a), mn, mx);
                         continue;
                     }
@@ -236,29 +253,41 @@ impl<'a> P<'a> {
             }
             break;
         }
-        a
+        Ok(a)
     }
 
-    fn interval(&mut self, start: usize, bre: bool) -> Option<(usize, Option<usize>)> {
+    /// Parse a `{n}` / `{n,}` / `{n,m}` interval starting at `start`.
+    /// `Ok(None)` means "not a well-formed interval here" (treat `{` literally);
+    /// `Err(())` means a syntactically-present interval with an illegal bound
+    /// (overflow / count > RE_DUP_MAX / n > m).
+    fn interval(&mut self, start: usize, bre: bool) -> Result<Option<(usize, Option<usize>)>, ()> {
         let b = self.b;
         let mut p = start;
-        let mut mn = 0usize;
+        let mut mn: usize = 0;
+        let mut mn_overflow = false;
         let mut got = false;
         while p < b.len() && b[p].is_ascii_digit() {
-            mn = mn * 10 + (b[p] - b'0') as usize;
+            mn = mn.saturating_mul(10).saturating_add((b[p] - b'0') as usize);
+            if mn > RE_DUP_MAX {
+                mn_overflow = true;
+            }
             p += 1;
             got = true;
         }
         if !got {
-            return None;
+            return Ok(None);
         }
+        let mut mx_overflow = false;
         let mx;
         if p < b.len() && b[p] == b',' {
             p += 1;
             if p < b.len() && b[p].is_ascii_digit() {
-                let mut m = 0usize;
+                let mut m: usize = 0;
                 while p < b.len() && b[p].is_ascii_digit() {
-                    m = m * 10 + (b[p] - b'0') as usize;
+                    m = m.saturating_mul(10).saturating_add((b[p] - b'0') as usize);
+                    if m > RE_DUP_MAX {
+                        mx_overflow = true;
+                    }
                     p += 1;
                 }
                 mx = Some(m);
@@ -268,22 +297,32 @@ impl<'a> P<'a> {
         } else {
             mx = Some(mn);
         }
+        // Require the closing brace before deciding this is an interval at all.
         if bre {
             if p + 1 < b.len() && b[p] == b'\\' && b[p + 1] == b'}' {
                 p += 2;
             } else {
-                return None;
+                return Ok(None);
             }
         } else if p < b.len() && b[p] == b'}' {
             p += 1;
         } else {
-            return None;
+            return Ok(None);
+        }
+        // Syntactically an interval: now validate the bounds.
+        if mn_overflow || mx_overflow {
+            return Err(());
+        }
+        if let Some(m) = mx {
+            if mn > m {
+                return Err(());
+            }
         }
         self.pos = p;
-        Some((mn, mx))
+        Ok(Some((mn, mx)))
     }
 
-    fn class(&mut self) -> Ast {
+    fn class(&mut self) -> Result<Ast, ()> {
         let b = self.b;
         self.pos += 1; // consume '['
         let mut negated = false;
@@ -293,10 +332,12 @@ impl<'a> P<'a> {
         }
         let mut ranges: Vec<(u8, u8)> = Vec::new();
         let mut first = true;
+        let mut closed = false;
         while self.pos < b.len() {
             let c = b[self.pos];
             if c == b']' && !first {
                 self.pos += 1;
+                closed = true;
                 break;
             }
             first = false;
@@ -308,7 +349,11 @@ impl<'a> P<'a> {
                 self.pos += 1;
             }
         }
-        Ast::Class(Class { negated, ranges })
+        if !closed {
+            // Unterminated bracket expression.
+            return Err(());
+        }
+        Ok(Ast::Class(Class { negated, ranges }))
     }
 }
 
@@ -398,6 +443,20 @@ struct Regex {
     icase: bool,
 }
 
+/// Backtracking matcher.
+///
+/// `memo[pc*(len+1)+pos]` records that `(pc, pos)` has already been entered
+/// during the current match attempt. Revisiting it can never succeed (any
+/// successful continuation would have been found the first time), so we prune
+/// it. This bounds catastrophic backtracking (ReDoS) and also serves as the
+/// empty-loop progress guard: a nullable star that loops back to its own
+/// `Split` at the same `pos` hits the memo and terminates instead of recursing
+/// forever. `depth` is a hard stack-overflow backstop on very long lines.
+///
+/// The pattern language has no back-references, so captures never gate whether
+/// the remainder matches; pruning by `(pc, pos)` alone is therefore sound, and
+/// the greedy-first exploration still records greedy-correct capture slots.
+#[allow(clippy::too_many_arguments)]
 fn re_run(
     prog: &[Inst],
     icase: bool,
@@ -405,57 +464,70 @@ fn re_run(
     text: &[u8],
     pos: usize,
     saves: &mut Vec<Option<usize>>,
+    memo: &mut [bool],
+    depth: usize,
 ) -> Option<usize> {
+    if depth > RE_MAX_DEPTH {
+        return None;
+    }
+    let len = text.len();
+    let key = pc * (len + 1) + pos;
+    if memo[key] {
+        return None;
+    }
+    memo[key] = true;
+    let d = depth + 1;
     match &prog[pc] {
         Inst::Match => Some(pos),
         Inst::Char(c) => {
             if pos < text.len() && eqc(text[pos], *c, icase) {
-                re_run(prog, icase, pc + 1, text, pos + 1, saves)
+                re_run(prog, icase, pc + 1, text, pos + 1, saves, memo, d)
             } else {
                 None
             }
         }
         Inst::Any => {
             if pos < text.len() {
-                re_run(prog, icase, pc + 1, text, pos + 1, saves)
+                re_run(prog, icase, pc + 1, text, pos + 1, saves, memo, d)
             } else {
                 None
             }
         }
         Inst::Class(cl) => {
             if pos < text.len() && cl.matches(text[pos], icase) {
-                re_run(prog, icase, pc + 1, text, pos + 1, saves)
+                re_run(prog, icase, pc + 1, text, pos + 1, saves, memo, d)
             } else {
                 None
             }
         }
         Inst::Start => {
             if pos == 0 {
-                re_run(prog, icase, pc + 1, text, pos, saves)
+                re_run(prog, icase, pc + 1, text, pos, saves, memo, d)
             } else {
                 None
             }
         }
         Inst::End => {
             if pos == text.len() {
-                re_run(prog, icase, pc + 1, text, pos, saves)
+                re_run(prog, icase, pc + 1, text, pos, saves, memo, d)
             } else {
                 None
             }
         }
-        Inst::Jmp(x) => re_run(prog, icase, *x, text, pos, saves),
+        Inst::Jmp(x) => re_run(prog, icase, *x, text, pos, saves, memo, d),
         Inst::Split(a, b) => {
-            let snap = saves.clone();
-            if let Some(e) = re_run(prog, icase, *a, text, pos, saves) {
+            // No snapshot of `saves` is needed: every `Save` frame restores its
+            // own touched slot when its subtree fails, so on a `None` return all
+            // capture slots are already back to their pre-call values.
+            if let Some(e) = re_run(prog, icase, *a, text, pos, saves, memo, d) {
                 return Some(e);
             }
-            *saves = snap;
-            re_run(prog, icase, *b, text, pos, saves)
+            re_run(prog, icase, *b, text, pos, saves, memo, d)
         }
         Inst::Save(k) => {
             let old = saves[*k];
             saves[*k] = Some(pos);
-            match re_run(prog, icase, pc + 1, text, pos, saves) {
+            match re_run(prog, icase, pc + 1, text, pos, saves, memo, d) {
                 Some(e) => Some(e),
                 None => {
                     saves[*k] = old;
@@ -467,33 +539,45 @@ fn re_run(
 }
 
 impl Regex {
-    fn compile(src: &[u8], ere: bool, icase: bool) -> Regex {
-        let mut p = P {
+    fn compile(src: &[u8], ere: bool, icase: bool) -> Result<Regex, ()> {
+        let mut p = Parser {
             b: src,
             pos: 0,
             ere,
             gc: 0,
+            depth: 0,
         };
-        let ast = p.alt();
+        let ast = p.alt()?;
+        // Leftover input means an unmatched group close (e.g. a stray `\)` / `)`).
+        if p.pos != src.len() {
+            return Err(());
+        }
         let ngroups = p.gc;
         let mut prog: Vec<Inst> = Vec::new();
         prog.push(Inst::Save(0));
         emit(&ast, &mut prog);
         prog.push(Inst::Save(1));
         prog.push(Inst::Match);
-        Regex {
+        Ok(Regex {
             prog,
             nslots: 2 * (ngroups + 1),
             icase,
-        }
+        })
     }
 
     fn search_from(&self, text: &[u8], start: usize) -> Option<Vec<Option<usize>>> {
+        let len = text.len();
+        let cells = self.prog.len() * (len + 1);
+        let mut memo: Vec<bool> = Vec::new();
+        memo.resize(cells, false);
         let mut s = start;
-        while s <= text.len() {
+        while s <= len {
+            for e in memo.iter_mut() {
+                *e = false;
+            }
             let mut saves: Vec<Option<usize>> = Vec::new();
             saves.resize(self.nslots, None);
-            if re_run(&self.prog, self.icase, 0, text, s, &mut saves).is_some() {
+            if re_run(&self.prog, self.icase, 0, text, s, &mut saves, &mut memo, 0).is_some() {
                 return Some(saves);
             }
             s += 1;
@@ -652,6 +736,16 @@ enum Cmd {
     Branch(Option<Vec<u8>>),
     Test(Option<Vec<u8>>),
     Label(Vec<u8>),
+    // Hold-space commands.
+    Get,      // g: pattern <- hold
+    GetApp,   // G: pattern <- pattern \n hold
+    Hold,     // h: hold <- pattern
+    HoldApp,  // H: hold <- hold \n pattern
+    Exchange, // x: swap pattern and hold
+    // `{ ... }` address-scoped grouping. `BlockStart` carries the index of its
+    // matching `BlockEnd`; the enclosing address/negate live on the Command.
+    BlockStart { end: usize },
+    BlockEnd,
 }
 
 struct Command {
@@ -691,30 +785,32 @@ fn read_delim(b: &[u8], pos: &mut usize, delim: u8) -> Option<Vec<u8>> {
     None
 }
 
-fn parse_addr(b: &[u8], pos: &mut usize, ere: bool) -> Option<Addr> {
+/// Parse an optional address. `Ok(None)` = no address here; `Err(())` = a
+/// syntactically-present address that is malformed (e.g. bad regex).
+fn parse_addr(b: &[u8], pos: &mut usize, ere: bool) -> Result<Option<Addr>, ()> {
     while *pos < b.len() && (b[*pos] == b' ' || b[*pos] == b'\t') {
         *pos += 1;
     }
     if *pos >= b.len() {
-        return None;
+        return Ok(None);
     }
     let c = b[*pos];
     if c.is_ascii_digit() {
         let mut n = 0usize;
         while *pos < b.len() && b[*pos].is_ascii_digit() {
-            n = n * 10 + (b[*pos] - b'0') as usize;
+            n = n.saturating_mul(10).saturating_add((b[*pos] - b'0') as usize);
             *pos += 1;
         }
-        Some(Addr::Line(n))
+        Ok(Some(Addr::Line(n)))
     } else if c == b'$' {
         *pos += 1;
-        Some(Addr::Last)
+        Ok(Some(Addr::Last))
     } else if c == b'/' {
         *pos += 1;
-        let raw = read_delim(b, pos, b'/')?;
-        Some(Addr::Rx(Regex::compile(&raw, ere, false)))
+        let raw = read_delim(b, pos, b'/').ok_or(())?;
+        Ok(Some(Addr::Rx(Regex::compile(&raw, ere, false)?)))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -769,8 +865,10 @@ fn read_label(b: &[u8], pos: &mut usize) -> Vec<u8> {
     out
 }
 
-fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
+fn parse_script(src: &[u8], ere: bool) -> Result<Vec<Command>, ()> {
     let mut cmds: Vec<Command> = Vec::new();
+    // Stack of open `{` command indices, so `}` can back-patch the jump target.
+    let mut block_stack: Vec<usize> = Vec::new();
     let mut pos = 0usize;
     let b = src;
     loop {
@@ -790,14 +888,9 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
             }
             continue;
         }
-        // Grouping braces: treat as no-op separators.
-        if b[pos] == b'{' || b[pos] == b'}' {
-            pos += 1;
-            continue;
-        }
 
         // Addresses.
-        let a1 = parse_addr(b, &mut pos, ere);
+        let a1 = parse_addr(b, &mut pos, ere)?;
         let mut a2 = None;
         if a1.is_some() {
             while pos < b.len() && (b[pos] == b' ' || b[pos] == b'\t') {
@@ -805,7 +898,7 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
             }
             if pos < b.len() && b[pos] == b',' {
                 pos += 1;
-                a2 = parse_addr(b, &mut pos, ere);
+                a2 = parse_addr(b, &mut pos, ere)?;
             }
         }
 
@@ -824,20 +917,56 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
         }
 
         if pos >= b.len() {
+            // A trailing address with no command is a syntax error.
+            if a1.is_some() {
+                return Err(());
+            }
             break;
         }
         let ch = b[pos];
         pos += 1;
 
+        // `{` opens an address-scoped block; `}` closes the most recent one.
+        if ch == b'{' {
+            block_stack.push(cmds.len());
+            cmds.push(Command {
+                a1,
+                a2,
+                negate,
+                active: false,
+                cmd: Cmd::BlockStart { end: 0 },
+            });
+            continue;
+        }
+        if ch == b'}' {
+            // A close brace takes no address of its own.
+            if a1.is_some() || negate {
+                return Err(());
+            }
+            let start = block_stack.pop().ok_or(())?;
+            let end_idx = cmds.len();
+            if let Cmd::BlockStart { end } = &mut cmds[start].cmd {
+                *end = end_idx;
+            }
+            cmds.push(Command {
+                a1: None,
+                a2: None,
+                negate: false,
+                active: false,
+                cmd: Cmd::BlockEnd,
+            });
+            continue;
+        }
+
         let cmd = match ch {
             b's' => {
                 if pos >= b.len() {
-                    return None;
+                    return Err(());
                 }
                 let delim = b[pos];
                 pos += 1;
-                let pat = read_delim(b, &mut pos, delim)?;
-                let rep = read_delim(b, &mut pos, delim)?;
+                let pat = read_delim(b, &mut pos, delim).ok_or(())?;
+                let rep = read_delim(b, &mut pos, delim).ok_or(())?;
                 let mut global = false;
                 let mut print = false;
                 let mut icase = false;
@@ -860,7 +989,7 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
                         b'0'..=b'9' => {
                             let mut n = 0usize;
                             while pos < b.len() && b[pos].is_ascii_digit() {
-                                n = n * 10 + (b[pos] - b'0') as usize;
+                                n = n.saturating_mul(10).saturating_add((b[pos] - b'0') as usize);
                                 pos += 1;
                             }
                             nth = n;
@@ -872,7 +1001,7 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
                     nth = 1;
                 }
                 Cmd::Subst {
-                    re: Regex::compile(&pat, ere, icase),
+                    re: Regex::compile(&pat, ere, icase)?,
                     repl: parse_repl(&rep),
                     global,
                     nth,
@@ -881,16 +1010,19 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
             }
             b'y' => {
                 if pos >= b.len() {
-                    return None;
+                    return Err(());
                 }
                 let delim = b[pos];
                 pos += 1;
-                let from = read_delim(b, &mut pos, delim)?;
-                let to = read_delim(b, &mut pos, delim)?;
-                Cmd::Trans {
-                    from: unescape_y(&from),
-                    to: unescape_y(&to),
+                let from = read_delim(b, &mut pos, delim).ok_or(())?;
+                let to = read_delim(b, &mut pos, delim).ok_or(())?;
+                let from = unescape_y(&from);
+                let to = unescape_y(&to);
+                // POSIX: the two strings must have equal length.
+                if from.len() != to.len() {
+                    return Err(());
                 }
+                Cmd::Trans { from, to }
             }
             b'd' => Cmd::Delete,
             b'p' => Cmd::Print,
@@ -898,6 +1030,11 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
             b'q' => Cmd::Quit,
             b'n' => Cmd::Next,
             b'N' => Cmd::NextApp,
+            b'g' => Cmd::Get,
+            b'G' => Cmd::GetApp,
+            b'h' => Cmd::Hold,
+            b'H' => Cmd::HoldApp,
+            b'x' => Cmd::Exchange,
             b'a' => Cmd::Append(read_text(b, &mut pos)),
             b'i' => Cmd::Insert(read_text(b, &mut pos)),
             b'c' => Cmd::Change(read_text(b, &mut pos)),
@@ -911,11 +1048,8 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
             }
             b':' => Cmd::Label(read_label(b, &mut pos)),
             _ => {
-                // Unknown command: skip to next separator and ignore.
-                while pos < b.len() && b[pos] != b';' && b[pos] != b'\n' {
-                    pos += 1;
-                }
-                continue;
+                // Genuinely unsupported command: hard error.
+                return Err(());
             }
         };
 
@@ -927,7 +1061,36 @@ fn parse_script(src: &[u8], ere: bool) -> Option<Vec<Command>> {
             cmd,
         });
     }
-    Some(cmds)
+
+    // Every `{` must have a matching `}`.
+    if !block_stack.is_empty() {
+        return Err(());
+    }
+
+    // Validate that every b/t target label is defined.
+    for c in &cmds {
+        let name = match &c.cmd {
+            Cmd::Branch(n) => n,
+            Cmd::Test(n) => n,
+            _ => continue,
+        };
+        if let Some(target) = name {
+            let mut found = false;
+            for other in &cmds {
+                if let Cmd::Label(l) = &other.cmd {
+                    if l == target {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if !found {
+                return Err(());
+            }
+        }
+    }
+
+    Ok(cmds)
 }
 
 fn unescape_y(src: &[u8]) -> Vec<u8> {
@@ -1054,8 +1217,11 @@ fn resolve_label(cmds: &[Command], name: &Option<Vec<u8>>) -> usize {
 
 fn run_program(lines: &[Vec<u8>], cmds: &mut [Command], autoprint: bool, out: &mut Vec<u8>) {
     for c in cmds.iter_mut() {
-        c.active = false;
+        // GNU `0,/re/` ranges are active from line 1, so their end address can
+        // fire on the very first line. Mark them active up front.
+        c.active = matches!(c.a1, Some(Addr::Line(0))) && c.a2.is_some();
     }
+    let mut hold: Vec<u8> = Vec::new();
     let total = lines.len();
     let mut next_idx = 0usize;
     'outer: loop {
@@ -1078,6 +1244,23 @@ fn run_program(lines: &[Vec<u8>], cmds: &mut [Command], autoprint: bool, out: &m
                 break;
             }
             let sel = compute_selection(&mut cmds[pc], line_no, is_last, &ps);
+
+            // Address-scoped block: if the block's address does not select this
+            // line, skip the entire block by jumping to its matching `}`.
+            let block_end = if let Cmd::BlockStart { end } = &cmds[pc].cmd {
+                Some(*end)
+            } else {
+                None
+            };
+            if let Some(end) = block_end {
+                if sel == cmds[pc].negate {
+                    pc = end; // BlockEnd is a no-op; the next iteration advances past it.
+                } else {
+                    pc += 1; // enter the block
+                }
+                continue 'prog;
+            }
+
             if sel == cmds[pc].negate {
                 pc += 1;
                 continue;
@@ -1181,6 +1364,24 @@ fn run_program(lines: &[Vec<u8>], cmds: &mut [Command], autoprint: bool, out: &m
                     }
                 }
                 Cmd::Label(_) => {}
+                Cmd::Get => {
+                    ps = hold.clone();
+                }
+                Cmd::GetApp => {
+                    ps.push(b'\n');
+                    ps.extend_from_slice(&hold);
+                }
+                Cmd::Hold => {
+                    hold = ps.clone();
+                }
+                Cmd::HoldApp => {
+                    hold.push(b'\n');
+                    hold.extend_from_slice(&ps);
+                }
+                Cmd::Exchange => {
+                    core::mem::swap(&mut ps, &mut hold);
+                }
+                Cmd::BlockStart { .. } | Cmd::BlockEnd => {}
             }
 
             match jump {
@@ -1216,6 +1417,26 @@ fn read_file(path: &[u8]) -> Option<Vec<u8>> {
     Some(v)
 }
 
+/// `base` bytes followed by `extra` bytes (used to derive backup/temp paths).
+fn join_bytes(base: &[u8], extra: &[u8]) -> Vec<u8> {
+    let mut v: Vec<u8> = Vec::new();
+    v.extend_from_slice(base);
+    v.extend_from_slice(extra);
+    v
+}
+
+/// Create/truncate `path` and write `data` in full, then close.
+/// Returns true only on a fully-successful write AND close.
+fn write_file_all(path: &[u8], data: &[u8]) -> bool {
+    let fd = io::open(path, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
+    if fd < 0 {
+        return false;
+    }
+    let n = io::write_all(fd, data);
+    let c = io::close(fd);
+    n == data.len() as isize && c == 0
+}
+
 /// sed - stream editor
 ///
 /// # Synopsis
@@ -1231,6 +1452,7 @@ pub fn sed(argc: i32, argv: *const *const u8) -> i32 {
     let mut suppress = false;
     let mut ere = false;
     let mut inplace = false;
+    let mut inplace_suffix: Option<Vec<u8>> = None;
     let mut exit_code = 0i32;
     let mut end_opts = false;
 
@@ -1253,7 +1475,13 @@ pub fn sed(argc: i32, argv: *const *const u8) -> i32 {
                     b'r' | b'E' => ere = true,
                     b'i' => {
                         inplace = true;
-                        // Ignore any suffix attached to -i.
+                        // A suffix may be attached directly to -i (e.g. `-i.bak`).
+                        let rest = &bytes[j + 1..];
+                        if !rest.is_empty() {
+                            let mut s: Vec<u8> = Vec::new();
+                            s.extend_from_slice(rest);
+                            inplace_suffix = Some(s);
+                        }
                         j = bytes.len();
                         break;
                     }
@@ -1326,8 +1554,8 @@ pub fn sed(argc: i32, argv: *const *const u8) -> i32 {
     }
 
     let mut cmds = match parse_script(&scripts, ere) {
-        Some(c) => c,
-        None => {
+        Ok(c) => c,
+        Err(()) => {
             io::write_str(2, b"sed: error in script\n");
             return 1;
         }
@@ -1335,7 +1563,12 @@ pub fn sed(argc: i32, argv: *const *const u8) -> i32 {
 
     let autoprint = !suppress;
 
-    if inplace && !files.is_empty() {
+    if inplace {
+        // In-place editing requires at least one named file operand.
+        if files.is_empty() {
+            io::write_str(2, b"sed: no input files for -i\n");
+            return 1;
+        }
         for f in &files {
             let data = match read_file(f) {
                 Some(d) => d,
@@ -1350,16 +1583,40 @@ pub fn sed(argc: i32, argv: *const *const u8) -> i32 {
             let lines = split_lines(&data);
             let mut out: Vec<u8> = Vec::new();
             run_program(&lines, &mut cmds, autoprint, &mut out);
-            let fd = io::open(f, libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC, 0o644);
-            if fd < 0 {
-                io::write_str(2, b"sed: can't write ");
+
+            // Backup (`-i.bak`): copy the original before touching it.
+            if let Some(suf) = &inplace_suffix {
+                let bpath = join_bytes(f, suf);
+                if !write_file_all(&bpath, &data) {
+                    io::write_str(2, b"sed: couldn't create backup ");
+                    io::write_all(2, &bpath);
+                    io::write_str(2, b"\n");
+                    exit_code = 2;
+                    continue; // leave the original untouched
+                }
+            }
+
+            // Write to a temp file in the same directory, then rename over the
+            // original only after a fully-successful write+close. On any error
+            // the original file is left intact.
+            let mut tmp = join_bytes(f, b".sed_tmp");
+            push_num(&mut tmp, io::getpid() as u64);
+            if !write_file_all(&tmp, &out) {
+                io::write_str(2, b"sed: couldn't write temp file for ");
                 io::write_all(2, f);
                 io::write_str(2, b"\n");
+                io::unlink(&tmp);
                 exit_code = 2;
                 continue;
             }
-            io::write_all(fd, &out);
-            io::close(fd);
+            if io::rename(&tmp, f) != 0 {
+                io::write_str(2, b"sed: couldn't replace ");
+                io::write_all(2, f);
+                io::write_str(2, b"\n");
+                io::unlink(&tmp);
+                exit_code = 2;
+                continue;
+            }
         }
         return exit_code;
     }
@@ -1390,7 +1647,11 @@ pub fn sed(argc: i32, argv: *const *const u8) -> i32 {
     let lines = split_lines(&data);
     let mut out: Vec<u8> = Vec::new();
     run_program(&lines, &mut cmds, autoprint, &mut out);
-    io::write_all(1, &out);
+    let n = io::write_all(1, &out);
+    if n != out.len() as isize {
+        io::write_str(2, b"sed: write error\n");
+        return 2;
+    }
 
     exit_code
 }

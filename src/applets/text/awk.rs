@@ -32,12 +32,6 @@ fn fabs(x: f64) -> f64 {
     if x < 0.0 { -x } else { x }
 }
 
-/// Traditional awk aborts the whole program on division/modulo by zero.
-fn awk_div_by_zero() -> ! {
-    crate::io::write_str(2, b"awk: division by zero\n");
-    unsafe { libc::exit(2) }
-}
-
 /// Truncate toward zero.
 fn ftrunc(x: f64) -> f64 {
     if !x.is_finite() {
@@ -459,6 +453,24 @@ fn snp_str(spec: &[u8], s: &[u8]) -> Vec<u8> {
 }
 
 // ===========================================================================
+// Limits (guard against pathological input / OOM / stack overflow)
+// ===========================================================================
+
+/// Maximum repetition count for a regex interval `{n,m}` (POSIX RE_DUP_MAX).
+const RE_DUP_MAX: usize = 32767;
+/// Recursion-depth cap for the backtracking regex matcher. The CPS matcher uses
+/// large stack frames (trait-object continuations), so this is a pragmatic
+/// backstop against stack overflow on long lines / ReDoS rather than a limit
+/// with linguistic meaning. Matches that would recurse deeper abort cleanly.
+const RE_MAX_DEPTH: usize = 6000;
+/// Recursion-depth cap for the ERE and awk-expression parsers.
+const PARSE_MAX_DEPTH: usize = 2000;
+/// Upper bound on NF / a field index, to reject `NF=2000000000` style OOM.
+const FIELD_MAX: usize = 1_000_000;
+/// Clamp for printf/sprintf field width and precision before snprintf.
+const PRINTF_MAX_WIDTH: i64 = 8192;
+
+// ===========================================================================
 // Regex engine (ERE subset) with continuation-passing backtracking
 // ===========================================================================
 
@@ -479,9 +491,18 @@ enum ReNode {
 #[derive(Clone)]
 struct Regex {
     root: ReNode,
+    /// Set when the pattern failed to parse (unbalanced parens, bad interval,
+    /// unterminated class, or too-deep nesting). The interpreter turns this into
+    /// a runtime error when the regex is actually used.
+    error: bool,
 }
 
-fn re_run(node: &ReNode, t: &[u8], pos: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
+fn re_run(node: &ReNode, t: &[u8], pos: usize, depth: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
+    // Backstop against stack overflow (long lines / catastrophic backtracking):
+    // abort this match path cleanly once the recursion gets too deep.
+    if depth > RE_MAX_DEPTH {
+        return None;
+    }
     match node {
         ReNode::Empty => k(pos),
         ReNode::Char(c) => {
@@ -519,43 +540,51 @@ fn re_run(node: &ReNode, t: &[u8], pos: usize, k: &dyn Fn(usize) -> Option<usize
                 None
             }
         }
-        ReNode::Concat(v) => re_seq(v, 0, t, pos, k),
+        ReNode::Concat(v) => re_seq(v, 0, t, pos, depth + 1, k),
         ReNode::Alt(v) => {
             for a in v {
-                if let Some(e) = re_run(a, t, pos, k) {
+                if let Some(e) = re_run(a, t, pos, depth + 1, k) {
                     return Some(e);
                 }
             }
             None
         }
-        ReNode::Star(inner) => re_star(inner, t, pos, k),
-        ReNode::Quest(inner) => re_run(inner, t, pos, k).or_else(|| k(pos)),
+        ReNode::Star(inner) => re_star(inner, t, pos, depth + 1, k),
+        ReNode::Quest(inner) => re_run(inner, t, pos, depth + 1, k).or_else(|| k(pos)),
     }
 }
 
-fn re_seq(v: &[ReNode], i: usize, t: &[u8], pos: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
+fn re_seq(v: &[ReNode], i: usize, t: &[u8], pos: usize, depth: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
+    if depth > RE_MAX_DEPTH {
+        return None;
+    }
     if i >= v.len() {
         return k(pos);
     }
-    let cont = |p: usize| re_seq(v, i + 1, t, p, k);
-    re_run(&v[i], t, pos, &cont)
+    let cont = |p: usize| re_seq(v, i + 1, t, p, depth, k);
+    re_run(&v[i], t, pos, depth + 1, &cont)
 }
 
-fn re_star(inner: &ReNode, t: &[u8], pos: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
+fn re_star(inner: &ReNode, t: &[u8], pos: usize, depth: usize, k: &dyn Fn(usize) -> Option<usize>) -> Option<usize> {
+    if depth > RE_MAX_DEPTH {
+        return None;
+    }
     let cont = |p: usize| -> Option<usize> {
+        // Empty-loop guard: only recurse if the inner match consumed input,
+        // otherwise `a*` on an empty match would spin forever.
         if p > pos {
-            re_star(inner, t, p, k)
+            re_star(inner, t, p, depth + 1, k)
         } else {
             None
         }
     };
-    re_run(inner, t, pos, &cont).or_else(|| k(pos))
+    re_run(inner, t, pos, depth + 1, &cont).or_else(|| k(pos))
 }
 
 fn re_find(re: &Regex, t: &[u8], from: usize) -> Option<(usize, usize)> {
     let mut start = from;
     loop {
-        if let Some(end) = re_run(&re.root, t, start, &|p| Some(p)) {
+        if let Some(end) = re_run(&re.root, t, start, 0, &|p| Some(p)) {
             return Some((start, end));
         }
         if start >= t.len() {
@@ -575,6 +604,8 @@ fn re_test(re: &Regex, t: &[u8]) -> bool {
 struct ReParser<'a> {
     s: &'a [u8],
     i: usize,
+    error: bool,
+    depth: usize,
 }
 
 impl<'a> ReParser<'a> {
@@ -590,11 +621,20 @@ impl<'a> ReParser<'a> {
     }
 
     fn parse_alt(&mut self) -> ReNode {
+        // Cap nesting depth (groups recurse parse_atom -> parse_alt) to avoid a
+        // parser stack overflow on adversarial patterns like "((((((...".
+        self.depth += 1;
+        if self.depth > PARSE_MAX_DEPTH {
+            self.error = true;
+            self.depth -= 1;
+            return ReNode::Empty;
+        }
         let mut alts = vec![self.parse_concat()];
         while self.peek() == Some(b'|') {
             self.bump();
             alts.push(self.parse_concat());
         }
+        self.depth -= 1;
         if alts.len() == 1 {
             alts.pop().unwrap()
         } else {
@@ -649,22 +689,39 @@ impl<'a> ReParser<'a> {
         atom
     }
 
-    fn try_interval(&mut self, atom: &ReNode) -> Option<ReNode> {
-        let save = self.i;
-        self.bump(); // '{'
-        let mut lo = 0usize;
-        let mut got_lo = false;
+    /// Read a bounded decimal for an interval. Accumulates with saturating
+    /// arithmetic (so it can never overflow/panic) and reports whether any
+    /// digit was seen and whether the value stayed within `RE_DUP_MAX`.
+    fn interval_num(&mut self) -> (usize, bool, bool) {
+        let mut n = 0usize;
+        let mut got = false;
+        let mut ok = true;
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() {
-                lo = lo * 10 + (c - b'0') as usize;
-                got_lo = true;
+                n = n.saturating_mul(10).saturating_add((c - b'0') as usize);
+                if n > RE_DUP_MAX {
+                    ok = false;
+                }
+                got = true;
                 self.bump();
             } else {
                 break;
             }
         }
+        (n, got, ok)
+    }
+
+    fn try_interval(&mut self, atom: &ReNode) -> Option<ReNode> {
+        let save = self.i;
+        self.bump(); // '{'
+        let (lo, got_lo, lo_ok) = self.interval_num();
         if !got_lo {
             self.i = save;
+            return None;
+        }
+        if !lo_ok {
+            // In range syntactically but the bound exceeds RE_DUP_MAX.
+            self.error = true;
             return None;
         }
         let mut hi = Some(lo);
@@ -673,19 +730,13 @@ impl<'a> ReParser<'a> {
             if self.peek() == Some(b'}') {
                 hi = None;
             } else {
-                let mut h = 0usize;
-                let mut got = false;
-                while let Some(c) = self.peek() {
-                    if c.is_ascii_digit() {
-                        h = h * 10 + (c - b'0') as usize;
-                        got = true;
-                        self.bump();
-                    } else {
-                        break;
-                    }
-                }
+                let (h, got, hi_ok) = self.interval_num();
                 if !got {
                     self.i = save;
+                    return None;
+                }
+                if !hi_ok {
+                    self.error = true;
                     return None;
                 }
                 hi = Some(h);
@@ -694,6 +745,14 @@ impl<'a> ReParser<'a> {
         if self.peek() != Some(b'}') {
             self.i = save;
             return None;
+        }
+        // Reject an inverted range like {3,2}.
+        if let Some(h) = hi {
+            if h < lo {
+                self.bump(); // consume '}' so we don't reparse it
+                self.error = true;
+                return None;
+            }
         }
         self.bump(); // '}'
         // Expand: lo copies, then (hi-lo) optional copies, or a Star for unbounded.
@@ -724,6 +783,9 @@ impl<'a> ReParser<'a> {
                 let inner = self.parse_alt();
                 if self.peek() == Some(b')') {
                     self.bump();
+                } else {
+                    // Unbalanced '(' — a bad regex.
+                    self.error = true;
                 }
                 inner
             }
@@ -761,7 +823,11 @@ impl<'a> ReParser<'a> {
         let mut first = true;
         loop {
             match self.peek() {
-                None => break,
+                None => {
+                    // Unterminated '[' ... ']'.
+                    self.error = true;
+                    break;
+                }
                 Some(b']') if !first => {
                     self.bump();
                     break;
@@ -841,8 +907,13 @@ impl<'a> ReParser<'a> {
 }
 
 fn compile_regex(pat: &[u8]) -> Regex {
-    let mut p = ReParser { s: pat, i: 0 };
-    Regex { root: p.parse_alt() }
+    let mut p = ReParser { s: pat, i: 0, error: false, depth: 0 };
+    let root = p.parse_alt();
+    // Leftover input (e.g. a stray ')') means the pattern was malformed.
+    if p.i != pat.len() {
+        p.error = true;
+    }
+    Regex { root, error: p.error }
 }
 
 // ===========================================================================
@@ -1442,6 +1513,7 @@ struct Parser {
     pos: usize,
     no_gt: bool,
     error: bool,
+    depth: usize,
     rules: Vec<Rule>,
     funcs: BTreeMap<Vec<u8>, Func>,
 }
@@ -1453,6 +1525,7 @@ impl Parser {
             pos: 0,
             no_gt: false,
             error: false,
+            depth: 0,
             rules: Vec::new(),
             funcs: BTreeMap::new(),
         }
@@ -1811,7 +1884,18 @@ impl Parser {
     // --- expression grammar ---
 
     fn parse_expr(&mut self) -> Expr {
-        self.parse_assign()
+        // Bound expression-nesting recursion (parenthesised sub-expressions
+        // recurse through parse_primary -> parse_expr) to avoid a parser stack
+        // overflow on adversarial input; past the cap it is a syntax error.
+        self.depth += 1;
+        if self.depth > PARSE_MAX_DEPTH {
+            self.error = true;
+            self.depth -= 1;
+            return Expr::Num(0.0);
+        }
+        let e = self.parse_assign();
+        self.depth -= 1;
+        e
     }
 
     fn parse_assign(&mut self) -> Expr {
@@ -1977,7 +2061,15 @@ impl Parser {
     }
 
     fn parse_unary(&mut self) -> Expr {
-        match self.peek() {
+        // Bound unary-operator chains (`!!!!x`, `- - - x`, ...) against a
+        // parser stack overflow; past the cap it is a syntax error.
+        self.depth += 1;
+        if self.depth > PARSE_MAX_DEPTH {
+            self.error = true;
+            self.depth -= 1;
+            return Expr::Num(0.0);
+        }
+        let e = match self.peek() {
             Tok::Not => {
                 self.bump();
                 Expr::Not(Box::new(self.parse_unary()))
@@ -1999,7 +2091,9 @@ impl Parser {
                 Expr::PreIncr(false, Box::new(self.parse_unary()))
             }
             _ => self.parse_pow(),
-        }
+        };
+        self.depth -= 1;
+        e
     }
 
     fn parse_pow(&mut self) -> Expr {
@@ -2339,6 +2433,9 @@ impl Interp {
         self.record = rec;
     }
     fn set_nf(&mut self, newnf: usize) {
+        if newnf > FIELD_MAX {
+            self.runtime_error(b"awk: NF set too large\n");
+        }
         if newnf < self.nf {
             self.fields.truncate(newnf);
         } else {
@@ -2362,6 +2459,9 @@ impl Interp {
             self.resplit();
         } else if idx >= 1 {
             let n = idx as usize;
+            if n > FIELD_MAX {
+                self.runtime_error(b"awk: field index too large\n");
+            }
             if n > self.nf {
                 self.fields.resize(n, Vec::new());
                 self.nf = n;
@@ -2378,10 +2478,33 @@ impl Interp {
     }
 
     fn flush(&mut self) {
-        if !self.out.is_empty() {
-            io::write_all(1, &self.out);
-            self.out.clear();
+        if self.out.is_empty() {
+            return;
         }
+        // Only clear the bytes that were actually written; on a short write
+        // keep the remainder and report the failure.
+        let want = self.out.len();
+        let wrote = io::write_all_count(1, &self.out);
+        self.out.drain(..wrote);
+        if wrote < want {
+            io::write_str(2, b"awk: write error\n");
+            if self.exit_code == 0 {
+                self.exit_code = 2;
+            }
+        }
+    }
+
+    /// Flush buffered stdout, print `msg` to stderr, and abort the whole
+    /// program (traditional awk behaviour for fatal runtime errors). The flush
+    /// ensures the user still sees everything printed before the error.
+    fn runtime_error(&mut self, msg: &[u8]) -> ! {
+        self.flush();
+        crate::io::write_str(2, msg);
+        unsafe { libc::exit(2) }
+    }
+
+    fn div_by_zero(&mut self) -> ! {
+        self.runtime_error(b"awk: division by zero\n")
     }
 
     // --- evaluation ---
@@ -2389,7 +2512,12 @@ impl Interp {
         match e {
             Expr::Num(n) => Value::Num(*n),
             Expr::Str(s) => Value::Str(s.clone()),
-            Expr::Regex(re) => Value::Num(if re_test(re, &self.record) { 1.0 } else { 0.0 }),
+            Expr::Regex(re) => {
+                if re.error {
+                    self.runtime_error(b"awk: invalid regular expression\n");
+                }
+                Value::Num(if re_test(re, &self.record) { 1.0 } else { 0.0 })
+            }
             Expr::Grouping(inner) => self.eval(inner),
             Expr::Var(name) => self.get_var(name),
             Expr::Field(ie) => {
@@ -2412,8 +2540,8 @@ impl Interp {
                     BinOp::Add => x + y,
                     BinOp::Sub => x - y,
                     BinOp::Mul => x * y,
-                    BinOp::Div => { if y == 0.0 { awk_div_by_zero(); } x / y }
-                    BinOp::Mod => { if y == 0.0 { awk_div_by_zero(); } fmod(x, y) }
+                    BinOp::Div => { if y == 0.0 { self.div_by_zero(); } x / y }
+                    BinOp::Mod => { if y == 0.0 { self.div_by_zero(); } fmod(x, y) }
                     BinOp::Pow => fpow(x, y),
                 })
             }
@@ -2518,6 +2646,9 @@ impl Interp {
         } else {
             let cur = self.eval_lvalue(lhs);
             let r = rhs.to_num();
+            if matches!(op, AssignOp::Div | AssignOp::Mod) && r == 0.0 {
+                self.div_by_zero();
+            }
             Value::Num(match op {
                 AssignOp::Add => cur + r,
                 AssignOp::Sub => cur - r,
@@ -2547,13 +2678,17 @@ impl Interp {
     }
 
     fn regex_from(&mut self, e: &Expr) -> Regex {
-        if let Expr::Regex(r) = e {
+        let re = if let Expr::Regex(r) = e {
             r.clone()
         } else {
             let conv = self.convfmt();
             let s = self.eval(e).to_str(&conv);
             compile_regex(&s)
+        };
+        if re.error {
+            self.runtime_error(b"awk: invalid regular expression\n");
         }
+        re
     }
 
     fn call_user(&mut self, name: &[u8], args: &[Expr]) -> Value {
@@ -2662,6 +2797,9 @@ impl Interp {
                 };
                 let parts = if args.len() >= 3 {
                     if let Expr::Regex(re) = &args[2] {
+                        if re.error {
+                            self.runtime_error(b"awk: invalid regular expression\n");
+                        }
                         split_by_regex(&s, re)
                     } else {
                         let fsv = self.eval(&args[2]).to_str(&conv);
@@ -3120,9 +3258,12 @@ fn awk_sprintf(fmt: &[u8], args: &[Value], conv: &[u8]) -> Vec<u8> {
             spec.push(fmt[i]);
             i += 1;
         }
-        // width
+        // width (clamped to keep the value in range for libc snprintf, where
+        // out-of-int-range widths are undefined behaviour, and to bound the
+        // amount of padding a single conversion can request)
         if i < fmt.len() && fmt[i] == b'*' {
-            let w = next(&mut ai).to_num() as i64;
+            let mut w = next(&mut ai).to_num() as i64;
+            w = w.clamp(-PRINTF_MAX_WIDTH, PRINTF_MAX_WIDTH);
             if w < 0 {
                 spec.push(b'-');
                 push_u(&mut spec, (-w) as u128);
@@ -3131,24 +3272,39 @@ fn awk_sprintf(fmt: &[u8], args: &[Value], conv: &[u8]) -> Vec<u8> {
             }
             i += 1;
         } else {
+            let mut w: i64 = 0;
+            let mut any = false;
             while i < fmt.len() && fmt[i].is_ascii_digit() {
-                spec.push(fmt[i]);
+                w = w.saturating_mul(10).saturating_add((fmt[i] - b'0') as i64);
+                any = true;
                 i += 1;
             }
+            if any {
+                if w > PRINTF_MAX_WIDTH {
+                    w = PRINTF_MAX_WIDTH;
+                }
+                push_u(&mut spec, w as u128);
+            }
         }
-        // precision
+        // precision (also clamped)
         if i < fmt.len() && fmt[i] == b'.' {
             spec.push(b'.');
             i += 1;
             if i < fmt.len() && fmt[i] == b'*' {
-                let p = next(&mut ai).to_num() as i64;
-                push_u(&mut spec, if p < 0 { 0 } else { p as u128 });
+                let mut p = next(&mut ai).to_num() as i64;
+                p = p.clamp(0, PRINTF_MAX_WIDTH);
+                push_u(&mut spec, p as u128);
                 i += 1;
             } else {
+                let mut p: i64 = 0;
                 while i < fmt.len() && fmt[i].is_ascii_digit() {
-                    spec.push(fmt[i]);
+                    p = p.saturating_mul(10).saturating_add((fmt[i] - b'0') as i64);
                     i += 1;
                 }
+                if p > PRINTF_MAX_WIDTH {
+                    p = PRINTF_MAX_WIDTH;
+                }
+                push_u(&mut spec, p as u128);
             }
         }
         if i >= fmt.len() {
@@ -3346,8 +3502,12 @@ pub fn awk(argc: i32, argv: *const *const u8) -> i32 {
                     prog_files.push(f);
                 }
                 _ => {
-                    // unknown option: stop, treat as program/operand
-                    break;
+                    // Unrecognized -X option: diagnose and exit rather than
+                    // silently treating "-X" as the program text.
+                    io::write_str(2, b"awk: unknown option ");
+                    io::write_str(2, arg);
+                    io::write_str(2, b"\n");
+                    return 2;
                 }
             }
             i += 1;
@@ -3423,14 +3583,15 @@ pub fn awk(argc: i32, argv: *const *const u8) -> i32 {
         }
     }
 
-    let has_begin = rules.iter().any(|r| matches!(r.pattern, Some(Pattern::Begin)));
     let has_end = rules.iter().any(|r| matches!(r.pattern, Some(Pattern::End)));
     let has_main = rules
         .iter()
         .any(|r| !matches!(r.pattern, Some(Pattern::Begin) | Some(Pattern::End)));
 
-    let _ = has_begin;
-
+    // `exiting` tracks only whether `exit` fired in BEGIN: that skips the main
+    // input loop but END must STILL run (POSIX). An `exit` inside the main loop
+    // is handled by process_input returning early; END runs afterwards
+    // regardless. An `exit` inside END is handled within the END loop below.
     let mut exiting = false;
 
     // --- BEGIN ---
@@ -3469,7 +3630,8 @@ pub fn awk(argc: i32, argv: *const *const u8) -> i32 {
             }
             it.globals.insert(b"FILENAME".to_vec(), Value::Str(Vec::new()));
             let data = read_fd(0);
-            exiting = process_input(&mut it, &rules, &data);
+            // An exit here stops input, but END still runs below.
+            process_input(&mut it, &rules, &data);
         } else {
             // Re-walk operands in order to interleave assignments with files.
             'outer: for op in &operands {
@@ -3496,14 +3658,14 @@ pub fn awk(argc: i32, argv: *const *const u8) -> i32 {
                 it.globals.insert(b"FILENAME".to_vec(), Value::Str(op.clone()));
                 it.fnr = 0;
                 if process_input(&mut it, &rules, &data) {
-                    exiting = true;
+                    // exit fired mid-input: stop reading files, but run END.
                     break 'outer;
                 }
             }
         }
     }
 
-    // --- END ---
+    // --- END (runs even after an `exit` in BEGIN or the main loop) ---
     if has_end {
         for r in &rules {
             if let Some(Pattern::End) = r.pattern {
@@ -3516,7 +3678,6 @@ pub fn awk(argc: i32, argv: *const *const u8) -> i32 {
         }
     }
 
-    let _ = exiting;
     it.flush();
     it.exit_code
 }

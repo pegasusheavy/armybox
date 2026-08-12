@@ -16,6 +16,25 @@ use crate::applets::get_arg;
 use crate::io;
 
 // ===========================================================================
+// Resource limits (guard against pathological patterns / inputs)
+// ===========================================================================
+
+/// Maximum repetition count for an interval expression `{n,m}` (POSIX RE_DUP_MAX).
+const RE_DUP_MAX: usize = 32767;
+
+/// Backstop cap on the total number of compiled VM instructions. Interval
+/// expansion multiplies instruction counts, so nested bounds are capped here
+/// even when each individual bound is within RE_DUP_MAX.
+const MAX_PROG_LEN: usize = 1 << 20;
+
+/// Maximum group-nesting depth accepted by the parser.
+const MAX_NEST_DEPTH: usize = 1000;
+
+/// Maximum VM recursion depth. Bounds stack usage on very long input lines
+/// (the matcher recurses roughly one frame per consumed byte).
+const MAX_VM_DEPTH: usize = 100_000;
+
+// ===========================================================================
 // Options
 // ===========================================================================
 
@@ -80,11 +99,17 @@ struct Parser<'a> {
     b: &'a [u8],
     pos: usize,
     ere: bool,
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
     fn new(b: &'a [u8], ere: bool) -> Self {
-        Parser { b, pos: 0, ere }
+        Parser {
+            b,
+            pos: 0,
+            ere,
+            depth: 0,
+        }
     }
 
     fn peek(&self) -> Option<u8> {
@@ -194,20 +219,30 @@ impl<'a> Parser<'a> {
         // Grouping.
         if self.ere && c == b'(' {
             self.pos += 1;
+            self.depth += 1;
+            if self.depth > MAX_NEST_DEPTH {
+                return Err(());
+            }
             let inner = self.parse_alt()?;
             if !self.at_group_close() {
                 return Err(());
             }
             self.pos += 1;
+            self.depth -= 1;
             return Ok(inner);
         }
         if !self.ere && self.at_escaped(b'(') {
             self.pos += 2;
+            self.depth += 1;
+            if self.depth > MAX_NEST_DEPTH {
+                return Err(());
+            }
             let inner = self.parse_alt()?;
             if !self.at_group_close() {
                 return Err(());
             }
             self.pos += 2;
+            self.depth -= 1;
             return Ok(inner);
         }
 
@@ -242,12 +277,21 @@ impl<'a> Parser<'a> {
         Ok(Ast::Lit(c))
     }
 
+    /// Read a decimal count. Returns `None` if no digits are present. Uses
+    /// checked arithmetic: any value that overflows `usize` is clamped to
+    /// `usize::MAX`, which the caller rejects as above `RE_DUP_MAX`.
     fn read_num(&mut self) -> Option<usize> {
         let s = self.pos;
         let mut v: usize = 0;
         while let Some(d) = self.peek() {
             if d.is_ascii_digit() {
-                v = v.saturating_mul(10).saturating_add((d - b'0') as usize);
+                v = match v
+                    .checked_mul(10)
+                    .and_then(|x| x.checked_add((d - b'0') as usize))
+                {
+                    Some(x) => x,
+                    None => usize::MAX,
+                };
                 self.pos += 1;
             } else {
                 break;
@@ -261,18 +305,22 @@ impl<'a> Parser<'a> {
     }
 
     /// Attempt to parse a `{n}`, `{n,}`, `{n,m}` bound at the current position.
-    /// Returns None (without consuming) if it is not a valid bound.
-    fn try_bound(&mut self) -> Option<(usize, Option<usize>)> {
+    ///
+    /// - `Ok(None)` (position restored): the text here is not a bound.
+    /// - `Ok(Some(..))`: a valid bound within limits.
+    /// - `Err(())`: the text is a syntactically complete bound whose counts are
+    ///   out of range (above `RE_DUP_MAX`, or `n > m`) — a compile error.
+    fn try_bound(&mut self) -> Result<Option<(usize, Option<usize>)>, ()> {
         let save = self.pos;
         // Opening token.
         if self.ere {
             if self.peek() != Some(b'{') {
-                return None;
+                return Ok(None);
             }
             self.pos += 1;
         } else {
             if !self.at_escaped(b'{') {
-                return None;
+                return Ok(None);
             }
             self.pos += 2;
         }
@@ -281,7 +329,7 @@ impl<'a> Parser<'a> {
             Some(v) => v,
             None => {
                 self.pos = save;
-                return None;
+                return Ok(None);
             }
         };
         let max;
@@ -300,7 +348,7 @@ impl<'a> Parser<'a> {
                     Some(m) => max = Some(m),
                     None => {
                         self.pos = save;
-                        return None;
+                        return Ok(None);
                     }
                 }
             }
@@ -311,17 +359,28 @@ impl<'a> Parser<'a> {
         if self.ere {
             if self.peek() != Some(b'}') {
                 self.pos = save;
-                return None;
+                return Ok(None);
             }
             self.pos += 1;
         } else {
             if !self.at_escaped(b'}') {
                 self.pos = save;
-                return None;
+                return Ok(None);
             }
             self.pos += 2;
         }
-        Some((n, max))
+        // Syntactically a bound: now enforce the count limits. Beyond this
+        // point the input is consumed and out-of-range values are errors, not
+        // a fallback to literal text.
+        if n > RE_DUP_MAX {
+            return Err(());
+        }
+        if let Some(m) = max {
+            if m > RE_DUP_MAX || n > m {
+                return Err(());
+            }
+        }
+        Ok(Some((n, max)))
     }
 
     fn parse_repeat(&mut self, mut atom: Ast) -> Result<Ast, ()> {
@@ -350,7 +409,7 @@ impl<'a> Parser<'a> {
                         atom = Ast::Quest(Box::new(atom));
                         continue;
                     }
-                    if let Some((n, m)) = self.try_bound() {
+                    if let Some((n, m)) = self.try_bound()? {
                         atom = Ast::Repeat(Box::new(atom), n, m);
                         continue;
                     }
@@ -509,11 +568,21 @@ fn compile(pat: &[u8], ere: bool) -> Result<Vec<Inst>, ()> {
     let ast = Parser::new(pat, ere).parse()?;
     let mut prog = Vec::new();
     emit(&mut prog, &ast);
+    // Backstop: interval expansion (including nested bounds) can multiply the
+    // instruction count. If we blew past the cap, reject the pattern.
+    if prog.len() > MAX_PROG_LEN {
+        return Err(());
+    }
     prog.push(Inst::Match);
     Ok(prog)
 }
 
 fn emit(prog: &mut Vec<Inst>, ast: &Ast) {
+    // Stop growing the program once the cap is exceeded; `compile` turns the
+    // oversize program into a compile error.
+    if prog.len() > MAX_PROG_LEN {
+        return;
+    }
     match ast {
         Ast::Empty => {}
         Ast::Lit(c) => prog.push(Inst::Char(*c)),
@@ -659,7 +728,14 @@ impl<'a> Vm<'a> {
         true
     }
 
-    fn run(&self, memo: &mut [bool], pc: usize, sp: usize) -> bool {
+    fn run(&self, memo: &mut [bool], pc: usize, sp: usize, depth: usize) -> bool {
+        // Bound stack growth: the matcher recurses ~1 frame per consumed byte,
+        // so a multi-megabyte line could otherwise overflow the stack. Aborting
+        // this path cleanly (treat as no-match for this start position) is safe:
+        // the memo already bounds total work, and outer starts are still tried.
+        if depth >= MAX_VM_DEPTH {
+            return false;
+        }
         let len = self.text.len();
         let key = pc * (len + 1) + sp;
         if memo[key] {
@@ -667,6 +743,7 @@ impl<'a> Vm<'a> {
         }
         memo[key] = true;
 
+        let d = depth + 1;
         match &self.prog[pc] {
             Inst::Char(c) => {
                 if sp < len {
@@ -676,21 +753,21 @@ impl<'a> Vm<'a> {
                     } else {
                         a == *c
                     };
-                    hit && self.run(memo, pc + 1, sp + 1)
+                    hit && self.run(memo, pc + 1, sp + 1, d)
                 } else {
                     false
                 }
             }
-            Inst::Any => sp < len && self.run(memo, pc + 1, sp + 1),
+            Inst::Any => sp < len && self.run(memo, pc + 1, sp + 1, d),
             Inst::Class(bm, neg) => {
                 sp < len
                     && class_match(bm, *neg, self.text[sp], self.ic)
-                    && self.run(memo, pc + 1, sp + 1)
+                    && self.run(memo, pc + 1, sp + 1, d)
             }
-            Inst::AnchorStart => sp == 0 && self.run(memo, pc + 1, sp),
-            Inst::AnchorEnd => sp == len && self.run(memo, pc + 1, sp),
-            Inst::Split(a, b) => self.run(memo, *a, sp) || self.run(memo, *b, sp),
-            Inst::Jmp(a) => self.run(memo, *a, sp),
+            Inst::AnchorStart => sp == 0 && self.run(memo, pc + 1, sp, d),
+            Inst::AnchorEnd => sp == len && self.run(memo, pc + 1, sp, d),
+            Inst::Split(a, b) => self.run(memo, *a, sp, d) || self.run(memo, *b, sp, d),
+            Inst::Jmp(a) => self.run(memo, *a, sp, d),
             Inst::Match => self.accept(sp),
         }
     }
@@ -715,7 +792,7 @@ fn regex_search(prog: &[Inst], line: &[u8], opts: &Opts) -> bool {
             word: opts.word,
             start,
         };
-        if vm.run(&mut memo, 0, start) {
+        if vm.run(&mut memo, 0, start, 0) {
             return true;
         }
     }
@@ -935,7 +1012,9 @@ fn grep_main(argc: i32, argv: *const *const u8, default_ere: bool, default_fixed
                         break; // done with this cluster
                     }
                     _ => {
-                        io::write_str(2, b"grep: invalid option\n");
+                        io::write_str(2, b"grep: invalid option -- '");
+                        io::write_all(2, &[c]);
+                        io::write_str(2, b"'\n");
                         return 2;
                     }
                 }

@@ -10,7 +10,6 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use crate::io;
-use crate::sys;
 use super::get_arg;
 
 /// A value in `expr` is always a string; numeric operators parse it as i64.
@@ -19,6 +18,16 @@ type Value = Vec<u8>;
 /// Error exit code produced when the expression cannot be evaluated.
 const E_SYNTAX: i32 = 2;
 const E_MATH: i32 = 2;
+/// Error exit code produced when writing the result fails.
+const E_IO: i32 = 2;
+
+/// Maximum repetition count for an interval expression `\{n,m\}`
+/// (POSIX RE_DUP_MAX).
+const RE_DUP_MAX: usize = 32767;
+
+/// Recursion depth cap for the BRE matcher. Beyond this the matcher reports
+/// no match rather than risking a stack overflow on a very long operand.
+const MATCH_DEPTH_MAX: usize = 5000;
 
 /// A value is "false" (null or zero) when it is the empty string or when it
 /// parses as an integer equal to zero.
@@ -26,7 +35,7 @@ fn is_falsey(v: &[u8]) -> bool {
     if v.is_empty() {
         return true;
     }
-    matches!(sys::parse_i64(v), Some(0))
+    matches!(to_int(v), Some(0))
 }
 
 /// Format a signed integer into a freshly allocated byte vector.
@@ -55,8 +64,29 @@ fn int_to_value(n: i64) -> Value {
 
 /// Parse a value as an integer, requiring the entire string to be a valid
 /// optionally-signed decimal integer.
+///
+/// Magnitudes outside the `i64` range are rejected (returning `None`) so that a
+/// too-large literal is treated as a string operand rather than overflowing.
+/// Negatives are accumulated directly so that `i64::MIN` is representable
+/// without the `-(i64::MIN)` panic that a parse-then-negate approach hits.
 fn to_int(v: &[u8]) -> Option<i64> {
-    sys::parse_i64(v)
+    if v.is_empty() {
+        return None;
+    }
+    let (neg, digits) = if v[0] == b'-' { (true, &v[1..]) } else { (false, v) };
+    if digits.is_empty() {
+        return None;
+    }
+    let mut acc: i64 = 0;
+    for &c in digits {
+        if !c.is_ascii_digit() {
+            return None;
+        }
+        let d = (c - b'0') as i64;
+        acc = acc.checked_mul(10)?;
+        acc = if neg { acc.checked_sub(d)? } else { acc.checked_add(d)? };
+    }
+    Some(acc)
 }
 
 // ------------------------------------------------------------------------
@@ -154,7 +184,14 @@ impl<'a> Parser<'a> {
             let right = self.parse_mul()?;
             let a = to_int(&left).ok_or(E_MATH)?;
             let b = to_int(&right).ok_or(E_MATH)?;
-            let r = if sub { a.wrapping_sub(b) } else { a.wrapping_add(b) };
+            let r = if sub { a.checked_sub(b) } else { a.checked_add(b) };
+            let r = match r {
+                Some(r) => r,
+                None => {
+                    io::write_str(2, b"expr: overflow\n");
+                    return Err(E_MATH);
+                }
+            };
             left = int_to_value(r);
         }
         Ok(left)
@@ -174,14 +211,21 @@ impl<'a> Parser<'a> {
             let right = self.parse_match()?;
             let a = to_int(&left).ok_or(E_MATH)?;
             let b = to_int(&right).ok_or(E_MATH)?;
-            let r = match kind {
-                0 => a.wrapping_mul(b),
+            let checked = match kind {
+                0 => a.checked_mul(b),
                 _ => {
                     if b == 0 {
                         io::write_str(2, b"expr: division by zero\n");
                         return Err(E_MATH);
                     }
-                    if kind == 1 { a.wrapping_div(b) } else { a.wrapping_rem(b) }
+                    if kind == 1 { a.checked_div(b) } else { a.checked_rem(b) }
+                }
+            };
+            let r = match checked {
+                Some(r) => r,
+                None => {
+                    io::write_str(2, b"expr: overflow\n");
+                    return Err(E_MATH);
                 }
             };
             left = int_to_value(r);
@@ -196,7 +240,7 @@ impl<'a> Parser<'a> {
             if t == b":" {
                 self.advance();
                 let right = self.parse_primary()?;
-                left = regex_match(&left, &right);
+                left = regex_match(&left, &right)?;
             } else {
                 break;
             }
@@ -242,7 +286,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let s = self.parse_primary()?;
                 let re = self.parse_primary()?;
-                return Ok(regex_match(&s, &re));
+                return regex_match(&s, &re);
             }
             _ => {}
         }
@@ -314,12 +358,97 @@ enum AtomKind {
 
 struct Piece {
     kind: AtomKind,
-    star: bool,
+    /// Minimum number of repetitions required.
+    min: usize,
+    /// Maximum number of repetitions, or `None` for unbounded.
+    max: Option<usize>,
+}
+
+impl Piece {
+    /// A marker (`GroupStart`/`GroupEnd`/`End`) or an atom that matches exactly
+    /// once. Quantifiers overwrite `min`/`max` afterwards.
+    fn once(kind: AtomKind) -> Piece {
+        Piece { kind, min: 1, max: Some(1) }
+    }
+}
+
+/// Read a decimal count starting at `start`. Returns the value (overflow
+/// clamped to `usize::MAX`, which the caller rejects as above `RE_DUP_MAX`) and
+/// the index past the last digit, or `None` if no digit is present.
+fn read_num(pattern: &[u8], start: usize) -> (Option<usize>, usize) {
+    let mut j = start;
+    let mut v: usize = 0;
+    let mut any = false;
+    while j < pattern.len() && pattern[j].is_ascii_digit() {
+        any = true;
+        v = v
+            .checked_mul(10)
+            .and_then(|x| x.checked_add((pattern[j] - b'0') as usize))
+            .unwrap_or(usize::MAX);
+        j += 1;
+    }
+    if any { (Some(v), j) } else { (None, j) }
+}
+
+/// Parse an interval `\{n\}`, `\{n,\}`, or `\{n,m\}` beginning at `*i` (which
+/// points at the leading backslash). On success advances `*i` past the closing
+/// `\}` and returns `(min, max)`. A malformed or out-of-range interval is a
+/// syntax error.
+fn parse_interval(pattern: &[u8], i: &mut usize) -> Result<(usize, Option<usize>), i32> {
+    // pattern[*i] == '\\', pattern[*i + 1] == '{'
+    let mut j = *i + 2;
+    let (n, j2) = read_num(pattern, j);
+    let n = n.ok_or(E_SYNTAX)?;
+    j = j2;
+    let max;
+    if j < pattern.len() && pattern[j] == b',' {
+        j += 1;
+        let closing_now = j + 1 < pattern.len() && pattern[j] == b'\\' && pattern[j + 1] == b'}';
+        if closing_now {
+            max = None;
+        } else {
+            let (m, j3) = read_num(pattern, j);
+            max = Some(m.ok_or(E_SYNTAX)?);
+            j = j3;
+        }
+    } else {
+        max = Some(n);
+    }
+    // Closing `\}`.
+    if !(j + 1 < pattern.len() && pattern[j] == b'\\' && pattern[j + 1] == b'}') {
+        return Err(E_SYNTAX);
+    }
+    j += 2;
+    if n > RE_DUP_MAX {
+        return Err(E_SYNTAX);
+    }
+    if let Some(m) = max {
+        if m > RE_DUP_MAX || n > m {
+            return Err(E_SYNTAX);
+        }
+    }
+    *i = j;
+    Ok((n, max))
+}
+
+/// Parse an optional quantifier (`*` or `\{n,m\}`) at `*i`, advancing past it.
+/// Returns `(min, max)`; with no quantifier this is `(1, Some(1))`.
+fn parse_quantifier(pattern: &[u8], i: &mut usize) -> Result<(usize, Option<usize>), i32> {
+    let p = *i;
+    if p < pattern.len() && pattern[p] == b'*' {
+        *i += 1;
+        return Ok((0, None));
+    }
+    if p + 1 < pattern.len() && pattern[p] == b'\\' && pattern[p + 1] == b'{' {
+        return parse_interval(pattern, i);
+    }
+    Ok((1, Some(1)))
 }
 
 /// Parse a BRE pattern into pieces. A leading `^` is treated as an anchor
-/// (dropped) because `expr` always anchors at the start of the string.
-fn compile(pattern: &[u8]) -> (Vec<Piece>, bool) {
+/// (dropped) because `expr` always anchors at the start of the string. Returns
+/// a syntax error for a malformed interval expression.
+fn compile(pattern: &[u8]) -> Result<(Vec<Piece>, bool), i32> {
     let mut pieces: Vec<Piece> = Vec::new();
     let mut has_group = false;
     let mut i = 0;
@@ -328,52 +457,55 @@ fn compile(pattern: &[u8]) -> (Vec<Piece>, bool) {
     }
     while i < pattern.len() {
         let c = pattern[i];
+        // Parse one atom, leaving `i` pointing just past it. Markers never take
+        // a quantifier and are pushed directly.
         let kind: AtomKind = match c {
             b'\\' => {
                 i += 1;
                 if i >= pattern.len() {
-                    AtomKind::Char(b'\\')
-                } else {
-                    match pattern[i] {
-                        b'(' => {
-                            has_group = true;
-                            AtomKind::GroupStart
-                        }
-                        b')' => AtomKind::GroupEnd,
-                        other => AtomKind::Char(other),
+                    pieces.push(Piece::once(AtomKind::Char(b'\\')));
+                    break;
+                }
+                let nc = pattern[i];
+                i += 1;
+                match nc {
+                    b'(' => {
+                        has_group = true;
+                        pieces.push(Piece::once(AtomKind::GroupStart));
+                        continue;
                     }
+                    b')' => {
+                        pieces.push(Piece::once(AtomKind::GroupEnd));
+                        continue;
+                    }
+                    other => AtomKind::Char(other),
                 }
             }
-            b'.' => AtomKind::Any,
-            b'$' if i == pattern.len() - 1 => AtomKind::End,
-            b'[' => {
-                let (cls, next) = parse_class(pattern, i);
-                i = next;
-                // `i` now points at the closing `]`; fall through to *-check.
-                pieces.push(Piece { kind: cls, star: false });
-                // Handle a possible trailing `*`.
-                if i + 1 < pattern.len() && pattern[i + 1] == b'*' {
-                    if let Some(last) = pieces.last_mut() {
-                        last.star = true;
-                    }
-                    i += 1;
-                }
+            b'.' => {
                 i += 1;
+                AtomKind::Any
+            }
+            b'$' if i == pattern.len() - 1 => {
+                i += 1;
+                pieces.push(Piece::once(AtomKind::End));
                 continue;
             }
-            other => AtomKind::Char(other),
+            b'[' => {
+                let (cls, close) = parse_class(pattern, i);
+                // `close` is the index of the closing `]` (or end if unterminated).
+                i = close + 1;
+                cls
+            }
+            other => {
+                i += 1;
+                AtomKind::Char(other)
+            }
         };
 
-        // GroupStart/GroupEnd/End never take a `*`.
-        let can_star = !matches!(kind, AtomKind::GroupStart | AtomKind::GroupEnd | AtomKind::End);
-        let star = can_star && i + 1 < pattern.len() && pattern[i + 1] == b'*';
-        pieces.push(Piece { kind, star });
-        if star {
-            i += 1;
-        }
-        i += 1;
+        let (min, max) = parse_quantifier(pattern, &mut i)?;
+        pieces.push(Piece { kind, min, max });
     }
-    (pieces, has_group)
+    Ok((pieces, has_group))
 }
 
 /// Parse a `[...]` character class starting at index `start` (the `[`).
@@ -433,7 +565,20 @@ struct Capture {
 
 /// Match pieces[pi..] against s[si..], recording capture boundaries as markers
 /// are crossed on the successful path. Returns the end offset on full match.
-fn match_here(pieces: &[Piece], pi: usize, s: &[u8], si: usize, cap: &mut Capture) -> Option<usize> {
+///
+/// `depth` caps recursion so that a very long operand cannot overflow the
+/// stack; past the cap the matcher reports no match.
+fn match_here(
+    pieces: &[Piece],
+    pi: usize,
+    s: &[u8],
+    si: usize,
+    cap: &mut Capture,
+    depth: usize,
+) -> Option<usize> {
+    if depth > MATCH_DEPTH_MAX {
+        return None;
+    }
     if pi >= pieces.len() {
         return Some(si);
     }
@@ -441,41 +586,39 @@ fn match_here(pieces: &[Piece], pi: usize, s: &[u8], si: usize, cap: &mut Captur
     match &piece.kind {
         AtomKind::GroupStart => {
             cap.start = Some(si);
-            return match_here(pieces, pi + 1, s, si, cap);
+            return match_here(pieces, pi + 1, s, si, cap, depth + 1);
         }
         AtomKind::GroupEnd => {
             cap.end = Some(si);
-            return match_here(pieces, pi + 1, s, si, cap);
+            return match_here(pieces, pi + 1, s, si, cap, depth + 1);
         }
         AtomKind::End => {
             if si == s.len() {
-                return match_here(pieces, pi + 1, s, si, cap);
+                return match_here(pieces, pi + 1, s, si, cap, depth + 1);
             }
             return None;
         }
         _ => {}
     }
 
-    if piece.star {
-        // Greedy: consume as many as possible, then backtrack.
-        let mut count = 0usize;
-        while si + count < s.len() && atom_matches(&piece.kind, s[si + count]) {
-            count += 1;
+    // General repetition: greedily consume up to `max`, then backtrack down to
+    // `min`. A plain atom has min == max == 1; a `*` has min 0 / max None.
+    let limit = piece.max.unwrap_or(usize::MAX);
+    let mut count = 0usize;
+    while count < limit && si + count < s.len() && atom_matches(&piece.kind, s[si + count]) {
+        count += 1;
+    }
+    if count < piece.min {
+        return None;
+    }
+    loop {
+        if let Some(r) = match_here(pieces, pi + 1, s, si + count, cap, depth + 1) {
+            return Some(r);
         }
-        loop {
-            if let Some(r) = match_here(pieces, pi + 1, s, si + count, cap) {
-                return Some(r);
-            }
-            if count == 0 {
-                return None;
-            }
-            count -= 1;
+        if count == piece.min {
+            return None;
         }
-    } else {
-        if si < s.len() && atom_matches(&piece.kind, s[si]) {
-            return match_here(pieces, pi + 1, s, si + 1, cap);
-        }
-        None
+        count -= 1;
     }
 }
 
@@ -484,12 +627,12 @@ fn match_here(pieces: &[Piece], pi: usize, s: &[u8], si: usize, cap: &mut Captur
 /// Without a `\(...\)` group, returns the byte-length of the matched prefix as
 /// a decimal string ("0" if no match). With a group, returns the captured
 /// substring ("" if no match).
-fn regex_match(s: &[u8], pattern: &[u8]) -> Value {
-    let (pieces, has_group) = compile(pattern);
+fn regex_match(s: &[u8], pattern: &[u8]) -> Result<Value, i32> {
+    let (pieces, has_group) = compile(pattern)?;
     let mut cap = Capture { start: None, end: None };
-    let matched_end = match_here(&pieces, 0, s, 0, &mut cap);
+    let matched_end = match_here(&pieces, 0, s, 0, &mut cap, 0);
 
-    if has_group {
+    let result = if has_group {
         match (matched_end, cap.start, cap.end) {
             (Some(_), Some(a), Some(b)) if a <= b && b <= s.len() => s[a..b].to_vec(),
             _ => Vec::new(),
@@ -499,7 +642,8 @@ fn regex_match(s: &[u8], pattern: &[u8]) -> Value {
             Some(end) => int_to_value(end as i64),
             None => b"0".to_vec(),
         }
-    }
+    };
+    Ok(result)
 }
 
 // ------------------------------------------------------------------------
@@ -539,8 +683,10 @@ pub fn expr(argc: i32, argv: *const *const u8) -> i32 {
                 io::write_str(2, b"expr: syntax error\n");
                 return E_SYNTAX;
             }
-            io::write_all(1, &v);
-            io::write_str(1, b"\n");
+            if io::write_all(1, &v) < 0 || io::write_str(1, b"\n") < 0 {
+                io::write_str(2, b"expr: I/O error\n");
+                return E_IO;
+            }
             if is_falsey(&v) { 1 } else { 0 }
         }
         Err(code) => code,

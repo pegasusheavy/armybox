@@ -197,7 +197,131 @@ fn posix_sed_transform() {
     assert_eq!(result.1, "xxyyzz\n");
 }
 
-/// POSIX: sed inplace -i (extension)
+/// POSIX: branch/test loop collapses repeated matches (`:a;s/aa/a/;ta`)
+#[test]
+fn posix_sed_branch_loop() {
+    let result = run_with_stdin(&["sed", ":a;s/aa/a/;ta"], b"aaaa");
+    assert_success(&result);
+    assert_eq!(result.1, "a\n");
+}
+
+/// POSIX: N appends the next line into the pattern space
+#[test]
+fn posix_sed_next_append() {
+    let result = run_with_stdin(&["sed", "N;s/\\n/ /"], b"a\nb");
+    assert_success(&result);
+    assert_eq!(result.1, "a b\n");
+}
+
+/// POSIX: n prints/loads the next line; `n;d` keeps every other line
+#[test]
+fn posix_sed_next_meaningful() {
+    let result = run_with_stdin(&["sed", "n;d"], b"keep\ndelete\nkeep\ndelete");
+    assert_success(&result);
+    assert_eq!(result.1, "keep\nkeep\n");
+}
+
+/// POSIX: interval expression {n,m} matches greedily within bounds
+#[test]
+fn posix_sed_interval() {
+    let result = run_with_stdin(&["sed", "-E", "s/a{2,3}/X/"], b"aaaa");
+    assert_success(&result);
+    assert_eq!(result.1, "Xa\n");
+}
+
+/// POSIX: ERE alternation with -E
+#[test]
+fn posix_sed_ere_alternation() {
+    let result = run_with_stdin(&["sed", "-E", "s/cat|dog/pet/g"], b"cat and dog");
+    assert_success(&result);
+    assert_eq!(result.1, "pet and pet\n");
+}
+
+/// POSIX: s///N replaces only the Nth match
+#[test]
+fn posix_sed_subst_nth() {
+    let result = run_with_stdin(&["sed", "s/o/0/2"], b"foo boo");
+    assert_success(&result);
+    assert_eq!(result.1, "fo0 boo\n");
+}
+
+/// GNU extension: s///I is case-insensitive
+#[test]
+fn posix_sed_subst_icase() {
+    let result = run_with_stdin(&["sed", "s/hello/hi/I"], b"HELLO world");
+    assert_success(&result);
+    assert_eq!(result.1, "hi world\n");
+}
+
+/// POSIX: `!` negates an address (`2!d` keeps only line 2)
+#[test]
+fn posix_sed_negation() {
+    let result = run_with_stdin(&["sed", "2!d"], b"a\nb\nc");
+    assert_success(&result);
+    assert_eq!(result.1, "b\n");
+}
+
+/// POSIX: `{ }` block scoped to an address applies to all inner commands
+#[test]
+fn posix_sed_brace_group() {
+    let result = run_with_stdin(&["sed", "/foo/{s/foo/XXX/;s/o/Y/}"], b"foo\nbar");
+    assert_success(&result);
+    assert_eq!(result.1, "XXX\nbar\n");
+}
+
+/// POSIX: hold-space commands reverse the input (`tac` idiom)
+#[test]
+fn posix_sed_hold_reverse() {
+    let result = run_with_stdin(&["sed", "-n", "1!G;h;$p"], b"a\nb\nc");
+    assert_success(&result);
+    assert_eq!(result.1, "c\nb\na\n");
+}
+
+/// A malformed script (unknown command) must exit nonzero
+#[test]
+fn posix_sed_malformed_script() {
+    let result = run_with_stdin(&["sed", "Z"], b"x");
+    assert!(result.0 != 0);
+}
+
+/// An unbalanced `{` block must exit nonzero
+#[test]
+fn posix_sed_unbalanced_brace() {
+    let result = run_with_stdin(&["sed", "/x/{s/a/b/"], b"x");
+    assert!(result.0 != 0);
+}
+
+/// A branch to an undefined label must exit nonzero
+#[test]
+fn posix_sed_undefined_label() {
+    let result = run_with_stdin(&["sed", "bnope"], b"x");
+    assert!(result.0 != 0);
+}
+
+/// GNU 0,/re/ range is active from line 1 and ends at the first match
+#[test]
+fn posix_sed_zero_range() {
+    let result = run_with_stdin(&["sed", "0,/b/d"], b"a\nb\nc");
+    assert_success(&result);
+    assert_eq!(result.1, "c\n");
+}
+
+/// sed inplace -i.bak keeps a backup copy of the original
+#[test]
+fn posix_sed_inplace_backup() {
+    let dir = setup_test_env();
+    let file = dir.path().join("bakfile");
+    fs::write(&file, "hello").unwrap();
+
+    let result = run(&["sed", "-i.bak", "s/hello/world/", file.to_str().unwrap()]);
+    if result.0 == 0 {
+        assert_eq!(fs::read_to_string(&file).unwrap(), "world\n");
+        let bak = dir.path().join("bakfile.bak");
+        assert_eq!(fs::read_to_string(&bak).unwrap(), "hello");
+    }
+}
+
+/// sed inplace -i (extension)
 #[test]
 fn posix_sed_inplace() {
     let dir = setup_test_env();
