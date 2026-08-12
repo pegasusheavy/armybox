@@ -466,7 +466,7 @@ const PRINTF_MAX_WIDTH: i64 = 8192;
 // pattern that fails to compile is flagged and turned into a runtime error only
 // when the regex is actually used.
 
-use super::regex::{Regex as ReEngine, Syntax as ReSyntax};
+use crate::applets::regex::{Regex as ReEngine, Syntax as ReSyntax};
 
 /// awk ERE syntax: extended, case-sensitive, with escape translation so that
 /// regex constants and dynamic regexes interpret `\t`/`\n`/`\r` as control

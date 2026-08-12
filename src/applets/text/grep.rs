@@ -10,7 +10,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use super::regex::{Regex, Syntax};
+use crate::applets::regex::{Regex, Syntax};
 use crate::applets::get_arg;
 use crate::io;
 

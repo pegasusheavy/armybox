@@ -3,7 +3,8 @@
 //! Evaluate an expression given as separate argv tokens and print the result.
 //! Implements a recursive-descent parser over the tokens honoring POSIX
 //! precedence, plus the common `length`, `substr`, `index` and `match`
-//! string functions and a minimal BRE engine for the `:` / `match` operators.
+//! string functions. The `:` / `match` regex operators delegate to the shared
+//! BRE/ERE engine (`crate::applets::text::regex`).
 
 extern crate alloc;
 
@@ -20,14 +21,6 @@ const E_SYNTAX: i32 = 2;
 const E_MATH: i32 = 2;
 /// Error exit code produced when writing the result fails.
 const E_IO: i32 = 2;
-
-/// Maximum repetition count for an interval expression `\{n,m\}`
-/// (POSIX RE_DUP_MAX).
-const RE_DUP_MAX: usize = 32767;
-
-/// Recursion depth cap for the BRE matcher. Beyond this the matcher reports
-/// no match rather than risking a stack overflow on a very long operand.
-const MATCH_DEPTH_MAX: usize = 5000;
 
 /// A value is "false" (null or zero) when it is the empty string or when it
 /// parses as an integer equal to zero.
@@ -339,303 +332,82 @@ fn index_of(s: &[u8], chars: &[u8]) -> i64 {
 }
 
 // ------------------------------------------------------------------------
-// Minimal BRE engine for `:` and `match`
+// Regex matching for `:` and `match` (delegates to the shared BRE engine)
 // ------------------------------------------------------------------------
 
-/// A single matchable atom.
-enum AtomKind {
-    Char(u8),
-    Any,
-    Class { negate: bool, ranges: Vec<(u8, u8)> },
-    GroupStart,
-    GroupEnd,
-    End, // `$`
-}
-
-struct Piece {
-    kind: AtomKind,
-    /// Minimum number of repetitions required.
-    min: usize,
-    /// Maximum number of repetitions, or `None` for unbounded.
-    max: Option<usize>,
-}
-
-impl Piece {
-    /// A marker (`GroupStart`/`GroupEnd`/`End`) or an atom that matches exactly
-    /// once. Quantifiers overwrite `min`/`max` afterwards.
-    fn once(kind: AtomKind) -> Piece {
-        Piece { kind, min: 1, max: Some(1) }
-    }
-}
-
-/// Read a decimal count starting at `start`. Returns the value (overflow
-/// clamped to `usize::MAX`, which the caller rejects as above `RE_DUP_MAX`) and
-/// the index past the last digit, or `None` if no digit is present.
-fn read_num(pattern: &[u8], start: usize) -> (Option<usize>, usize) {
-    let mut j = start;
-    let mut v: usize = 0;
-    let mut any = false;
-    while j < pattern.len() && pattern[j].is_ascii_digit() {
-        any = true;
-        v = v
-            .checked_mul(10)
-            .and_then(|x| x.checked_add((pattern[j] - b'0') as usize))
-            .unwrap_or(usize::MAX);
-        j += 1;
-    }
-    if any { (Some(v), j) } else { (None, j) }
-}
-
-/// Parse an interval `\{n\}`, `\{n,\}`, or `\{n,m\}` beginning at `*i` (which
-/// points at the leading backslash). On success advances `*i` past the closing
-/// `\}` and returns `(min, max)`. A malformed or out-of-range interval is a
-/// syntax error.
-fn parse_interval(pattern: &[u8], i: &mut usize) -> Result<(usize, Option<usize>), i32> {
-    // pattern[*i] == '\\', pattern[*i + 1] == '{'
-    let mut j = *i + 2;
-    let (n, j2) = read_num(pattern, j);
-    let n = n.ok_or(E_SYNTAX)?;
-    j = j2;
-    let max;
-    if j < pattern.len() && pattern[j] == b',' {
-        j += 1;
-        let closing_now = j + 1 < pattern.len() && pattern[j] == b'\\' && pattern[j + 1] == b'}';
-        if closing_now {
-            max = None;
-        } else {
-            let (m, j3) = read_num(pattern, j);
-            max = Some(m.ok_or(E_SYNTAX)?);
-            j = j3;
-        }
-    } else {
-        max = Some(n);
-    }
-    // Closing `\}`.
-    if !(j + 1 < pattern.len() && pattern[j] == b'\\' && pattern[j + 1] == b'}') {
-        return Err(E_SYNTAX);
-    }
-    j += 2;
-    if n > RE_DUP_MAX {
-        return Err(E_SYNTAX);
-    }
-    if let Some(m) = max {
-        if m > RE_DUP_MAX || n > m {
-            return Err(E_SYNTAX);
-        }
-    }
-    *i = j;
-    Ok((n, max))
-}
-
-/// Parse an optional quantifier (`*` or `\{n,m\}`) at `*i`, advancing past it.
-/// Returns `(min, max)`; with no quantifier this is `(1, Some(1))`.
-fn parse_quantifier(pattern: &[u8], i: &mut usize) -> Result<(usize, Option<usize>), i32> {
-    let p = *i;
-    if p < pattern.len() && pattern[p] == b'*' {
-        *i += 1;
-        return Ok((0, None));
-    }
-    if p + 1 < pattern.len() && pattern[p] == b'\\' && pattern[p + 1] == b'{' {
-        return parse_interval(pattern, i);
-    }
-    Ok((1, Some(1)))
-}
-
-/// Parse a BRE pattern into pieces. A leading `^` is treated as an anchor
-/// (dropped) because `expr` always anchors at the start of the string. Returns
-/// a syntax error for a malformed interval expression.
-fn compile(pattern: &[u8]) -> Result<(Vec<Piece>, bool), i32> {
-    let mut pieces: Vec<Piece> = Vec::new();
-    let mut has_group = false;
+/// Does `pattern` contain a `\(...\)` capture group?
+///
+/// POSIX `expr` distinguishes patterns with a subexpression (result is the
+/// captured substring) from those without (result is the match length). A
+/// group is opened by an *unescaped* `\(`; a `\(` appearing inside a bracket
+/// expression is literal (a backslash is an ordinary character within `[...]`
+/// in a BRE), matching the shared engine's own group counting.
+fn pattern_has_group(pattern: &[u8]) -> bool {
     let mut i = 0;
-    if pattern.first() == Some(&b'^') {
-        i = 1;
-    }
     while i < pattern.len() {
-        let c = pattern[i];
-        // Parse one atom, leaving `i` pointing just past it. Markers never take
-        // a quantifier and are pushed directly.
-        let kind: AtomKind = match c {
-            b'\\' => {
-                i += 1;
-                if i >= pattern.len() {
-                    pieces.push(Piece::once(AtomKind::Char(b'\\')));
-                    break;
+        match pattern[i] {
+            b'\\' if i + 1 < pattern.len() => {
+                if pattern[i + 1] == b'(' {
+                    return true;
                 }
-                let nc = pattern[i];
-                i += 1;
-                match nc {
-                    b'(' => {
-                        has_group = true;
-                        pieces.push(Piece::once(AtomKind::GroupStart));
-                        continue;
-                    }
-                    b')' => {
-                        pieces.push(Piece::once(AtomKind::GroupEnd));
-                        continue;
-                    }
-                    other => AtomKind::Char(other),
-                }
+                // Skip the escaped pair (e.g. `\\` then a following `(`).
+                i += 2;
             }
-            b'.' => {
-                i += 1;
-                AtomKind::Any
-            }
-            b'$' if i == pattern.len() - 1 => {
-                i += 1;
-                pieces.push(Piece::once(AtomKind::End));
-                continue;
-            }
-            b'[' => {
-                let (cls, close) = parse_class(pattern, i);
-                // `close` is the index of the closing `]` (or end if unterminated).
-                i = close + 1;
-                cls
-            }
-            other => {
-                i += 1;
-                AtomKind::Char(other)
-            }
-        };
-
-        let (min, max) = parse_quantifier(pattern, &mut i)?;
-        pieces.push(Piece { kind, min, max });
+            b'[' => i = skip_bracket(pattern, i),
+            _ => i += 1,
+        }
     }
-    Ok((pieces, has_group))
+    false
 }
 
-/// Parse a `[...]` character class starting at index `start` (the `[`).
-/// Returns the atom and the index of the closing `]`.
-fn parse_class(pattern: &[u8], start: usize) -> (AtomKind, usize) {
+/// Return the index just past a `[...]` bracket expression beginning at `start`
+/// (the `[`). A `]` immediately after `[` or `[^` is a literal member rather
+/// than the terminator, mirroring BRE bracket parsing.
+fn skip_bracket(pattern: &[u8], start: usize) -> usize {
     let mut i = start + 1;
-    let mut negate = false;
     if i < pattern.len() && pattern[i] == b'^' {
-        negate = true;
         i += 1;
     }
-    let mut ranges: Vec<(u8, u8)> = Vec::new();
-    // A `]` immediately after `[` (or `[^`) is a literal.
     if i < pattern.len() && pattern[i] == b']' {
-        ranges.push((b']', b']'));
         i += 1;
     }
     while i < pattern.len() && pattern[i] != b']' {
-        let lo = pattern[i];
-        if i + 2 < pattern.len() && pattern[i + 1] == b'-' && pattern[i + 2] != b']' {
-            let hi = pattern[i + 2];
-            ranges.push((lo, hi));
-            i += 3;
-        } else {
-            ranges.push((lo, lo));
-            i += 1;
-        }
+        i += 1;
     }
-    // `i` is the index of `]` (or end of pattern if unterminated).
-    (AtomKind::Class { negate, ranges }, i)
-}
-
-fn class_matches(negate: bool, ranges: &[(u8, u8)], c: u8) -> bool {
-    let mut hit = false;
-    for &(lo, hi) in ranges {
-        if c >= lo && c <= hi {
-            hit = true;
-            break;
-        }
+    if i < pattern.len() {
+        i += 1; // consume the closing `]`
     }
-    hit != negate
-}
-
-fn atom_matches(kind: &AtomKind, c: u8) -> bool {
-    match kind {
-        AtomKind::Char(x) => *x == c,
-        AtomKind::Any => true,
-        AtomKind::Class { negate, ranges } => class_matches(*negate, ranges, c),
-        _ => false,
-    }
-}
-
-struct Capture {
-    start: Option<usize>,
-    end: Option<usize>,
-}
-
-/// Match pieces[pi..] against s[si..], recording capture boundaries as markers
-/// are crossed on the successful path. Returns the end offset on full match.
-///
-/// `depth` caps recursion so that a very long operand cannot overflow the
-/// stack; past the cap the matcher reports no match.
-fn match_here(
-    pieces: &[Piece],
-    pi: usize,
-    s: &[u8],
-    si: usize,
-    cap: &mut Capture,
-    depth: usize,
-) -> Option<usize> {
-    if depth > MATCH_DEPTH_MAX {
-        return None;
-    }
-    if pi >= pieces.len() {
-        return Some(si);
-    }
-    let piece = &pieces[pi];
-    match &piece.kind {
-        AtomKind::GroupStart => {
-            cap.start = Some(si);
-            return match_here(pieces, pi + 1, s, si, cap, depth + 1);
-        }
-        AtomKind::GroupEnd => {
-            cap.end = Some(si);
-            return match_here(pieces, pi + 1, s, si, cap, depth + 1);
-        }
-        AtomKind::End => {
-            if si == s.len() {
-                return match_here(pieces, pi + 1, s, si, cap, depth + 1);
-            }
-            return None;
-        }
-        _ => {}
-    }
-
-    // General repetition: greedily consume up to `max`, then backtrack down to
-    // `min`. A plain atom has min == max == 1; a `*` has min 0 / max None.
-    let limit = piece.max.unwrap_or(usize::MAX);
-    let mut count = 0usize;
-    while count < limit && si + count < s.len() && atom_matches(&piece.kind, s[si + count]) {
-        count += 1;
-    }
-    if count < piece.min {
-        return None;
-    }
-    loop {
-        if let Some(r) = match_here(pieces, pi + 1, s, si + count, cap, depth + 1) {
-            return Some(r);
-        }
-        if count == piece.min {
-            return None;
-        }
-        count -= 1;
-    }
+    i
 }
 
 /// Anchored regex match used by both `:` and `match`.
 ///
-/// Without a `\(...\)` group, returns the byte-length of the matched prefix as
-/// a decimal string ("0" if no match). With a group, returns the captured
-/// substring ("" if no match).
+/// POSIX `expr` regexes are Basic Regular Expressions implicitly anchored at
+/// the start of the string, so the pattern is compiled as a BRE and only a
+/// match beginning at position 0 is accepted (the shared engine's `search` is
+/// leftmost, so a returned match that does not start at 0 means nothing
+/// matches there). Without a `\(...\)` group the result is the number of bytes
+/// matched, as a decimal string ("0" if no match); with a group it is the
+/// substring captured by group 1 ("" if no match). A malformed pattern is a
+/// syntax error (exit 2).
 fn regex_match(s: &[u8], pattern: &[u8]) -> Result<Value, i32> {
-    let (pieces, has_group) = compile(pattern)?;
-    let mut cap = Capture { start: None, end: None };
-    let matched_end = match_here(&pieces, 0, s, 0, &mut cap, 0);
+    use crate::applets::regex::{Regex, Syntax};
+
+    let syntax = Syntax { ere: false, icase: false, translate_escapes: false };
+    let re = Regex::compile(pattern, syntax).map_err(|()| E_SYNTAX)?;
+
+    let has_group = pattern_has_group(pattern);
+    // expr anchors at the start of the string: accept only a match at index 0.
+    let matched = re.search(s, 0).filter(|c| c.start() == 0);
 
     let result = if has_group {
-        match (matched_end, cap.start, cap.end) {
-            (Some(_), Some(a), Some(b)) if a <= b && b <= s.len() => s[a..b].to_vec(),
-            _ => Vec::new(),
+        match &matched {
+            Some(c) => c.group(1, s).unwrap_or(&[]).to_vec(),
+            None => Vec::new(),
         }
     } else {
-        match matched_end {
-            Some(end) => int_to_value(end as i64),
+        match matched {
+            Some(c) => int_to_value((c.end() - c.start()) as i64),
             None => b"0".to_vec(),
         }
     };
