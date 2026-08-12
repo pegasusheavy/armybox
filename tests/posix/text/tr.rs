@@ -9,7 +9,7 @@ use crate::posix::helpers::*;
 fn posix_tr_basic() {
     let result = run_with_stdin(&["tr", "abc", "xyz"], b"aabbcc");
     assert_success(&result);
-    assert_eq!(result.1, "xxyyzz\n");
+    assert_eq!(result.1, "xxyyzz");
 }
 
 /// POSIX: tr -d delete characters
@@ -17,7 +17,7 @@ fn posix_tr_basic() {
 fn posix_tr_delete() {
     let result = run_with_stdin(&["tr", "-d", "aeiou"], b"hello world");
     assert_success(&result);
-    assert_eq!(result.1, "hll wrld\n");
+    assert_eq!(result.1, "hll wrld");
 }
 
 /// POSIX: tr -s squeeze repeated characters
@@ -25,7 +25,7 @@ fn posix_tr_delete() {
 fn posix_tr_squeeze() {
     let result = run_with_stdin(&["tr", "-s", " "], b"hello    world");
     assert_success(&result);
-    assert_eq!(result.1, "hello world\n");
+    assert_eq!(result.1, "hello world");
 }
 
 /// POSIX: tr -c complement of set1
@@ -41,7 +41,7 @@ fn posix_tr_complement() {
 fn posix_tr_class_lower() {
     let result = run_with_stdin(&["tr", "[:lower:]", "[:upper:]"], b"hello");
     assert_success(&result);
-    assert_eq!(result.1, "HELLO\n");
+    assert_eq!(result.1, "HELLO");
 }
 
 /// POSIX: tr character class [:upper:]
@@ -49,7 +49,7 @@ fn posix_tr_class_lower() {
 fn posix_tr_class_upper() {
     let result = run_with_stdin(&["tr", "[:upper:]", "[:lower:]"], b"HELLO");
     assert_success(&result);
-    assert_eq!(result.1, "hello\n");
+    assert_eq!(result.1, "hello");
 }
 
 /// POSIX: tr character class [:digit:]
@@ -57,7 +57,7 @@ fn posix_tr_class_upper() {
 fn posix_tr_class_digit() {
     let result = run_with_stdin(&["tr", "-d", "[:digit:]"], b"abc123def456");
     assert_success(&result);
-    assert_eq!(result.1, "abcdef\n");
+    assert_eq!(result.1, "abcdef");
 }
 
 /// POSIX: tr character class [:space:]
@@ -65,7 +65,10 @@ fn posix_tr_class_digit() {
 fn posix_tr_class_space() {
     let result = run_with_stdin(&["tr", "-s", "[:space:]"], b"hello   \t\n  world");
     assert_success(&result);
-    // Multiple spaces/tabs/newlines squeezed to single space
+    // -s only squeezes runs of the *same* character; a run mixing distinct
+    // whitespace members (space, tab, newline) collapses each distinct
+    // member's run but does not merge different members together.
+    assert_eq!(result.1, "hello \t\n world");
 }
 
 /// POSIX: tr range a-z
@@ -73,7 +76,7 @@ fn posix_tr_class_space() {
 fn posix_tr_range() {
     let result = run_with_stdin(&["tr", "a-z", "A-Z"], b"hello");
     assert_success(&result);
-    assert_eq!(result.1, "HELLO\n");
+    assert_eq!(result.1, "HELLO");
 }
 
 /// POSIX: tr -ds delete and squeeze
@@ -82,7 +85,7 @@ fn posix_tr_delete_squeeze() {
     let result = run_with_stdin(&["tr", "-ds", "aeiou", " "], b"hello  world");
     assert_success(&result);
     // Deletes vowels and squeezes spaces
-    assert_eq!(result.1, "hll wrld\n");
+    assert_eq!(result.1, "hll wrld");
 }
 
 /// POSIX: Exit status 0 on success
@@ -98,7 +101,7 @@ fn posix_tr_truncate() {
     let result = run_with_stdin(&["tr", "abc", "x"], b"aabbcc");
     assert_success(&result);
     // set2 is extended with last character
-    assert_eq!(result.1, "xxxxxx\n");
+    assert_eq!(result.1, "xxxxxx");
 }
 
 /// POSIX: tr -t truncate set1 to set2 length
@@ -107,7 +110,7 @@ fn posix_tr_truncate_flag() {
     let result = run_with_stdin(&["tr", "-t", "abc", "x"], b"aabbcc");
     assert_success(&result);
     // Only 'a' is translated, b and c unchanged
-    assert_eq!(result.1, "xxbbcc\n");
+    assert_eq!(result.1, "xxbbcc");
 }
 
 /// POSIX: tr escape sequences
@@ -116,5 +119,5 @@ fn posix_tr_escapes() {
     let result = run_with_stdin(&["tr", "\\n", "X"], b"hello\nworld");
     assert_success(&result);
     // Newline translated to X
-    assert!(result.1.contains("X"));
+    assert_eq!(result.1, "helloXworld");
 }

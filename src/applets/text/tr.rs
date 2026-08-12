@@ -178,10 +178,11 @@ pub fn tr(argc: i32, argv: *const *const u8) -> i32 {
             *last_out = out as i32;
         };
 
-        // --- Stream stdin -> stdout. ---
+        // --- Stream stdin -> stdout, byte-transparent (no synthetic
+        // trailing newline is added; output is exactly the transformed
+        // input bytes, matching POSIX tr behavior). ---
         let mut buf = [0u8; 4096];
         let mut last_out: i32 = -1;
-        let mut last_in: i32 = -1;
 
         loop {
             let n = io::read(0, &mut buf);
@@ -192,14 +193,6 @@ pub fn tr(argc: i32, argv: *const *const u8) -> i32 {
             for k in 0..n {
                 process(buf[k], &mut last_out);
             }
-            last_in = buf[n - 1] as i32;
-        }
-
-        // Treat input as newline-terminated: if it didn't already end in a
-        // newline, run one synthetic newline through the same pipeline (it is
-        // translated/deleted/squeezed just like real input).
-        if last_in >= 0 && last_in != b'\n' as i32 {
-            process(b'\n', &mut last_out);
         }
 
         return 0;
