@@ -25,7 +25,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn nameif(argc: i32, argv: *const *const u8) -> i32 {
     let mut config_file: &[u8] = b"/etc/mactab";
     let mut use_syslog = false;
@@ -97,7 +97,7 @@ pub fn nameif(argc: i32, argv: *const *const u8) -> i32 {
     exit_code
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn rename_interface_by_mac(new_name: &[u8], target_mac: &[u8], _use_syslog: bool) -> i32 {
     // Parse target MAC address
     let target = match parse_mac(target_mac) {
@@ -157,7 +157,7 @@ fn rename_interface_by_mac(new_name: &[u8], target_mac: &[u8], _use_syslog: bool
     result
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn find_interface_by_mac(target: &[u8; 6]) -> Option<Vec<u8>> {
     // Read /sys/class/net to find all interfaces
     let dir_fd = io::open(b"/sys/class/net", libc::O_RDONLY | libc::O_DIRECTORY, 0);
@@ -314,7 +314,7 @@ fn print_usage() {
     io::write_str(1, b"  -c FILE   Use FILE instead of /etc/mactab\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn nameif(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"nameif: only available on Linux\n");
     1

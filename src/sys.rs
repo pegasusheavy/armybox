@@ -263,6 +263,104 @@ pub fn clear_errno() {
     unsafe { *libc::__error() = 0; }
 }
 
+/// Constants Bionic has but the libc crate does not bind for Android
+/// (`SCHED_OTHER` in sched.h, `_PC_FILESIZEBITS` in unistd.h). Applets
+/// reference these via `sys::` so a single code path works everywhere.
+#[cfg(not(target_os = "android"))]
+pub use libc::{SCHED_OTHER, _PC_FILESIZEBITS};
+#[cfg(target_os = "android")]
+pub const SCHED_OTHER: libc::c_int = 0;
+#[cfg(target_os = "android")]
+pub const _PC_FILESIZEBITS: libc::c_int = 0;
+
+/// reboot(2) commands; kernel ABI from linux/reboot.h, unbound in the libc
+/// crate for Android.
+#[cfg(not(target_os = "android"))]
+pub use libc::{RB_AUTOBOOT, RB_HALT_SYSTEM, RB_POWER_OFF};
+#[cfg(target_os = "android")]
+pub const RB_AUTOBOOT: libc::c_int = 0x01234567u32 as i32;
+#[cfg(target_os = "android")]
+pub const RB_HALT_SYSTEM: libc::c_int = 0xcdef0123u32 as i32;
+#[cfg(target_os = "android")]
+pub const RB_POWER_OFF: libc::c_int = 0x4321fedcu32 as i32;
+
+/// reboot(2). Bionic has the syscall but the libc crate binds no wrapper for
+/// Android, so issue it directly there.
+pub fn reboot(cmd: libc::c_int) -> i32 {
+    #[cfg(not(target_os = "android"))]
+    unsafe {
+        libc::reboot(cmd)
+    }
+    #[cfg(target_os = "android")]
+    unsafe {
+        const LINUX_REBOOT_MAGIC1: libc::c_uint = 0xfee1dead;
+        const LINUX_REBOOT_MAGIC2: libc::c_uint = 672274793;
+        libc::syscall(libc::SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2, cmd, 0) as i32
+    }
+}
+
+/// gethostid(3). Bionic has no gethostid at all; there, mirror glibc's
+/// storage semantics: the 4 bytes in /etc/hostid if present, else 0.
+pub fn gethostid() -> i64 {
+    #[cfg(not(target_os = "android"))]
+    unsafe {
+        libc::gethostid() as i64
+    }
+    #[cfg(target_os = "android")]
+    {
+        let fd = io::open(b"/etc/hostid", libc::O_RDONLY, 0);
+        if fd < 0 {
+            return 0;
+        }
+        let mut buf = [0u8; 4];
+        let n = io::read(fd, &mut buf);
+        io::close(fd);
+        if n == 4 {
+            u32::from_ne_bytes(buf) as i64
+        } else {
+            0
+        }
+    }
+}
+
+/// Routing-table ABI from linux/route.h, which Bionic's net/route.h includes
+/// verbatim; the libc crate does not bind these for Android. The struct layout
+/// matches libc's rtentry field-for-field (on LP64 the rt_tos/rt_class/rt_pad4
+/// group occupies exactly the kernel's `void *rt_pad4` slot), so route and
+/// ifup share one construction path on every platform.
+#[cfg(not(target_os = "android"))]
+pub use libc::{rtentry, RTF_GATEWAY, RTF_HOST, RTF_UP};
+#[cfg(target_os = "android")]
+pub const RTF_UP: libc::c_ushort = 0x0001;
+#[cfg(target_os = "android")]
+pub const RTF_GATEWAY: libc::c_ushort = 0x0002;
+#[cfg(target_os = "android")]
+pub const RTF_HOST: libc::c_ushort = 0x0004;
+
+#[cfg(target_os = "android")]
+#[repr(C)]
+#[allow(non_camel_case_types)]
+pub struct rtentry {
+    pub rt_pad1: libc::c_ulong,
+    pub rt_dst: libc::sockaddr,
+    pub rt_gateway: libc::sockaddr,
+    pub rt_genmask: libc::sockaddr,
+    pub rt_flags: libc::c_ushort,
+    pub rt_pad2: libc::c_short,
+    pub rt_pad3: libc::c_ulong,
+    pub rt_tos: libc::c_uchar,
+    pub rt_class: libc::c_uchar,
+    #[cfg(target_pointer_width = "64")]
+    pub rt_pad4: [libc::c_short; 3usize],
+    #[cfg(not(target_pointer_width = "64"))]
+    pub rt_pad4: [libc::c_short; 1usize],
+    pub rt_metric: libc::c_short,
+    pub rt_dev: *mut libc::c_char,
+    pub rt_mtu: libc::c_ulong,
+    pub rt_window: libc::c_ulong,
+    pub rt_irtt: libc::c_ushort,
+}
+
 /// Parse size with optional suffix (K, M, G, T, P, E)
 pub fn parse_size(s: &[u8]) -> Option<u64> {
     if s.is_empty() {

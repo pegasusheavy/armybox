@@ -35,13 +35,13 @@ use core::ptr;
 
 /// Portable ioctl request type.
 ///
-/// musl libc defines `ioctl(fd, request: c_int, ...)` while glibc uses
-/// `ioctl(fd, request: c_ulong, ...)`. This type alias allows ioctl
-/// request constants to compile correctly on both targets.
-#[cfg(target_env = "musl")]
+/// musl libc and Bionic define `ioctl(fd, request: c_int, ...)` while glibc
+/// uses `ioctl(fd, request: c_ulong, ...)`. This type alias allows ioctl
+/// request constants to compile correctly on all targets.
+#[cfg(any(target_env = "musl", target_os = "android"))]
 pub type IoctlReq = libc::c_int;
-/// Portable ioctl request type (c_ulong on glibc, c_int on musl).
-#[cfg(not(target_env = "musl"))]
+/// Portable ioctl request type (c_ulong on glibc, c_int on musl/Bionic).
+#[cfg(not(any(target_env = "musl", target_os = "android")))]
 pub type IoctlReq = libc::c_ulong;
 
 /// Maximum path length supported (matches PATH_MAX on Linux)

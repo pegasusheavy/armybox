@@ -35,7 +35,7 @@ const TELOPT_NAWS: u8 = 31;  // Window Size
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn telnet(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 2 {
         io::write_str(2, b"Usage: telnet HOST [PORT]\n");
@@ -271,19 +271,19 @@ pub fn telnet(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn telnet(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"telnet: only available on Linux\n");
     1
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 struct TelnetState {
     echo: bool,
     sga: bool,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl TelnetState {
     fn new() -> Self {
         TelnetState {
@@ -293,7 +293,7 @@ impl TelnetState {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn handle_telnet_option(sock: i32, cmd: u8, opt: u8, state: &mut TelnetState) {
     let response = match cmd {
         DO => {
@@ -344,7 +344,7 @@ fn handle_telnet_option(sock: i32, cmd: u8, opt: u8, state: &mut TelnetState) {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn resolve_host(host: &[u8], port: u16) -> Option<libc::sockaddr_in> {
     // Try to parse as IP address first
     if let Some(ip) = parse_ipv4(host) {
@@ -396,7 +396,7 @@ fn resolve_host(host: &[u8], port: u16) -> Option<libc::sockaddr_in> {
     addr
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn parse_ipv4(s: &[u8]) -> Option<u32> {
     let mut parts = [0u8; 4];
     let mut part_idx = 0;
@@ -434,7 +434,7 @@ fn parse_ipv4(s: &[u8]) -> Option<u32> {
          (parts[3] as u32))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn print_addr(addr: &libc::sockaddr_in) {
     let ip = u32::from_be(addr.sin_addr.s_addr);
     let port = u16::from_be(addr.sin_port);

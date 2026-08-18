@@ -20,7 +20,7 @@ pub fn poweroff(argc: i32, argv: *const *const u8) -> i32 {
     let _ = argv;
     unsafe {
         libc::sync();
-        libc::reboot(libc::RB_POWER_OFF);
+        crate::sys::reboot(crate::sys::RB_POWER_OFF);
     }
     0
 }

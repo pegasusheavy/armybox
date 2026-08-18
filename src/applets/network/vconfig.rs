@@ -7,33 +7,33 @@ use crate::sys;
 use super::get_arg;
 
 // VLAN ioctl commands
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SIOCGIFVLAN: crate::io::IoctlReq = 0x8982u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SIOCSIFVLAN: crate::io::IoctlReq = 0x8983u32 as crate::io::IoctlReq;
 
 // VLAN command codes
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const ADD_VLAN_CMD: libc::c_int = 0;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const DEL_VLAN_CMD: libc::c_int = 1;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SET_VLAN_INGRESS_PRIORITY_CMD: libc::c_int = 2;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SET_VLAN_EGRESS_PRIORITY_CMD: libc::c_int = 3;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SET_VLAN_FLAG_CMD: libc::c_int = 4;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SET_VLAN_NAME_TYPE_CMD: libc::c_int = 5;
 
 // VLAN name types
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const VLAN_NAME_TYPE_PLUS_VID: libc::c_int = 0; // vlan0005
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const VLAN_NAME_TYPE_RAW_PLUS_VID: libc::c_int = 1; // eth0.0005
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const VLAN_NAME_TYPE_PLUS_VID_NO_PAD: libc::c_int = 2; // vlan5
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const VLAN_NAME_TYPE_RAW_PLUS_VID_NO_PAD: libc::c_int = 3; // eth0.5
 
 /// vconfig - VLAN configuration utility
@@ -62,7 +62,7 @@ const VLAN_NAME_TYPE_RAW_PLUS_VID_NO_PAD: libc::c_int = 3; // eth0.5
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn vconfig(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 2 {
         print_usage();
@@ -190,14 +190,14 @@ pub fn vconfig(argc: i32, argv: *const *const u8) -> i32 {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn vconfig(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"vconfig: only available on Linux\n");
     1
 }
 
 // VLAN ioctl arguments structure
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct VlanIoctlArgs {
     cmd: libc::c_int,
@@ -206,7 +206,7 @@ struct VlanIoctlArgs {
     vlan_qos: libc::c_short,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 union VlanIoctlUnion {
     device2: [libc::c_char; 24],
@@ -217,7 +217,7 @@ union VlanIoctlUnion {
     flag: libc::c_uint,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn add_vlan(iface: &[u8], vid: u16) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -254,7 +254,7 @@ fn add_vlan(iface: &[u8], vid: u16) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn rem_vlan(vlan_iface: &[u8]) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -286,7 +286,7 @@ fn rem_vlan(vlan_iface: &[u8]) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_vlan_flag(vlan_iface: &[u8], flag: libc::c_int, value: libc::c_int) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -320,7 +320,7 @@ fn set_vlan_flag(vlan_iface: &[u8], flag: libc::c_int, value: libc::c_int) -> i3
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_egress_map(vlan_iface: &[u8], skb_prio: u32, vlan_qos: u16) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -354,7 +354,7 @@ fn set_egress_map(vlan_iface: &[u8], skb_prio: u32, vlan_qos: u16) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_ingress_map(vlan_iface: &[u8], skb_prio: u32, vlan_qos: u16) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -388,7 +388,7 @@ fn set_ingress_map(vlan_iface: &[u8], skb_prio: u32, vlan_qos: u16) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_name_type(name_type: &[u8]) -> i32 {
     let type_val = if name_type == b"VLAN_PLUS_VID" {
         VLAN_NAME_TYPE_PLUS_VID

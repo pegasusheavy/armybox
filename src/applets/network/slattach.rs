@@ -7,21 +7,21 @@ use crate::sys;
 use super::get_arg;
 
 // Line discipline constants
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const N_SLIP: libc::c_int = 1;      // Serial Line IP
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const N_CSLIP: libc::c_int = 2;     // SLIP + VJ header compression
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const N_SLIP6: libc::c_int = 3;     // 6-bit SLIP
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const N_CSLIP6: libc::c_int = 4;    // 6-bit SLIP + VJ compression
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const N_PPP: libc::c_int = 3;       // PPP (same as SLIP6 on some systems)
 
 // TTY ioctl for setting line discipline
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const TIOCSETD: crate::io::IoctlReq = 0x5423u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const TIOCGETD: crate::io::IoctlReq = 0x5424u32 as crate::io::IoctlReq;
 
 /// slattach - attach a network interface to a serial line
@@ -43,7 +43,7 @@ const TIOCGETD: crate::io::IoctlReq = 0x5424u32 as crate::io::IoctlReq;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn slattach(argc: i32, argv: *const *const u8) -> i32 {
     let mut protocol = N_CSLIP;
     let mut speed: Option<u32> = None;
@@ -226,7 +226,7 @@ pub fn slattach(argc: i32, argv: *const *const u8) -> i32 {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn slattach(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"slattach: only available on Linux\n");
     1

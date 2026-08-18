@@ -62,7 +62,7 @@ fn pathconf_var(name: &[u8]) -> Option<libc::c_int> {
         b"MAX_CANON" => libc::_PC_MAX_CANON,
         b"MAX_INPUT" => libc::_PC_MAX_INPUT,
         b"PIPE_BUF" => libc::_PC_PIPE_BUF,
-        b"FILESIZEBITS" => libc::_PC_FILESIZEBITS,
+        b"FILESIZEBITS" => crate::sys::_PC_FILESIZEBITS,
         b"_POSIX_CHOWN_RESTRICTED" => libc::_PC_CHOWN_RESTRICTED,
         b"_POSIX_NO_TRUNC" => libc::_PC_NO_TRUNC,
         _ => return None,

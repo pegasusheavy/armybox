@@ -25,7 +25,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn ifdown(argc: i32, argv: *const *const u8) -> i32 {
     let mut all = false;
     let mut force = false;
@@ -211,7 +211,7 @@ fn join(parts: &[&[u8]], sep: &[u8]) -> Vec<u8> {
     result
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn deconfigure_interface(config: &InterfaceConfig, _force: bool, verbose: bool) -> i32 {
     // Run pre-down commands
     for cmd in &config.pre_down {
@@ -249,7 +249,7 @@ fn deconfigure_interface(config: &InterfaceConfig, _force: bool, verbose: bool) 
     result
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn deconfigure_interface_direct(iface: &[u8], verbose: bool) -> i32 {
     if verbose {
         io::write_str(1, b"  Bringing interface down\n");
@@ -333,7 +333,7 @@ fn print_usage() {
     io::write_str(1, b"  -v        Verbose output\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn ifdown(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"ifdown: only available on Linux\n");
     1

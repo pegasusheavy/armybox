@@ -33,7 +33,7 @@ const IP_ALEN: usize = 4;
 /// # Exit Status
 /// - 0: At least one reply received
 /// - 1: No reply received or error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn arping(argc: i32, argv: *const *const u8) -> i32 {
     let mut count: Option<u32> = None;
     let mut interface: &[u8] = b"eth0";
@@ -287,14 +287,14 @@ pub fn arping(argc: i32, argv: *const *const u8) -> i32 {
     if received > 0 { 0 } else { 1 }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn arping(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"arping: only available on Linux\n");
     1
 }
 
 /// Get interface MAC address, IP address, and index
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn get_interface_info(name: &[u8]) -> Option<([u8; 6], u32, i32)> {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) };
     if sock < 0 {
@@ -347,7 +347,7 @@ fn get_interface_info(name: &[u8]) -> Option<([u8; 6], u32, i32)> {
     Some((mac, ip, if_index))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn parse_ipv4(s: &[u8]) -> Option<u32> {
     let mut parts = [0u8; 4];
     let mut part_idx = 0;
@@ -385,7 +385,7 @@ fn parse_ipv4(s: &[u8]) -> Option<u32> {
          (parts[3] as u32))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn print_ip(ip: u32) {
     let mut buf = [0u8; 16];
     io::write_all(1, sys::format_u64(((ip >> 24) & 0xFF) as u64, &mut buf));
@@ -397,7 +397,7 @@ fn print_ip(ip: u32) {
     io::write_all(1, sys::format_u64((ip & 0xFF) as u64, &mut buf));
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn print_mac(mac: &[u8]) {
     let mut buf = [0u8; 8];
     for (i, &b) in mac.iter().enumerate() {

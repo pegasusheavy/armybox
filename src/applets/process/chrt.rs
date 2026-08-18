@@ -47,7 +47,7 @@ pub fn chrt(argc: i32, argv: *const *const u8) -> i32 {
             } else if arg == b"-r" {
                 policy = libc::SCHED_RR;
             } else if arg == b"-o" {
-                policy = libc::SCHED_OTHER;
+                policy = sys::SCHED_OTHER;
             } else if arg[0] != b'-' {
                 break;
             }
@@ -84,7 +84,7 @@ pub fn chrt(argc: i32, argv: *const *const u8) -> i32 {
         }
 
         let policy_name = match current_policy {
-            libc::SCHED_OTHER => b"SCHED_OTHER" as &[u8],
+            sys::SCHED_OTHER => b"SCHED_OTHER" as &[u8],
             libc::SCHED_FIFO => b"SCHED_FIFO",
             libc::SCHED_RR => b"SCHED_RR",
             libc::SCHED_BATCH => b"SCHED_BATCH",

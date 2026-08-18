@@ -8,7 +8,7 @@ use crate::io;
 const USER_PROCESS: i16 = 7;
 
 // utmp structure for Linux (glibc compatible)
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct Utmp {
     ut_type: i16,
@@ -24,21 +24,21 @@ struct Utmp {
     __unused: [u8; 20],
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct ExitStatus {
     e_termination: i16,
     e_exit: i16,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct Timeval {
     tv_sec: i32,
     tv_usec: i32,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const UTMP_SIZE: usize = core::mem::size_of::<Utmp>();
 
 /// users - print logged in users
@@ -55,7 +55,7 @@ const UTMP_SIZE: usize = core::mem::size_of::<Utmp>();
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn users(argc: i32, argv: *const *const u8) -> i32 {
     // Determine utmp file to use
     let utmp_path = if argc > 1 {
@@ -124,7 +124,7 @@ pub fn users(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn users(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"users: only available on Linux\n");
     1

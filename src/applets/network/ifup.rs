@@ -28,7 +28,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn ifup(argc: i32, argv: *const *const u8) -> i32 {
     let mut all = false;
     let mut force = false;
@@ -250,7 +250,7 @@ fn join(parts: &[&[u8]], sep: &[u8]) -> Vec<u8> {
     result
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn configure_interface(config: &InterfaceConfig, _force: bool, verbose: bool) -> i32 {
     // Run pre-up commands
     for cmd in &config.pre_up {
@@ -303,7 +303,7 @@ fn configure_interface(config: &InterfaceConfig, _force: bool, verbose: bool) ->
     result
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn configure_loopback(iface: &[u8], verbose: bool) -> i32 {
     if verbose {
         io::write_str(1, b"  Configuring loopback\n");
@@ -361,7 +361,7 @@ fn configure_loopback(iface: &[u8], verbose: bool) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn configure_dhcp(iface: &[u8], verbose: bool) -> i32 {
     if verbose {
         io::write_str(1, b"  Running DHCP client\n");
@@ -389,7 +389,7 @@ fn configure_dhcp(iface: &[u8], verbose: bool) -> i32 {
     1
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn configure_static(config: &InterfaceConfig, verbose: bool) -> i32 {
     let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) };
     if fd < 0 {
@@ -486,7 +486,7 @@ fn configure_static(config: &InterfaceConfig, verbose: bool) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn configure_interface_direct(iface: &[u8], up: bool, verbose: bool) -> i32 {
     if verbose {
         io::write_str(1, b"  Bringing interface ");
@@ -572,7 +572,7 @@ fn parse_ipv4(s: &[u8]) -> Option<u32> {
     Some(u32::from_ne_bytes(octets))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn add_default_route(gateway: &[u8]) -> i32 {
     let gw_ip = match parse_ipv4(gateway) {
         Some(ip) => ip,
@@ -584,7 +584,7 @@ fn add_default_route(gateway: &[u8]) -> i32 {
         return 1;
     }
 
-    let mut rt: libc::rtentry = unsafe { core::mem::zeroed() };
+    let mut rt: crate::sys::rtentry = unsafe { core::mem::zeroed() };
 
     // Destination: 0.0.0.0
     let dst = create_sockaddr_in(0);
@@ -610,7 +610,7 @@ fn add_default_route(gateway: &[u8]) -> i32 {
                                         core::mem::size_of::<libc::sockaddr_in>());
     }
 
-    rt.rt_flags = libc::RTF_UP as u16 | libc::RTF_GATEWAY as u16;
+    rt.rt_flags = crate::sys::RTF_UP as u16 | crate::sys::RTF_GATEWAY as u16;
 
     let result = unsafe { libc::ioctl(fd, libc::SIOCADDRT as _, &rt) };
     io::close(fd);
@@ -664,7 +664,7 @@ fn print_usage() {
     io::write_str(1, b"  -v        Verbose output\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn ifup(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"ifup: only available on Linux\n");
     1

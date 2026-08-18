@@ -19,7 +19,7 @@ use crate::io;
 pub fn hostid(argc: i32, argv: *const *const u8) -> i32 {
     let _ = argc;
     let _ = argv;
-    io::write_num(1, unsafe { libc::gethostid() } as u64);
+    io::write_num(1, crate::sys::gethostid() as u64);
     io::write_str(1, b"\n");
     0
 }

@@ -19,7 +19,7 @@ const USER_PROCESS: i16 = 7;
 const DEAD_PROCESS: i16 = 8;
 
 // utmp structure for Linux (glibc compatible)
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct Utmp {
     ut_type: i16,
@@ -35,21 +35,21 @@ struct Utmp {
     __unused: [u8; 20],
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct ExitStatus {
     e_termination: i16,
     e_exit: i16,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct Timeval {
     tv_sec: i32,
     tv_usec: i32,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const UTMP_SIZE: usize = core::mem::size_of::<Utmp>();
 
 /// who - show who is logged in
@@ -80,7 +80,7 @@ const UTMP_SIZE: usize = core::mem::size_of::<Utmp>();
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn who(argc: i32, argv: *const *const u8) -> i32 {
     let mut show_header = false;
     let mut show_boot = false;
@@ -167,7 +167,7 @@ pub fn who(argc: i32, argv: *const *const u8) -> i32 {
                  quick_mode, my_tty)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn process_utmp(fd: i32, show_header: bool, show_boot: bool, show_dead: bool,
                 show_login: bool, show_runlevel: bool, show_time_change: bool,
                 show_idle: bool, show_mesg: bool, quick_mode: bool,
@@ -308,7 +308,7 @@ fn process_utmp(fd: i32, show_header: bool, show_boot: bool, show_dead: bool,
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn get_my_tty() -> Option<[u8; 32]> {
     let mut tty_buf = [0u8; 256];
 
@@ -341,7 +341,7 @@ fn get_my_tty() -> Option<[u8; 32]> {
     Some(result)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn get_mesg_status(line: &[u8]) -> u8 {
     let mut path = [0u8; 64];
     path[..5].copy_from_slice(b"/dev/");
@@ -362,7 +362,7 @@ fn get_mesg_status(line: &[u8]) -> u8 {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn get_idle_time(line: &[u8]) -> i64 {
     let mut path = [0u8; 64];
     path[..5].copy_from_slice(b"/dev/");
@@ -382,7 +382,7 @@ fn get_idle_time(line: &[u8]) -> i64 {
     now.tv_sec as i64 - stat.st_atime as i64
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn format_time(timestamp: i64) {
     // Convert timestamp to broken-down time
     let tm = unsafe {
@@ -426,7 +426,7 @@ fn format_time(timestamp: i64) {
     io::write_all(1, &buf[..16]);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn format_idle(seconds: i64) {
     if seconds < 0 {
         io::write_str(1, b"  ?  ");
@@ -465,7 +465,7 @@ fn format_idle(seconds: i64) {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn who(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"who: only available on Linux\n");
     1

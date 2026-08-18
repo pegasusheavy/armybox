@@ -24,7 +24,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn ether_wake(argc: i32, argv: *const *const u8) -> i32 {
     let mut interface: Option<&[u8]> = None;
     let mut mac: Option<[u8; 6]> = None;
@@ -158,14 +158,14 @@ pub fn ether_wake(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn ether_wake(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"ether-wake: only available on Linux\n");
     1
 }
 
 /// Parse MAC address in AA:BB:CC:DD:EE:FF or AA-BB-CC-DD-EE-FF format
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn parse_mac(s: &[u8]) -> Option<[u8; 6]> {
     let mut mac = [0u8; 6];
     let mut idx = 0;
@@ -208,7 +208,7 @@ fn parse_mac(s: &[u8]) -> Option<[u8; 6]> {
     Some(mac)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn print_mac(mac: &[u8; 6]) {
     let mut buf = [0u8; 3];
     for (i, &b) in mac.iter().enumerate() {
@@ -220,7 +220,7 @@ fn print_mac(mac: &[u8; 6]) {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn format_hex_byte(val: u8, buf: &mut [u8; 3]) -> &[u8] {
     const HEX: &[u8] = b"0123456789abcdef";
     buf[0] = HEX[(val >> 4) as usize];

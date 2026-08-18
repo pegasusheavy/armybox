@@ -34,7 +34,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn httpd(argc: i32, argv: *const *const u8) -> i32 {
     let mut foreground = false;
     let mut port: u16 = 80;
@@ -198,7 +198,7 @@ pub fn httpd(argc: i32, argv: *const *const u8) -> i32 {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn handle_request(fd: i32, _verbose: bool) {
     let mut buf = [0u8; 4096];
     let n = io::read(fd, &mut buf);
@@ -322,7 +322,7 @@ fn handle_request(fd: i32, _verbose: bool) {
     io::close(file_fd);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn send_error(fd: i32, code: u32, message: &[u8]) {
     let mut buf = [0u8; 16];
 
@@ -469,7 +469,7 @@ fn print_usage() {
     io::write_str(1, b"  -v        Verbose mode\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn httpd(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"httpd: only available on Linux\n");
     1

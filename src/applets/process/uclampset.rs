@@ -86,7 +86,7 @@ impl Default for SchedAttr {
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn uclampset(argc: i32, argv: *const *const u8) -> i32 {
     let mut min: Option<u32> = None;
     let mut max: Option<u32> = None;
@@ -201,7 +201,7 @@ pub fn uclampset(argc: i32, argv: *const *const u8) -> i32 {
     1
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_uclamp(pid: i32, min: Option<u32>, max: Option<u32>, reset: bool, reset_on_fork: bool) -> i32 {
     let mut attr = SchedAttr::default();
 
@@ -241,7 +241,7 @@ fn set_uclamp(pid: i32, min: Option<u32>, max: Option<u32>, reset: bool, reset_o
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn show_uclamp(pid: i32) -> i32 {
     let mut attr = SchedAttr::default();
 
@@ -267,12 +267,12 @@ fn show_uclamp(pid: i32) -> i32 {
 }
 
 // Syscall wrappers
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 unsafe fn sched_getattr(pid: i32, attr: *mut SchedAttr, size: u32, flags: u32) -> i32 { unsafe {
     libc::syscall(libc::SYS_sched_getattr, pid, attr, size, flags) as i32
 }}
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 unsafe fn sched_setattr(pid: i32, attr: *const SchedAttr, flags: u32) -> i32 { unsafe {
     libc::syscall(libc::SYS_sched_setattr, pid, attr, flags) as i32
 }}
@@ -290,7 +290,7 @@ fn print_usage() {
     io::write_str(1, b"  -s       Show current settings\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn uclampset(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"uclampset: only available on Linux\n");
     1
