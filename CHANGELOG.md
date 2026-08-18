@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-18
+
+### Added
+- Android/Bionic support with full applet parity: `aarch64-linux-android` is
+  now a release target shipping prebuilt `armybox` and `abpd-gen` binaries.
+  New compat layer in `sys` (reboot via direct syscall, `gethostid` with
+  `/etc/hostid` fallback, `rtentry`/`RTF_*`, `SCHED_OTHER`,
+  `_PC_FILESIZEBITS`); 27 applets previously stubbed as "only available on
+  Linux" are enabled on Android.
+
+### Fixed
+- Cross-target portability: `*const i8` casts replaced with `libc::c_char`
+  (Bionic's `c_char` is `u8`), width-safe `st_mode & S_IFMT` comparisons,
+  32-bit `time_t`/`c_long` fixes across 13 applets, and the ioctl request
+  type on Bionic. The `aarch64-unknown-linux-musl` and
+  `armv7-unknown-linux-musleabihf` release targets compile again
+  (previously 173 errors).
+- Android errno: use Bionic's `__errno()` instead of `__errno_location()`
+  in `sys::errno()`/`clear_errno()`; five applets that read errno through
+  raw libc calls now go through `sys::errno()`.
+
+### abp package manager (0.2.1)
+- Android cross-compilation fixed (`c_char`, `st_mode` widths, Bionic
+  `__errno()`), closing the reported cargo-ndk build failure.
+- Path helpers set `ENAMETOOLONG` on the too-long-path short circuit, so
+  `mkdir_tracked` can no longer misread a stale `EEXIST` as success for a
+  directory that was never created.
+- New shared helpers: `io::errno`, `io::set_errno`, `io::is_dir`,
+  `io::is_reg`.
+
 ## [0.4.0] - 2026-08-12
 
 ### Changed
