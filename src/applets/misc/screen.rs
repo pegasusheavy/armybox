@@ -90,7 +90,7 @@ pub fn screen_list_sessions() -> i32 {
         let mut st: libc::stat = unsafe { core::mem::zeroed() };
         if io::stat(&path_buf[..idx], &mut st) == 0 {
             // Check if socket (S_IFSOCK)
-            if (st.st_mode & libc::S_IFMT) == libc::S_IFSOCK {
+            if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFSOCK as u32 {
                 io::write_str(1, b"\t");
                 io::write_all(1, &name[..len]);
                 io::write_str(1, b"\t(Detached)\n");
@@ -155,7 +155,7 @@ pub fn screen_detach(session_name: &[u8]) -> i32 {
 
         // Copy path to sun_path
         for i in 0..idx.min(107) {
-            addr.sun_path[i] = sock_path[i] as i8;
+            addr.sun_path[i] = sock_path[i] as libc::c_char;
         }
 
         let ret = unsafe {
@@ -236,7 +236,7 @@ pub fn screen_reattach(session_name: &[u8]) -> i32 {
         addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
 
         for i in 0..idx.min(107) {
-            addr.sun_path[i] = sock_path[i] as i8;
+            addr.sun_path[i] = sock_path[i] as libc::c_char;
         }
 
         let ret = unsafe {
@@ -437,7 +437,7 @@ pub fn screen_new_session(session_name: Option<&[u8]>) -> i32 {
     addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
 
     for i in 0..sock_path_len.min(107) {
-        addr.sun_path[i] = sock_path[i] as i8;
+        addr.sun_path[i] = sock_path[i] as libc::c_char;
     }
 
     let ret = unsafe {
@@ -522,7 +522,7 @@ pub fn screen_new_session(session_name: Option<&[u8]>) -> i32 {
         shell_path.push(0);
 
         if let Ok(shell_cstr) = CString::from_vec_with_nul(shell_path) {
-            let args: [*const i8; 2] = [shell_cstr.as_ptr(), core::ptr::null()];
+            let args: [*const libc::c_char; 2] = [shell_cstr.as_ptr(), core::ptr::null()];
             unsafe {
                 libc::execv(shell_cstr.as_ptr(), args.as_ptr());
             }

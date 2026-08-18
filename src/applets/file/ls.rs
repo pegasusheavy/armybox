@@ -249,7 +249,7 @@ pub fn ls(argc: i32, argv: *const *const u8) -> i32 {
             exit_code = 1;
             continue;
         }
-        let is_dir = (st.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+        let is_dir = (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32;
         if is_dir && !flags.dir_only {
             dirs.push(op);
         } else {

@@ -128,7 +128,7 @@ pub fn time(argc: i32, argv: *const *const u8) -> i32 {
             }
         }
 
-        let ptrs: Vec<*const i8> = args.iter()
+        let ptrs: Vec<*const libc::c_char> = args.iter()
             .map(|s| s.as_ptr())
             .chain(core::iter::once(core::ptr::null()))
             .collect();

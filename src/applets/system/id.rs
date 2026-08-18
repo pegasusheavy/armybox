@@ -108,7 +108,7 @@ pub fn id(argc: i32, argv: *const *const u8) -> i32 {
         let mut buf = alloc::vec::Vec::with_capacity(u.len() + 1);
         buf.extend_from_slice(u);
         buf.push(0);
-        let pw = unsafe { libc::getpwnam(buf.as_ptr() as *const i8) };
+        let pw = unsafe { libc::getpwnam(buf.as_ptr() as *const libc::c_char) };
         if pw.is_null() {
             io::write_str(2, b"id: '");
             io::write_all(2, u);
@@ -151,7 +151,7 @@ pub fn id(argc: i32, argv: *const *const u8) -> i32 {
         loop {
             let rc = unsafe {
                 libc::getgrouplist(
-                    buf.as_ptr() as *const i8,
+                    buf.as_ptr() as *const libc::c_char,
                     gid as libc::gid_t,
                     groups.as_mut_ptr(),
                     &mut ngroups,

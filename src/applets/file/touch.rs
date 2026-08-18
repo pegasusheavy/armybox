@@ -89,7 +89,7 @@ pub fn touch(argc: i32, argv: *const *const u8) -> i32 {
             io::write_str(2, b"'\n");
             return 1;
         }
-        Some((st.st_atime, st.st_mtime))
+        Some((st.st_atime as i64, st.st_mtime as i64))
     } else if let Some(ts) = time_str {
         match parse_touch_time(ts) {
             Some((sec, _)) => Some((sec, sec)),
@@ -131,7 +131,7 @@ pub fn touch(argc: i32, argv: *const *const u8) -> i32 {
                 None => {
                     // Current time - use utimes with null
                     if access_only && mod_only {
-                        if unsafe { libc::utimes(path.as_ptr() as *const i8, core::ptr::null()) } < 0 {
+                        if unsafe { libc::utimes(path.as_ptr() as *const libc::c_char, core::ptr::null()) } < 0 {
                             sys::perror(path);
                             exit_code = 1;
                         }
@@ -156,7 +156,7 @@ pub fn touch(argc: i32, argv: *const *const u8) -> i32 {
                                 tv_usec: 0,
                             },
                         ];
-                        if unsafe { libc::utimes(path.as_ptr() as *const i8, times.as_ptr()) } < 0 {
+                        if unsafe { libc::utimes(path.as_ptr() as *const libc::c_char, times.as_ptr()) } < 0 {
                             sys::perror(path);
                             exit_code = 1;
                         }
@@ -173,15 +173,15 @@ pub fn touch(argc: i32, argv: *const *const u8) -> i32 {
 
                     let times = [
                         libc::timeval {
-                            tv_sec: if access_only { atime } else { st2.st_atime },
+                            tv_sec: if access_only { atime as libc::time_t } else { st2.st_atime },
                             tv_usec: 0,
                         },
                         libc::timeval {
-                            tv_sec: if mod_only { mtime } else { st2.st_mtime },
+                            tv_sec: if mod_only { mtime as libc::time_t } else { st2.st_mtime },
                             tv_usec: 0,
                         },
                     ];
-                    if unsafe { libc::utimes(path.as_ptr() as *const i8, times.as_ptr()) } < 0 {
+                    if unsafe { libc::utimes(path.as_ptr() as *const libc::c_char, times.as_ptr()) } < 0 {
                         sys::perror(path);
                         exit_code = 1;
                     }
@@ -207,7 +207,7 @@ fn parse_touch_time(s: &[u8]) -> Option<(i64, i64)> {
     let (year, month, day, hour, min) = match main.len() {
         8 => {
             // MMDDhhmm - use current year
-            let mut now: i64 = 0;
+            let mut now: libc::time_t = 0;
             unsafe { libc::time(&mut now) };
             let tm = unsafe { libc::localtime(&now) };
             let year = unsafe { (*tm).tm_year + 1900 } as i64;
@@ -256,7 +256,7 @@ fn parse_touch_time(s: &[u8]) -> Option<(i64, i64)> {
         return None;
     }
 
-    Some((epoch, 0))
+    Some((epoch as i64, 0))
 }
 
 /// Parse a 2-digit decimal number

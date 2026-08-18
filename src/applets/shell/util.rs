@@ -163,7 +163,7 @@ pub(super) fn is_regular_file(path: &[u8]) -> bool {
     if io::stat(path, &mut stat_buf) != 0 {
         return false;
     }
-    (stat_buf.st_mode & libc::S_IFMT) == libc::S_IFREG
+    (stat_buf.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFREG as u32
 }
 
 /// Check if path is a directory
@@ -173,7 +173,7 @@ pub(super) fn is_directory(path: &[u8]) -> bool {
     if io::stat(path, &mut stat_buf) != 0 {
         return false;
     }
-    (stat_buf.st_mode & libc::S_IFMT) == libc::S_IFDIR
+    (stat_buf.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32
 }
 
 /// Check if path is readable
@@ -201,7 +201,7 @@ pub(super) fn is_symlink(path: &[u8]) -> bool {
     if io::lstat(path, &mut stat_buf) != 0 {
         return false;
     }
-    (stat_buf.st_mode & libc::S_IFMT) == libc::S_IFLNK
+    (stat_buf.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFLNK as u32
 }
 
 /// Get file size in bytes

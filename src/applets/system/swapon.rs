@@ -24,7 +24,7 @@ pub fn swapon(argc: i32, argv: *const *const u8) -> i32 {
     let mut path_buf = [0u8; 4096];
     path_buf[..path.len()].copy_from_slice(path);
 
-    if unsafe { libc::swapon(path_buf.as_ptr() as *const i8, 0) } != 0 {
+    if unsafe { libc::swapon(path_buf.as_ptr() as *const libc::c_char, 0) } != 0 {
         sys::perror(b"swapon");
         return 1;
     }

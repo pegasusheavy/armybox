@@ -127,7 +127,7 @@ pub fn traceroute(argc: i32, argv: *const *const u8) -> i32 {
 
     // Set receive timeout
     let tv = libc::timeval {
-        tv_sec: wait_time as i64,
+        tv_sec: wait_time as libc::time_t,
         tv_usec: 0,
     };
     unsafe {

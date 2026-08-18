@@ -391,7 +391,7 @@ fn is_directory(path: &[u8]) -> bool {
     if io::stat(path, &mut stat_buf) < 0 {
         return false;
     }
-    (stat_buf.st_mode & libc::S_IFMT) == libc::S_IFDIR
+    (stat_buf.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32
 }
 
 fn get_mime_type(path: &[u8]) -> &'static [u8] {

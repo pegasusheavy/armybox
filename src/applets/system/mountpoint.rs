@@ -29,7 +29,7 @@ pub fn mountpoint(argc: i32, argv: *const *const u8) -> i32 {
     let mut st1: libc::stat = unsafe { core::mem::zeroed() };
     let mut st2: libc::stat = unsafe { core::mem::zeroed() };
 
-    if unsafe { libc::stat(path_buf.as_ptr() as *const i8, &mut st1) } != 0 {
+    if unsafe { libc::stat(path_buf.as_ptr() as *const libc::c_char, &mut st1) } != 0 {
         return 1;
     }
 
@@ -42,7 +42,7 @@ pub fn mountpoint(argc: i32, argv: *const *const u8) -> i32 {
     parent[plen] = b'.'; plen += 1;
     parent[plen] = 0;
 
-    if unsafe { libc::stat(parent.as_ptr() as *const i8, &mut st2) } != 0 {
+    if unsafe { libc::stat(parent.as_ptr() as *const libc::c_char, &mut st2) } != 0 {
         return 1;
     }
 

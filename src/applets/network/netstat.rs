@@ -532,8 +532,8 @@ fn find_process_by_inode(inode: u64) -> Option<(u64, String)> {
                     link_path.push(0);
                     let n = unsafe {
                         libc::readlink(
-                            link_path.as_ptr() as *const i8,
-                            link_buf.as_mut_ptr() as *mut i8,
+                            link_path.as_ptr() as *const libc::c_char,
+                            link_buf.as_mut_ptr() as *mut libc::c_char,
                             link_buf.len()
                         )
                     };

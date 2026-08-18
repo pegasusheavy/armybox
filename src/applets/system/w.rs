@@ -306,7 +306,7 @@ fn get_users_from_proc() -> Vec<UserSession> {
         name,
         tty,
         host: String::new(),
-        login_time: unsafe { libc::time(core::ptr::null_mut()) },
+        login_time: unsafe { libc::time(core::ptr::null_mut()) } as i64,
         pid: unsafe { libc::getpid() },
     });
 
@@ -353,8 +353,8 @@ fn get_current_tty() -> String {
     let mut link_buf = [0u8; 256];
     let n = unsafe {
         libc::readlink(
-            b"/proc/self/fd/0\0".as_ptr() as *const i8,
-            link_buf.as_mut_ptr() as *mut i8,
+            b"/proc/self/fd/0\0".as_ptr() as *const libc::c_char,
+            link_buf.as_mut_ptr() as *mut libc::c_char,
             link_buf.len()
         )
     };
@@ -527,7 +527,8 @@ fn print_user_long(user: &UserSession) {
 
     // LOGIN@ (8)
     let mut tm: libc::tm = unsafe { core::mem::zeroed() };
-    unsafe { libc::localtime_r(&user.login_time, &mut tm); }
+    let login_time = user.login_time as libc::time_t;
+    unsafe { libc::localtime_r(&login_time, &mut tm); }
     let h = sys::format_u64(tm.tm_hour as u64, &mut buf);
     if h.len() < 2 { io::write_str(1, b"0"); }
     io::write_all(1, h);

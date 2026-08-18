@@ -75,7 +75,7 @@ fn show_module_info(module: &[u8], field_filter: Option<&[u8]>) -> bool {
     // Check if module exists in /sys/module
     let mut stat_buf: libc::stat = unsafe { core::mem::zeroed() };
     path[pos] = 0; // Null terminate
-    if unsafe { libc::stat(path.as_ptr() as *const i8, &mut stat_buf) } != 0 {
+    if unsafe { libc::stat(path.as_ptr() as *const libc::c_char, &mut stat_buf) } != 0 {
         io::write_str(2, b"modinfo: module ");
         io::write_all(2, module);
         io::write_str(2, b" not found\n");

@@ -23,6 +23,47 @@ pub fn path_to_cstr(path: &[u8], buf: &mut [u8; PATH_MAX]) -> bool {
     true
 }
 
+/// Current value of the C `errno`.
+///
+/// Bionic exposes errno as `__errno()`; glibc and musl as `__errno_location()`.
+pub fn errno() -> i32 {
+    #[cfg(target_os = "android")]
+    unsafe {
+        *libc::__errno()
+    }
+    #[cfg(not(target_os = "android"))]
+    unsafe {
+        *libc::__errno_location()
+    }
+}
+
+/// Set the C `errno`.
+pub fn set_errno(value: i32) {
+    #[cfg(target_os = "android")]
+    unsafe {
+        *libc::__errno() = value;
+    }
+    #[cfg(not(target_os = "android"))]
+    unsafe {
+        *libc::__errno_location() = value;
+    }
+}
+
+/// Does `st_mode` describe a directory?
+///
+/// The `u32` parameter (with casts at the call site) sidesteps `mode_t`/`S_IFMT`
+/// width differences across glibc, musl, and Bionic.
+#[inline]
+pub fn is_dir(mode: u32) -> bool {
+    (mode & libc::S_IFMT as u32) == libc::S_IFDIR as u32
+}
+
+/// Does `st_mode` describe a regular file?
+#[inline]
+pub fn is_reg(mode: u32) -> bool {
+    (mode & libc::S_IFMT as u32) == libc::S_IFREG as u32
+}
+
 /// Write all bytes to a file descriptor
 pub fn write_all(fd: i32, buf: &[u8]) -> isize {
     let mut written = 0;
@@ -93,12 +134,13 @@ pub fn read_all(fd: i32) -> Vec<u8> {
 pub fn open(path: &[u8], flags: i32, mode: u32) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::open(path_buf.as_ptr() as *const i8, flags, mode) }
+    unsafe { libc::open(path_buf.as_ptr() as *const libc::c_char, flags, mode) }
 }
 
 /// Close a file descriptor
@@ -116,12 +158,13 @@ pub fn stat_zeroed() -> libc::stat {
 pub fn stat(path: &[u8], buf: &mut libc::stat) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::stat(path_buf.as_ptr() as *const i8, buf) }
+    unsafe { libc::stat(path_buf.as_ptr() as *const libc::c_char, buf) }
 }
 
 /// Get file status from fd
@@ -133,36 +176,39 @@ pub fn fstat(fd: i32, buf: &mut libc::stat) -> i32 {
 pub fn mkdir(path: &[u8], mode: u32) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::mkdir(path_buf.as_ptr() as *const i8, mode as libc::mode_t) }
+    unsafe { libc::mkdir(path_buf.as_ptr() as *const libc::c_char, mode as libc::mode_t) }
 }
 
 /// Remove a directory
 pub fn rmdir(path: &[u8]) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::rmdir(path_buf.as_ptr() as *const i8) }
+    unsafe { libc::rmdir(path_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Unlink (remove) a file
 pub fn unlink(path: &[u8]) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::unlink(path_buf.as_ptr() as *const i8) }
+    unsafe { libc::unlink(path_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Rename a file
@@ -171,6 +217,7 @@ pub fn rename(old: &[u8], new: &[u8]) -> i32 {
     let mut new_buf = [0u8; 4096];
 
     if old.len() >= old_buf.len() || new.len() >= new_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
 
@@ -179,7 +226,7 @@ pub fn rename(old: &[u8], new: &[u8]) -> i32 {
     new_buf[..new.len()].copy_from_slice(new);
     new_buf[new.len()] = 0;
 
-    unsafe { libc::rename(old_buf.as_ptr() as *const i8, new_buf.as_ptr() as *const i8) }
+    unsafe { libc::rename(old_buf.as_ptr() as *const libc::c_char, new_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Create a symlink
@@ -188,6 +235,7 @@ pub fn symlink(target: &[u8], linkpath: &[u8]) -> i32 {
     let mut link_buf = [0u8; 4096];
 
     if target.len() >= target_buf.len() || linkpath.len() >= link_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
 
@@ -196,43 +244,46 @@ pub fn symlink(target: &[u8], linkpath: &[u8]) -> i32 {
     link_buf[..linkpath.len()].copy_from_slice(linkpath);
     link_buf[linkpath.len()] = 0;
 
-    unsafe { libc::symlink(target_buf.as_ptr() as *const i8, link_buf.as_ptr() as *const i8) }
+    unsafe { libc::symlink(target_buf.as_ptr() as *const libc::c_char, link_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Change file permissions
 pub fn chmod(path: &[u8], mode: u32) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::chmod(path_buf.as_ptr() as *const i8, mode as libc::mode_t) }
+    unsafe { libc::chmod(path_buf.as_ptr() as *const libc::c_char, mode as libc::mode_t) }
 }
 
 /// Check file access permissions (POSIX access())
 pub fn access(path: &[u8], mode: i32) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return -1;
     }
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::access(path_buf.as_ptr() as *const i8, mode) }
+    unsafe { libc::access(path_buf.as_ptr() as *const libc::c_char, mode) }
 }
 
 /// Open directory for reading
 pub fn opendir(path: &[u8]) -> *mut libc::DIR {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
+        set_errno(libc::ENAMETOOLONG);
         return ptr::null_mut();
     }
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::opendir(path_buf.as_ptr() as *const i8) }
+    unsafe { libc::opendir(path_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Read directory entry

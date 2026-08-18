@@ -35,14 +35,14 @@ pub fn file(argc: i32, argv: *const *const u8) -> i32 {
                 continue;
             }
 
-            match st.st_mode & libc::S_IFMT {
-                libc::S_IFDIR => { io::write_str(1, b"directory\n"); }
-                libc::S_IFLNK => { io::write_str(1, b"symbolic link\n"); }
-                libc::S_IFIFO => { io::write_str(1, b"fifo (named pipe)\n"); }
-                libc::S_IFSOCK => { io::write_str(1, b"socket\n"); }
-                libc::S_IFBLK => { io::write_str(1, b"block special\n"); }
-                libc::S_IFCHR => { io::write_str(1, b"character special\n"); }
-                libc::S_IFREG => {
+            match st.st_mode as u32 & libc::S_IFMT as u32 {
+                t if t == libc::S_IFDIR as u32 => { io::write_str(1, b"directory\n"); }
+                t if t == libc::S_IFLNK as u32 => { io::write_str(1, b"symbolic link\n"); }
+                t if t == libc::S_IFIFO as u32 => { io::write_str(1, b"fifo (named pipe)\n"); }
+                t if t == libc::S_IFSOCK as u32 => { io::write_str(1, b"socket\n"); }
+                t if t == libc::S_IFBLK as u32 => { io::write_str(1, b"block special\n"); }
+                t if t == libc::S_IFCHR as u32 => { io::write_str(1, b"character special\n"); }
+                t if t == libc::S_IFREG as u32 => {
                     // Check magic bytes
                     let fd = io::open(path, libc::O_RDONLY, 0);
                     if fd >= 0 {

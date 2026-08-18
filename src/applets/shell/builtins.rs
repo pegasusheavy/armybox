@@ -77,7 +77,7 @@ pub(super) fn execute_builtin(shell: &mut Shell, cmd: &Command) -> bool {
     if name == b"pwd" {
         let mut buf = [0u8; 4096];
         unsafe {
-            if !libc::getcwd(buf.as_mut_ptr() as *mut i8, buf.len()).is_null() {
+            if !libc::getcwd(buf.as_mut_ptr() as *mut libc::c_char, buf.len()).is_null() {
                 let len = io::strlen(buf.as_ptr());
                 io::write_all(1, &buf[..len]);
                 io::write_str(1, b"\n");

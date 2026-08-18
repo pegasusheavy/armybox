@@ -87,8 +87,8 @@ pub fn unshare(argc: i32, argv: *const *const u8) -> i32 {
 
     unsafe {
         libc::execvp(
-            cmd_buf.as_ptr() as *const i8,
-            argv.add(cmd_idx as usize) as *const *const i8,
+            cmd_buf.as_ptr() as *const libc::c_char,
+            argv.add(cmd_idx as usize) as *const *const libc::c_char,
         );
     }
     sys::perror(cmd);

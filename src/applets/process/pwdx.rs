@@ -29,7 +29,7 @@ pub fn pwdx(argc: i32, argv: *const *const u8) -> i32 {
     for &c in b"/cwd\0" { path[pi] = c; pi += 1; }
 
     let mut link_buf = [0u8; 4096];
-    let n = unsafe { libc::readlink(path.as_ptr() as *const i8, link_buf.as_mut_ptr() as *mut i8, link_buf.len() - 1) };
+    let n = unsafe { libc::readlink(path.as_ptr() as *const libc::c_char, link_buf.as_mut_ptr() as *mut libc::c_char, link_buf.len() - 1) };
     if n > 0 {
         io::write_all(1, pid);
         io::write_str(1, b": ");

@@ -52,7 +52,7 @@ pub fn hostname(argc: i32, argv: *const *const u8) -> i32 {
             // Trim trailing whitespace/newlines
             let name = content.trim_ascii();
             if !name.is_empty() {
-                if unsafe { libc::sethostname(name.as_ptr() as *const i8, name.len()) } < 0 {
+                if unsafe { libc::sethostname(name.as_ptr() as *const libc::c_char, name.len()) } < 0 {
                     sys::perror(b"sethostname");
                     return 1;
                 }
@@ -61,7 +61,7 @@ pub fn hostname(argc: i32, argv: *const *const u8) -> i32 {
         } else if arg == b"-s" || arg == b"--short" {
             // Print short hostname (up to first dot)
             let mut buf = [0u8; 256];
-            if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
+            if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) } == 0 {
                 let full = unsafe { io::cstr_to_slice(buf.as_ptr()) };
                 if let Some(dot) = full.iter().position(|&c| c == b'.') {
                     io::write_all(1, &full[..dot]);
@@ -74,7 +74,7 @@ pub fn hostname(argc: i32, argv: *const *const u8) -> i32 {
         } else if arg == b"-d" || arg == b"--domain" {
             // Print domain name
             let mut buf = [0u8; 256];
-            if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
+            if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) } == 0 {
                 let full = unsafe { io::cstr_to_slice(buf.as_ptr()) };
                 if let Some(dot) = full.iter().position(|&c| c == b'.') {
                     io::write_all(1, &full[dot + 1..]);
@@ -84,7 +84,7 @@ pub fn hostname(argc: i32, argv: *const *const u8) -> i32 {
             return 0;
         } else if arg[0] != b'-' {
             // Set hostname directly
-            if unsafe { libc::sethostname(arg.as_ptr() as *const i8, arg.len()) } < 0 {
+            if unsafe { libc::sethostname(arg.as_ptr() as *const libc::c_char, arg.len()) } < 0 {
                 sys::perror(b"sethostname");
                 return 1;
             }
@@ -96,7 +96,7 @@ pub fn hostname(argc: i32, argv: *const *const u8) -> i32 {
 
     // No arguments - print current hostname
     let mut buf = [0u8; 256];
-    if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
+    if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) } == 0 {
         io::write_all(1, unsafe { io::cstr_to_slice(buf.as_ptr()) });
         io::write_str(1, b"\n");
     }

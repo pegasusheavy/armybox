@@ -50,7 +50,7 @@ pub fn rtcwake(argc: i32, argv: *const *const u8) -> i32 {
         // Show current RTC time
         let now = unsafe { libc::time(core::ptr::null_mut()) };
         io::write_str(1, b"Current RTC time: ");
-        io::write_signed(1, now);
+        io::write_signed(1, now as i64);
         io::write_str(1, b"\n");
         return 0;
     }
@@ -66,7 +66,7 @@ pub fn rtcwake(argc: i32, argv: *const *const u8) -> i32 {
     }
 
     // Calculate wake time
-    let wake_time = unsafe { libc::time(core::ptr::null_mut()) } + seconds;
+    let wake_time = unsafe { libc::time(core::ptr::null_mut()) } as i64 + seconds;
 
     io::write_str(1, b"rtcwake: wakeup scheduled for ");
     io::write_signed(1, wake_time);

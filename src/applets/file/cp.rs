@@ -124,7 +124,7 @@ fn is_directory(path: &[u8]) -> bool {
     if io::stat(path, &mut st) < 0 {
         return false;
     }
-    (st.st_mode & libc::S_IFMT) == libc::S_IFDIR
+    (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32
 }
 
 /// Build destination path by appending basename of source to dest directory
@@ -185,7 +185,7 @@ fn copy_item(
     // links instead of being followed.
     if no_deref {
         let mut lst: libc::stat = unsafe { core::mem::zeroed() };
-        if io::lstat(src, &mut lst) == 0 && (lst.st_mode & libc::S_IFMT) == libc::S_IFLNK {
+        if io::lstat(src, &mut lst) == 0 && (lst.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFLNK as u32 {
             return copy_symlink(src, dest, force);
         }
     }
@@ -196,7 +196,7 @@ fn copy_item(
         return 1;
     }
 
-    if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+    if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
         if !recursive {
             io::write_str(2, b"cp: omitting directory '");
             io::write_all(2, src);
@@ -305,7 +305,7 @@ fn copy_file_opts(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
         // Preserve ownership (may fail if not root)
         unsafe {
             libc::chown(
-                dest.as_ptr() as *const i8,
+                dest.as_ptr() as *const libc::c_char,
                 src_st.st_uid,
                 src_st.st_gid,
             );
@@ -323,7 +323,7 @@ fn copy_file_opts(src: &[u8], dest: &[u8], force: bool, preserve: bool) -> i32 {
             },
         ];
         unsafe {
-            libc::utimes(dest.as_ptr() as *const i8, times.as_ptr());
+            libc::utimes(dest.as_ptr() as *const libc::c_char, times.as_ptr());
         }
     }
 
@@ -409,14 +409,14 @@ fn copy_directory(
         if io::stat(src, &mut src_st) == 0 {
             io::chmod(dest, src_st.st_mode & 0o7777);
             unsafe {
-                libc::chown(dest.as_ptr() as *const i8, src_st.st_uid, src_st.st_gid);
+                libc::chown(dest.as_ptr() as *const libc::c_char, src_st.st_uid, src_st.st_gid);
             }
             let times = [
                 libc::timeval { tv_sec: src_st.st_atime, tv_usec: 0 },
                 libc::timeval { tv_sec: src_st.st_mtime, tv_usec: 0 },
             ];
             unsafe {
-                libc::utimes(dest.as_ptr() as *const i8, times.as_ptr());
+                libc::utimes(dest.as_ptr() as *const libc::c_char, times.as_ptr());
             }
         }
     }

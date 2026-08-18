@@ -24,7 +24,7 @@ pub fn sysctl(argc: i32, argv: *const *const u8) -> i32 {
         // List all sysctl values - just show a few common ones
         io::write_str(1, b"kernel.hostname = ");
         let mut buf = [0u8; 256];
-        if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } == 0 {
+        if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) } == 0 {
             io::write_all(1, unsafe { io::cstr_to_slice(buf.as_ptr()) });
         }
         io::write_str(1, b"\n");

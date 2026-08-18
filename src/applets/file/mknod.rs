@@ -60,7 +60,7 @@ pub fn mknod(argc: i32, argv: *const *const u8) -> i32 {
         return 1;
     };
 
-    if unsafe { libc::mknod(path.as_ptr() as *const i8, mode, dev) } < 0 {
+    if unsafe { libc::mknod(path.as_ptr() as *const libc::c_char, mode, dev) } < 0 {
         sys::perror(path);
         return 1;
     }

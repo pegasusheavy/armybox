@@ -92,14 +92,14 @@ pub fn getconf(argc: i32, argv: *const *const u8) -> i32 {
         let mut cbuf = alloc::vec::Vec::with_capacity(p.len() + 1);
         cbuf.extend_from_slice(p);
         cbuf.push(0);
-        let val = unsafe { libc::pathconf(cbuf.as_ptr() as *const i8, pc) };
+        let val = unsafe { libc::pathconf(cbuf.as_ptr() as *const libc::c_char, pc) };
         // pathconf returns -1 for "no limit"; POSIX getconf prints it.
-        write_signed(1, val);
+        write_signed(1, val as i64);
         io::write_str(1, b"\n");
         0
     } else if let Some(sc) = sysconf_var(name) {
         let val = unsafe { libc::sysconf(sc) };
-        write_signed(1, val);
+        write_signed(1, val as i64);
         io::write_str(1, b"\n");
         0
     } else {

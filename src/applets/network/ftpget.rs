@@ -160,7 +160,7 @@ fn resolve_host(host: &[u8], port: u16) -> Option<libc::sockaddr_in> {
     hints.ai_socktype = libc::SOCK_STREAM;
 
     let mut res: *mut libc::addrinfo = core::ptr::null_mut();
-    if unsafe { libc::getaddrinfo(host_cstr.as_ptr() as *const i8, core::ptr::null(), &hints, &mut res) } != 0 {
+    if unsafe { libc::getaddrinfo(host_cstr.as_ptr() as *const libc::c_char, core::ptr::null(), &hints, &mut res) } != 0 {
         return None;
     }
 

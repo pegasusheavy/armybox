@@ -97,7 +97,7 @@ fn is_directory(path: &[u8]) -> bool {
     if io::stat(path, &mut st) < 0 {
         return false;
     }
-    (st.st_mode & libc::S_IFMT) == libc::S_IFDIR
+    (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32
 }
 
 /// Build destination path by appending basename of source to dest directory
@@ -140,7 +140,7 @@ fn move_item(src: &[u8], dest: &[u8], force: bool) -> i32 {
     if force {
         let mut st: libc::stat = unsafe { core::mem::zeroed() };
         if io::lstat(dest, &mut st) == 0 {
-            if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+            if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
                 // Can't force-remove a directory this way
             } else {
                 let _ = io::unlink(dest);
@@ -161,7 +161,7 @@ fn move_item(src: &[u8], dest: &[u8], force: bool) -> i32 {
         return 1;
     }
 
-    if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+    if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
         // For directories, we need recursive copy then remove
         if copy_directory(src, dest) != 0 {
             return 1;
@@ -277,7 +277,7 @@ fn copy_directory(src: &[u8], dest: &[u8]) -> i32 {
 
                 let mut st: libc::stat = unsafe { core::mem::zeroed() };
                 if io::stat(&src_path[..src_len], &mut st) == 0 {
-                    if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+                    if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
                         if copy_directory(&src_path[..src_len], &dest_path[..dest_len]) != 0 {
                             exit_code = 1;
                         }
@@ -300,7 +300,7 @@ fn remove_recursive(path: &[u8]) {
     let mut st: libc::stat = unsafe { core::mem::zeroed() };
     if io::stat(path, &mut st) < 0 { return; }
 
-    if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+    if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
         let fd = io::open(path, libc::O_RDONLY | libc::O_DIRECTORY, 0);
         if fd < 0 { return; }
 

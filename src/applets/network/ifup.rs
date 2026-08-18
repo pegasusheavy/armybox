@@ -523,10 +523,10 @@ fn configure_interface_direct(iface: &[u8], up: bool, verbose: bool) -> i32 {
     result
 }
 
-fn copy_iface_name(dest: &mut [i8; 16], src: &[u8]) {
+fn copy_iface_name(dest: &mut [libc::c_char; 16], src: &[u8]) {
     let len = src.len().min(15);
     for i in 0..len {
-        dest[i] = src[i] as i8;
+        dest[i] = src[i] as libc::c_char;
     }
     dest[len] = 0;
 }
@@ -635,15 +635,15 @@ fn run_command(cmd: &[u8]) -> i32 {
         let sh = b"/bin/sh\0";
         let c_flag = b"-c\0";
 
-        let argv: [*const i8; 4] = [
-            sh.as_ptr() as *const i8,
-            c_flag.as_ptr() as *const i8,
-            cmd_cstr.as_ptr() as *const i8,
+        let argv: [*const libc::c_char; 4] = [
+            sh.as_ptr() as *const libc::c_char,
+            c_flag.as_ptr() as *const libc::c_char,
+            cmd_cstr.as_ptr() as *const libc::c_char,
             core::ptr::null(),
         ];
 
         unsafe {
-            libc::execv(sh.as_ptr() as *const i8, argv.as_ptr());
+            libc::execv(sh.as_ptr() as *const libc::c_char, argv.as_ptr());
             libc::_exit(127);
         }
     }

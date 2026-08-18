@@ -562,7 +562,7 @@ fn get_if_index(sock: i32, iface: &[u8]) -> Option<libc::c_int> {
 
 #[cfg(target_os = "linux")]
 fn print_errno() {
-    let errno = unsafe { *libc::__errno_location() };
+    let errno = crate::sys::errno();
     let msg = match errno {
         libc::EEXIST => b"already exists" as &[u8],
         libc::ENOENT => b"not found" as &[u8],

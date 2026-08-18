@@ -61,7 +61,7 @@ pub fn pwd(argc: i32, argv: *const *const u8) -> i32 {
     }
 
     let mut buf = [0u8; 4096];
-    let ret = unsafe { libc::getcwd(buf.as_mut_ptr() as *mut i8, buf.len()) };
+    let ret = unsafe { libc::getcwd(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
     if !ret.is_null() {
         io::write_all(1, &buf[..io::strlen_arr(&buf)]);
         io::write_str(1, b"\n");

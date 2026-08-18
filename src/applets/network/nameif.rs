@@ -136,7 +136,7 @@ fn rename_interface_by_mac(new_name: &[u8], target_mac: &[u8], _use_syslog: bool
 
     // Put new name in ifr_ifru.ifru_newname
     // This is a union, we need to access it correctly
-    let new_name_ptr = unsafe { &mut ifr.ifr_ifru.ifru_newname as *mut [i8; 16] };
+    let new_name_ptr = unsafe { &mut ifr.ifr_ifru.ifru_newname as *mut [libc::c_char; 16] };
     copy_iface_name(unsafe { &mut *new_name_ptr }, new_name);
 
     // SIOCSIFNAME = 0x8923
@@ -286,10 +286,10 @@ fn parse_mac(s: &[u8]) -> Option<[u8; 6]> {
     Some(mac)
 }
 
-fn copy_iface_name(dest: &mut [i8; 16], src: &[u8]) {
+fn copy_iface_name(dest: &mut [libc::c_char; 16], src: &[u8]) {
     let len = src.len().min(15);
     for i in 0..len {
-        dest[i] = src[i] as i8;
+        dest[i] = src[i] as libc::c_char;
     }
     dest[len] = 0;
 }

@@ -85,7 +85,7 @@ pub fn truncate(argc: i32, argv: *const *const u8) -> i32 {
                 }
             }
 
-            if unsafe { libc::truncate(arg.as_ptr() as *const i8, size) } < 0 {
+            if unsafe { libc::truncate(arg.as_ptr() as *const libc::c_char, size) } < 0 {
                 sys::perror(arg);
                 exit_code = 1;
             }

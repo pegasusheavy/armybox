@@ -306,7 +306,7 @@ fn gzip_file(path: &[u8], keep: bool) -> i32 {
         let mut path_z = [0u8; 256];
         let len = path.len().min(255);
         path_z[..len].copy_from_slice(&path[..len]);
-        unsafe { libc::unlink(path_z.as_ptr() as *const i8) };
+        unsafe { libc::unlink(path_z.as_ptr() as *const libc::c_char) };
     }
 
     result
@@ -347,7 +347,7 @@ fn gunzip_file(path: &[u8], keep: bool) -> i32 {
         let mut path_z = [0u8; 256];
         let len = path.len().min(255);
         path_z[..len].copy_from_slice(&path[..len]);
-        unsafe { libc::unlink(path_z.as_ptr() as *const i8) };
+        unsafe { libc::unlink(path_z.as_ptr() as *const libc::c_char) };
     }
 
     result

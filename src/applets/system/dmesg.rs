@@ -244,7 +244,7 @@ fn format_relative_time(timestamp_us: u64) {
 /// Format human-readable time
 fn format_human_time(timestamp: i64) {
     let mut tm: libc::tm = unsafe { core::mem::zeroed() };
-    let time_t = timestamp as i64;
+    let time_t = timestamp as libc::time_t;
     unsafe { libc::localtime_r(&time_t, &mut tm) };
 
     // Format: [Mon Jan  2 15:04:05 2006]

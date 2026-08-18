@@ -86,7 +86,7 @@ fn remove_file(path: &[u8], force: bool) -> i32 {
     // Check if it's a directory
     let mut st: libc::stat = unsafe { core::mem::zeroed() };
     if io::lstat(path, &mut st) == 0 {
-        if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+        if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
             if !force {
                 io::write_str(2, b"rm: cannot remove '");
                 io::write_all(2, path);
@@ -125,7 +125,7 @@ fn remove_recursive(path: &[u8], force: bool) -> i32 {
     }
 
     // If it's a symlink or regular file, just unlink it
-    if (st.st_mode & libc::S_IFMT) != libc::S_IFDIR {
+    if (st.st_mode as u32 & libc::S_IFMT as u32) != libc::S_IFDIR as u32 {
         if io::unlink(path) < 0 {
             if !force {
                 sys::perror(path);

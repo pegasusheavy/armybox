@@ -67,15 +67,15 @@ fn run_command(cmd: &[u8], wait_for: bool) -> i32 {
         cmd_buf[..cmd_len].copy_from_slice(&cmd[..cmd_len]);
         cmd_buf[cmd_len] = 0;
 
-        let argv: [*const i8; 4] = [
-            sh_path.as_ptr() as *const i8,
-            dash_c.as_ptr() as *const i8,
-            cmd_buf.as_ptr() as *const i8,
+        let argv: [*const libc::c_char; 4] = [
+            sh_path.as_ptr() as *const libc::c_char,
+            dash_c.as_ptr() as *const libc::c_char,
+            cmd_buf.as_ptr() as *const libc::c_char,
             core::ptr::null(),
         ];
 
         unsafe {
-            libc::execv(sh_path.as_ptr() as *const i8, argv.as_ptr());
+            libc::execv(sh_path.as_ptr() as *const libc::c_char, argv.as_ptr());
         }
 
         // If exec fails, try running command directly
@@ -117,9 +117,9 @@ fn mount_if_needed(source: &[u8], target: &[u8], fstype: &[u8]) {
     // Try to mount
     let ret = unsafe {
         libc::mount(
-            source_buf.as_ptr() as *const i8,
-            target_buf.as_ptr() as *const i8,
-            fstype_buf.as_ptr() as *const i8,
+            source_buf.as_ptr() as *const libc::c_char,
+            target_buf.as_ptr() as *const libc::c_char,
+            fstype_buf.as_ptr() as *const libc::c_char,
             0,
             core::ptr::null(),
         )
@@ -158,13 +158,13 @@ pub fn init(_argc: i32, _argv: *const *const u8) -> i32 {
         if pid == 0 {
             // Child - exec shell
             let sh = b"/bin/sh\0";
-            let argv: [*const i8; 2] = [
-                sh.as_ptr() as *const i8,
+            let argv: [*const libc::c_char; 2] = [
+                sh.as_ptr() as *const libc::c_char,
                 core::ptr::null(),
             ];
             unsafe {
                 libc::setsid();
-                libc::execv(sh.as_ptr() as *const i8, argv.as_ptr());
+                libc::execv(sh.as_ptr() as *const libc::c_char, argv.as_ptr());
             }
             io::exit(1);
         }
@@ -212,13 +212,13 @@ pub fn init(_argc: i32, _argv: *const *const u8) -> i32 {
             let pid = io::fork();
             if pid == 0 {
                 let sh = b"/bin/sh\0";
-                let argv: [*const i8; 2] = [
-                    sh.as_ptr() as *const i8,
+                let argv: [*const libc::c_char; 2] = [
+                    sh.as_ptr() as *const libc::c_char,
                     core::ptr::null(),
                 ];
                 unsafe {
                     libc::setsid();
-                    libc::execv(sh.as_ptr() as *const i8, argv.as_ptr());
+                    libc::execv(sh.as_ptr() as *const libc::c_char, argv.as_ptr());
                 }
                 io::exit(1);
             }
@@ -469,13 +469,13 @@ pub fn getty(argc: i32, argv: *const *const u8) -> i32 {
     // into an unauthenticated shell.
     let login_path = b"/bin/login\0";
     let login_name = b"login\0";
-    let argv_login: [*const i8; 2] = [
-        login_name.as_ptr() as *const i8,
+    let argv_login: [*const libc::c_char; 2] = [
+        login_name.as_ptr() as *const libc::c_char,
         core::ptr::null(),
     ];
 
     unsafe {
-        libc::execv(login_path.as_ptr() as *const i8, argv_login.as_ptr());
+        libc::execv(login_path.as_ptr() as *const libc::c_char, argv_login.as_ptr());
     }
 
     io::write_str(2, b"getty: exec /bin/login failed\n");
@@ -517,13 +517,13 @@ pub fn sulogin(_argc: i32, _argv: *const *const u8) -> i32 {
 
     // Spawn shell
     let sh = b"/bin/sh\0";
-    let argv: [*const i8; 2] = [
-        sh.as_ptr() as *const i8,
+    let argv: [*const libc::c_char; 2] = [
+        sh.as_ptr() as *const libc::c_char,
         core::ptr::null(),
     ];
 
     unsafe {
-        libc::execv(sh.as_ptr() as *const i8, argv.as_ptr());
+        libc::execv(sh.as_ptr() as *const libc::c_char, argv.as_ptr());
     }
 
     1
@@ -540,13 +540,13 @@ pub fn oneit(argc: i32, argv: *const *const u8) -> i32 {
     // Build argv for the command
     #[cfg(all(feature = "oneit", feature = "alloc"))]
     {
-        let mut args: Vec<*const i8> = Vec::new();
+        let mut args: Vec<*const libc::c_char> = Vec::new();
         for i in 1..argc {
             if let Some(arg) = unsafe { get_arg(argv, i) } {
                 // Need null-terminated string
                 let mut buf = alloc::vec![0u8; arg.len() + 1];
                 buf[..arg.len()].copy_from_slice(arg);
-                args.push(buf.leak().as_ptr() as *const i8);
+                args.push(buf.leak().as_ptr() as *const libc::c_char);
             }
         }
         args.push(core::ptr::null());
@@ -591,23 +591,23 @@ pub fn switch_root(argc: i32, argv: *const *const u8) -> i32 {
     root_buf[..rlen].copy_from_slice(&new_root[..rlen]);
 
     unsafe {
-        if libc::chdir(root_buf.as_ptr() as *const i8) != 0 {
+        if libc::chdir(root_buf.as_ptr() as *const libc::c_char) != 0 {
             io::write_str(2, b"switch_root: chdir failed\n");
             return 1;
         }
 
-        if libc::mount(root_buf.as_ptr() as *const i8, b"/\0".as_ptr() as *const i8,
+        if libc::mount(root_buf.as_ptr() as *const libc::c_char, b"/\0".as_ptr() as *const libc::c_char,
                        core::ptr::null(), libc::MS_MOVE, core::ptr::null()) != 0 {
             io::write_str(2, b"switch_root: mount --move failed\n");
             return 1;
         }
 
-        if libc::chroot(b".\0".as_ptr() as *const i8) != 0 {
+        if libc::chroot(b".\0".as_ptr() as *const libc::c_char) != 0 {
             io::write_str(2, b"switch_root: chroot failed\n");
             return 1;
         }
 
-        if libc::chdir(b"/\0".as_ptr() as *const i8) != 0 {
+        if libc::chdir(b"/\0".as_ptr() as *const libc::c_char) != 0 {
             io::write_str(2, b"switch_root: chdir / failed\n");
             return 1;
         }
@@ -618,13 +618,13 @@ pub fn switch_root(argc: i32, argv: *const *const u8) -> i32 {
     let ilen = core::cmp::min(new_init.len(), init_buf.len() - 1);
     init_buf[..ilen].copy_from_slice(&new_init[..ilen]);
 
-    let argv_init: [*const i8; 2] = [
-        init_buf.as_ptr() as *const i8,
+    let argv_init: [*const libc::c_char; 2] = [
+        init_buf.as_ptr() as *const libc::c_char,
         core::ptr::null(),
     ];
 
     unsafe {
-        libc::execv(init_buf.as_ptr() as *const i8, argv_init.as_ptr());
+        libc::execv(init_buf.as_ptr() as *const libc::c_char, argv_init.as_ptr());
     }
 
     io::write_str(2, b"switch_root: exec failed\n");

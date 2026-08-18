@@ -282,7 +282,7 @@ fn log_message(priority: i32, tag: &[u8], pid: i32, message: &[u8], to_stderr: b
         addr.sun_family = libc::AF_UNIX as u16;
         // Copy path
         for (i, &b) in dev_log.iter().take(107).enumerate() {
-            addr.sun_path[i] = b as i8;
+            addr.sun_path[i] = b as libc::c_char;
         }
 
         let ret = unsafe {

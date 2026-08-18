@@ -87,7 +87,7 @@ pub(crate) fn mkdir_parents(path: &[u8], mode: u32) -> i32 {
         // Check if it already exists and is a directory
         let mut st: libc::stat = unsafe { core::mem::zeroed() };
         if io::stat(&partial[..len], &mut st) == 0 {
-            if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+            if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
                 return 0; // Already exists as directory, OK
             }
         }

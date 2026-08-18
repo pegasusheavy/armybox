@@ -70,7 +70,7 @@ pub fn ln(argc: i32, argv: *const *const u8) -> i32 {
     // of being dereferenced.
     let mut st: libc::stat = unsafe { core::mem::zeroed() };
     let stat_ret = if no_deref { io::lstat(last, &mut st) } else { io::stat(last, &mut st) };
-    let last_is_dir = stat_ret == 0 && (st.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+    let last_is_dir = stat_ret == 0 && (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32;
 
     if last_is_dir {
         // ln [-fs] source... target_dir

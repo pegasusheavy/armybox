@@ -161,7 +161,7 @@ fn process(
         return;
     }
 
-    let is_dir = (st.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+    let is_dir = (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32;
     let mut can_descend = is_dir && depth < cfg.maxdepth;
 
     // Bound genuine recursion depth so a pathologically deep tree stops the
@@ -382,7 +382,7 @@ fn run_exec(template: &[&[u8]], path: &[u8], ret: &mut i32) -> bool {
                 cstrings.push(cs);
             }
         }
-        let ptrs: Vec<*const i8> = cstrings
+        let ptrs: Vec<*const libc::c_char> = cstrings
             .iter()
             .map(|s| s.as_ptr())
             .chain(core::iter::once(core::ptr::null()))
@@ -405,7 +405,7 @@ fn run_exec(template: &[&[u8]], path: &[u8], ret: &mut i32) -> bool {
 
 /// Write a `find: 'PATH': strerror` diagnostic to stderr.
 fn diag(path: &[u8]) {
-    let errno = unsafe { *libc::__errno_location() };
+    let errno = crate::sys::errno();
     io::write_str(2, b"find: '");
     io::write_all(2, path);
     io::write_str(2, b"': ");

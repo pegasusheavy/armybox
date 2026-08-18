@@ -110,7 +110,7 @@ pub fn arping(argc: i32, argv: *const *const u8) -> i32 {
 
     // Set timeout
     let tv = libc::timeval {
-        tv_sec: timeout as i64,
+        tv_sec: timeout as libc::time_t,
         tv_usec: 0,
     };
     unsafe {

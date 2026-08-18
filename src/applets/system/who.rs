@@ -315,8 +315,8 @@ fn get_my_tty() -> Option<[u8; 32]> {
     // Get tty name from /proc/self/fd/0
     let n = unsafe {
         libc::readlink(
-            b"/proc/self/fd/0\0".as_ptr() as *const i8,
-            tty_buf.as_mut_ptr() as *mut i8,
+            b"/proc/self/fd/0\0".as_ptr() as *const libc::c_char,
+            tty_buf.as_mut_ptr() as *mut libc::c_char,
             tty_buf.len() - 1,
         )
     };
@@ -349,7 +349,7 @@ fn get_mesg_status(line: &[u8]) -> u8 {
     path[5..5 + len].copy_from_slice(&line[..len]);
 
     let mut stat: libc::stat = unsafe { core::mem::zeroed() };
-    let ret = unsafe { libc::stat(path.as_ptr() as *const i8, &mut stat) };
+    let ret = unsafe { libc::stat(path.as_ptr() as *const libc::c_char, &mut stat) };
 
     if ret < 0 {
         return b'?';
@@ -370,7 +370,7 @@ fn get_idle_time(line: &[u8]) -> i64 {
     path[5..5 + len].copy_from_slice(&line[..len]);
 
     let mut stat: libc::stat = unsafe { core::mem::zeroed() };
-    let ret = unsafe { libc::stat(path.as_ptr() as *const i8, &mut stat) };
+    let ret = unsafe { libc::stat(path.as_ptr() as *const libc::c_char, &mut stat) };
 
     if ret < 0 {
         return -1;
@@ -379,14 +379,14 @@ fn get_idle_time(line: &[u8]) -> i64 {
     let mut now: libc::timespec = unsafe { core::mem::zeroed() };
     unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut now) };
 
-    now.tv_sec - stat.st_atime
+    now.tv_sec as i64 - stat.st_atime as i64
 }
 
 #[cfg(target_os = "linux")]
 fn format_time(timestamp: i64) {
     // Convert timestamp to broken-down time
     let tm = unsafe {
-        let t = timestamp as i64;
+        let t = timestamp as libc::time_t;
         libc::localtime(&t)
     };
 

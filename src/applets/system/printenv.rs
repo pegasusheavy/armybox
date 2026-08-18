@@ -24,7 +24,7 @@ use super::env::env;
 pub fn printenv(argc: i32, argv: *const *const u8) -> i32 {
     if argc > 1 {
         if let Some(name) = unsafe { get_arg(argv, 1) } {
-            let val = unsafe { libc::getenv(name.as_ptr() as *const i8) };
+            let val = unsafe { libc::getenv(name.as_ptr() as *const libc::c_char) };
             if !val.is_null() {
                 io::write_all(1, unsafe { io::cstr_to_slice(val as *const u8) });
                 io::write_str(1, b"\n");

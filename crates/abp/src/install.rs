@@ -835,11 +835,6 @@ fn parse_tar_mode(field: &[u8]) -> u32 {
     result
 }
 
-/// Current value of the C `errno`.
-fn errno() -> i32 {
-    unsafe { *libc::__errno_location() }
-}
-
 /// Create a directory, treating an already-existing directory as success.
 /// Returns `false` only for a genuine failure (a non-EEXIST error), so callers
 /// can propagate real problems without tripping over pre-existing directories.
@@ -852,7 +847,7 @@ fn mkdir_tracked(path: &[u8], mode: u32, rb: &mut Rollback) -> bool {
         rb.dirs.push(path.to_vec());
         return true;
     }
-    errno() == libc::EEXIST
+    io::errno() == libc::EEXIST
 }
 
 /// Create every parent directory of `path`, recording freshly-created ones in

@@ -22,7 +22,7 @@ pub fn which(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 2 { return 1; }
 
     let cmd = unsafe { get_arg(argv, 1).unwrap() };
-    let path_env = unsafe { libc::getenv(b"PATH\0".as_ptr() as *const i8) };
+    let path_env = unsafe { libc::getenv(b"PATH\0".as_ptr() as *const libc::c_char) };
 
     if path_env.is_null() { return 1; }
 
@@ -35,7 +35,7 @@ pub fn which(argc: i32, argv: *const *const u8) -> i32 {
         full_path[len] = b'/'; len += 1;
         for &c in cmd { full_path[len] = c; len += 1; }
 
-        if unsafe { libc::access(full_path.as_ptr() as *const i8, libc::X_OK) } == 0 {
+        if unsafe { libc::access(full_path.as_ptr() as *const libc::c_char, libc::X_OK) } == 0 {
             io::write_all(1, &full_path[..len]);
             io::write_str(1, b"\n");
             return 0;
