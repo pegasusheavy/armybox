@@ -179,7 +179,7 @@ fn show_mount_entry(device: &[u8], mountpoint: &[u8], fstype: &[u8], human: bool
 
     // Get filesystem stats
     let mut stat_buf: StatFs = unsafe { core::mem::zeroed() };
-    let ret = unsafe { statfs(path_buf.as_ptr() as *const i8, &mut stat_buf) };
+    let ret = unsafe { statfs(path_buf.as_ptr() as *const libc::c_char, &mut stat_buf) };
 
     if ret < 0 {
         return;
@@ -279,7 +279,7 @@ fn show_filesystem(path: &[u8], human: bool, si: bool, inodes: bool, show_type: 
 
     // Get filesystem stats
     let mut stat_buf: StatFs = unsafe { core::mem::zeroed() };
-    let ret = unsafe { statfs(path_buf.as_ptr() as *const i8, &mut stat_buf) };
+    let ret = unsafe { statfs(path_buf.as_ptr() as *const libc::c_char, &mut stat_buf) };
 
     if ret < 0 {
         io::write_str(2, b"df: ");

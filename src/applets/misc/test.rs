@@ -178,7 +178,7 @@ fn unary(op: &[u8], arg: &[u8]) -> Result<bool, ()> {
             // Symlink test operates on the link itself.
             let mut st = io::stat_zeroed();
             let ok = io::lstat(arg, &mut st) == 0;
-            return Ok(ok && (st.st_mode & libc::S_IFMT) == libc::S_IFLNK);
+            return Ok(ok && (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFLNK as u32);
         }
         _ => {}
     }

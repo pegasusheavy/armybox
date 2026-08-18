@@ -404,7 +404,7 @@ fn add_route(args: &[&[u8]]) -> i32 {
         let mut dev_buf = [0u8; 16];
         let len = core::cmp::min(dev.len(), 15);
         dev_buf[..len].copy_from_slice(&dev[..len]);
-        rt.rt_dev = dev_buf.as_ptr() as *mut i8;
+        rt.rt_dev = dev_buf.as_ptr() as *mut libc::c_char;
     }
 
     // Open socket for ioctl

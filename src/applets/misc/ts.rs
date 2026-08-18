@@ -92,7 +92,7 @@ pub fn ts(argc: i32, argv: *const *const u8) -> i32 {
             io::write_all(1, s);
         } else {
             // Format wall clock time
-            format_timestamp(now, format);
+            format_timestamp(now as i64, format);
         }
 
         io::write_str(1, b" ");
@@ -106,7 +106,8 @@ fn format_timestamp(time: i64, _format: Option<&[u8]>) {
     // Simple ISO-ish format: YYYY-MM-DD HH:MM:SS
     let mut tm: libc::tm = unsafe { core::mem::zeroed() };
     unsafe {
-        libc::localtime_r(&time, &mut tm);
+        let t = time as libc::time_t;
+        libc::localtime_r(&t, &mut tm);
     }
 
     let mut buf = [0u8; 8];

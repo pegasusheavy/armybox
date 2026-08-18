@@ -265,7 +265,7 @@ fn chmod_path(path: &[u8], spec: &ModeSpec, recursive: bool) -> i32 {
         return 1;
     }
 
-    let is_dir = (st.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+    let is_dir = (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32;
     let new_mode = apply_mode(st.st_mode & 0o7777, spec, is_dir);
 
     if io::chmod(path, new_mode) < 0 {

@@ -112,7 +112,7 @@ fn scan_all_devices(format: OutputFormat, show_tag: Option<&[u8]>) -> i32 {
     let mut found_any = false;
 
     // Read /sys/block to find block devices
-    let dir_fd = unsafe { libc::open(b"/sys/block\0".as_ptr() as *const i8, libc::O_RDONLY | libc::O_DIRECTORY) };
+    let dir_fd = unsafe { libc::open(b"/sys/block\0".as_ptr() as *const libc::c_char, libc::O_RDONLY | libc::O_DIRECTORY) };
     if dir_fd < 0 {
         return 2;
     }
@@ -176,7 +176,7 @@ fn scan_block_device(name: &[u8], format: OutputFormat, show_tag: Option<&[u8]>,
     sys_path.extend_from_slice(name);
     sys_path.push(0);
 
-    let dir_fd = unsafe { libc::open(sys_path.as_ptr() as *const i8, libc::O_RDONLY | libc::O_DIRECTORY) };
+    let dir_fd = unsafe { libc::open(sys_path.as_ptr() as *const libc::c_char, libc::O_RDONLY | libc::O_DIRECTORY) };
     if dir_fd < 0 {
         return;
     }
@@ -225,7 +225,7 @@ fn probe_device(path: &[u8]) -> Option<FsInfo> {
     path_z.extend_from_slice(path);
     path_z.push(0);
 
-    let fd = unsafe { libc::open(path_z.as_ptr() as *const i8, libc::O_RDONLY) };
+    let fd = unsafe { libc::open(path_z.as_ptr() as *const libc::c_char, libc::O_RDONLY) };
     if fd < 0 {
         return None;
     }

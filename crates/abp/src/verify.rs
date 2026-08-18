@@ -352,7 +352,7 @@ fn compute_file_checksum(path: &[u8]) -> Option<[u8; 32]> {
         return None;
     }
 
-    if (stat_buf.st_mode & libc::S_IFMT) != libc::S_IFREG {
+    if !io::is_reg(stat_buf.st_mode as u32) {
         io::close(fd);
         return None;
     }

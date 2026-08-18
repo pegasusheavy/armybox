@@ -19,7 +19,7 @@ use crate::io;
 pub fn dnsdomainname(_argc: i32, _argv: *const *const u8) -> i32 {
     let mut buf = [0u8; 256];
 
-    if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) } != 0 {
+    if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) } != 0 {
         return 1;
     }
 

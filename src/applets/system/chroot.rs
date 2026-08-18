@@ -29,11 +29,11 @@ pub fn chroot(argc: i32, argv: *const *const u8) -> i32 {
     let mut root_buf = [0u8; 4096];
     root_buf[..newroot.len()].copy_from_slice(newroot);
 
-    if unsafe { libc::chroot(root_buf.as_ptr() as *const i8) } != 0 {
+    if unsafe { libc::chroot(root_buf.as_ptr() as *const libc::c_char) } != 0 {
         sys::perror(b"chroot");
         return 1;
     }
-    if unsafe { libc::chdir(b"/\0".as_ptr() as *const i8) } != 0 {
+    if unsafe { libc::chdir(b"/\0".as_ptr() as *const libc::c_char) } != 0 {
         sys::perror(b"chdir");
         return 1;
     }
@@ -43,7 +43,7 @@ pub fn chroot(argc: i32, argv: *const *const u8) -> i32 {
         let cmd = unsafe { get_arg(argv, 2).unwrap() };
         let mut cmd_buf = [0u8; 4096];
         cmd_buf[..cmd.len()].copy_from_slice(cmd);
-        let cmd_ptr = cmd_buf.as_ptr() as *const i8;
+        let cmd_ptr = cmd_buf.as_ptr() as *const libc::c_char;
         let argv_ptrs = [cmd_ptr, core::ptr::null()];
         unsafe { libc::execv(cmd_ptr, argv_ptrs.as_ptr()) };
         sys::perror(b"exec");
@@ -52,8 +52,8 @@ pub fn chroot(argc: i32, argv: *const *const u8) -> i32 {
 
     // Default: run /bin/sh
     let shell = b"/bin/sh\0";
-    let argv_ptrs = [shell.as_ptr() as *const i8, core::ptr::null()];
-    unsafe { libc::execv(shell.as_ptr() as *const i8, argv_ptrs.as_ptr()) };
+    let argv_ptrs = [shell.as_ptr() as *const libc::c_char, core::ptr::null()];
+    unsafe { libc::execv(shell.as_ptr() as *const libc::c_char, argv_ptrs.as_ptr()) };
     sys::perror(b"exec");
     1
 }

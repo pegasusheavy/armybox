@@ -68,7 +68,7 @@ pub(crate) fn create_parent_dirs(path: &[u8]) -> bool {
     for i in 0..len {
         if buf[i] == b'/' {
             buf[i] = 0;
-            unsafe { libc::mkdir(buf.as_ptr() as *const i8, 0o755) };
+            unsafe { libc::mkdir(buf.as_ptr() as *const libc::c_char, 0o755) };
             buf[i] = b'/';
         }
     }

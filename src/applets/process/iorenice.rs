@@ -55,7 +55,7 @@ pub fn iorenice(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 3 {
         // Just show current priority
         let ioprio = unsafe {
-            libc::syscall(SYS_IOPRIO_GET, IOPRIO_WHO_PROCESS, pid)
+            libc::syscall(SYS_IOPRIO_GET as libc::c_long, IOPRIO_WHO_PROCESS, pid)
         } as i32;
 
         if ioprio < 0 {
@@ -109,7 +109,7 @@ pub fn iorenice(argc: i32, argv: *const *const u8) -> i32 {
     let ioprio = (class << 13) | (priority & 0x7);
 
     let result = unsafe {
-        libc::syscall(SYS_IOPRIO_SET, IOPRIO_WHO_PROCESS, pid, ioprio)
+        libc::syscall(SYS_IOPRIO_SET as libc::c_long, IOPRIO_WHO_PROCESS, pid, ioprio)
     };
 
     if result < 0 {

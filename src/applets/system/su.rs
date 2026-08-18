@@ -127,7 +127,7 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
     let user_len = user.len().min(user_buf.len() - 1);
     user_buf[..user_len].copy_from_slice(&user[..user_len]);
     unsafe {
-        libc::initgroups(user_buf.as_ptr() as *const i8, user_info.gid as libc::gid_t);
+        libc::initgroups(user_buf.as_ptr() as *const libc::c_char, user_info.gid as libc::gid_t);
     }
 
     // Set user ID
@@ -143,7 +143,7 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
         home_env.extend_from_slice(&user_info.home);
         home_env.push(0);
         unsafe {
-            libc::putenv(home_env.as_ptr() as *mut i8);
+            libc::putenv(home_env.as_ptr() as *mut libc::c_char);
         }
         core::mem::forget(home_env); // Don't free the env string
 
@@ -152,7 +152,7 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
         shell_env.extend_from_slice(&shell);
         shell_env.push(0);
         unsafe {
-            libc::putenv(shell_env.as_ptr() as *mut i8);
+            libc::putenv(shell_env.as_ptr() as *mut libc::c_char);
         }
         core::mem::forget(shell_env);
 
@@ -161,7 +161,7 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
         user_env.extend_from_slice(user);
         user_env.push(0);
         unsafe {
-            libc::putenv(user_env.as_ptr() as *mut i8);
+            libc::putenv(user_env.as_ptr() as *mut libc::c_char);
         }
         core::mem::forget(user_env);
 
@@ -170,7 +170,7 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
         logname_env.extend_from_slice(user);
         logname_env.push(0);
         unsafe {
-            libc::putenv(logname_env.as_ptr() as *mut i8);
+            libc::putenv(logname_env.as_ptr() as *mut libc::c_char);
         }
         core::mem::forget(logname_env);
 
@@ -179,7 +179,7 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
         let home_len = user_info.home.len().min(home_buf.len() - 1);
         home_buf[..home_len].copy_from_slice(&user_info.home[..home_len]);
         unsafe {
-            libc::chdir(home_buf.as_ptr() as *const i8);
+            libc::chdir(home_buf.as_ptr() as *const libc::c_char);
         }
     }
 
@@ -196,14 +196,14 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
 
         let c_flag = b"-c\0";
         let argv_ptrs = [
-            shell_buf.as_ptr() as *const i8,
-            c_flag.as_ptr() as *const i8,
-            cmd_buf.as_ptr() as *const i8,
+            shell_buf.as_ptr() as *const libc::c_char,
+            c_flag.as_ptr() as *const libc::c_char,
+            cmd_buf.as_ptr() as *const libc::c_char,
             core::ptr::null(),
         ];
 
         unsafe {
-            libc::execv(shell_buf.as_ptr() as *const i8, argv_ptrs.as_ptr());
+            libc::execv(shell_buf.as_ptr() as *const libc::c_char, argv_ptrs.as_ptr());
         }
     } else {
         // Build shell name for argv[0] (with or without leading -)
@@ -224,12 +224,12 @@ pub fn su(argc: i32, argv: *const *const u8) -> i32 {
         shell_name[start..start + name_len].copy_from_slice(&shell_basename[..name_len]);
 
         let argv_ptrs = [
-            shell_name.as_ptr() as *const i8,
+            shell_name.as_ptr() as *const libc::c_char,
             core::ptr::null(),
         ];
 
         unsafe {
-            libc::execv(shell_buf.as_ptr() as *const i8, argv_ptrs.as_ptr());
+            libc::execv(shell_buf.as_ptr() as *const libc::c_char, argv_ptrs.as_ptr());
         }
     }
 

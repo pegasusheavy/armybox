@@ -24,7 +24,7 @@ const PER_LINUX32: u64 = 0x0008;
 /// - Exit status of PROGRAM, or 1 on error
 pub fn linux32(argc: i32, argv: *const *const u8) -> i32 {
     // Set personality to 32-bit
-    let result = unsafe { libc::personality(PER_LINUX32) };
+    let result = unsafe { libc::personality(PER_LINUX32 as libc::c_ulong) };
     if result < 0 {
         sys::perror(b"personality");
         return 1;
@@ -35,7 +35,7 @@ pub fn linux32(argc: i32, argv: *const *const u8) -> i32 {
         let shell = b"/bin/sh\0";
         let args: [*const u8; 2] = [shell.as_ptr(), core::ptr::null()];
         unsafe {
-            libc::execv(shell.as_ptr() as *const i8, args.as_ptr() as *const *const i8);
+            libc::execv(shell.as_ptr() as *const libc::c_char, args.as_ptr() as *const *const libc::c_char);
         }
         sys::perror(b"/bin/sh");
         return 1;
@@ -52,8 +52,8 @@ pub fn linux32(argc: i32, argv: *const *const u8) -> i32 {
     // Execute the program
     unsafe {
         libc::execvp(
-            prog_buf.as_ptr() as *const i8,
-            argv.add(1) as *const *const i8,
+            prog_buf.as_ptr() as *const libc::c_char,
+            argv.add(1) as *const *const libc::c_char,
         );
     }
 

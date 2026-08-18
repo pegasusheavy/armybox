@@ -61,7 +61,7 @@ pub fn ping(argc: i32, argv: *const *const u8) -> i32 {
     hints.ai_family = libc::AF_INET;
     let mut res: *mut libc::addrinfo = core::ptr::null_mut();
 
-    if unsafe { libc::getaddrinfo(host_buf.as_ptr() as *const i8, core::ptr::null(), &hints, &mut res) } != 0 {
+    if unsafe { libc::getaddrinfo(host_buf.as_ptr() as *const libc::c_char, core::ptr::null(), &hints, &mut res) } != 0 {
         io::write_str(2, b"ping: unknown host\n");
         unsafe { libc::close(sock) };
         return 1;

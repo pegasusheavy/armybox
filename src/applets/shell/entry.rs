@@ -217,7 +217,7 @@ pub(super) fn minimal_shell() {
             let plen = core::cmp::min(path.len(), path_buf.len() - 1);
             path_buf[..plen].copy_from_slice(&path[..plen]);
             unsafe {
-                if libc::chdir(path_buf.as_ptr() as *const i8) != 0 {
+                if libc::chdir(path_buf.as_ptr() as *const libc::c_char) != 0 {
                     io::write_str(2, b"cd: failed\n");
                 }
             }
@@ -227,7 +227,7 @@ pub(super) fn minimal_shell() {
         // Fork and exec
         let pid = io::fork();
         if pid == 0 {
-            let mut args: [*const i8; 32] = [core::ptr::null(); 32];
+            let mut args: [*const libc::c_char; 32] = [core::ptr::null(); 32];
             let mut arg_count = 0;
             let mut start = 0;
             let mut in_word = false;
@@ -236,7 +236,7 @@ pub(super) fn minimal_shell() {
                 if i == pos || line_buf[i] == b' ' || line_buf[i] == b'\t' {
                     if in_word && arg_count < 31 {
                         line_buf[i] = 0;
-                        args[arg_count] = line_buf[start..].as_ptr() as *const i8;
+                        args[arg_count] = line_buf[start..].as_ptr() as *const libc::c_char;
                         arg_count += 1;
                         in_word = false;
                     }

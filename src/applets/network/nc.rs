@@ -38,7 +38,7 @@ pub fn nc(argc: i32, argv: *const *const u8) -> i32 {
     hints.ai_socktype = libc::SOCK_STREAM;
     let mut res: *mut libc::addrinfo = core::ptr::null_mut();
 
-    if unsafe { libc::getaddrinfo(host_buf.as_ptr() as *const i8, port_buf.as_ptr() as *const i8, &hints, &mut res) } != 0 {
+    if unsafe { libc::getaddrinfo(host_buf.as_ptr() as *const libc::c_char, port_buf.as_ptr() as *const libc::c_char, &hints, &mut res) } != 0 {
         io::write_str(2, b"nc: cannot resolve host\n");
         return 1;
     }

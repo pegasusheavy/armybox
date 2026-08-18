@@ -38,13 +38,13 @@ pub fn du(argc: i32, argv: *const *const u8) -> i32 {
         path_buf[path.len()] = 0;
 
         let mut st: libc::stat = unsafe { core::mem::zeroed() };
-        if unsafe { libc::lstat(path_buf.as_ptr() as *const i8, &mut st) } != 0 {
+        if unsafe { libc::lstat(path_buf.as_ptr() as *const libc::c_char, &mut st) } != 0 {
             return 0;
         }
 
         total += (st.st_blocks * 512) / 1024; // Convert to KB
 
-        if (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+        if (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
             let fd = io::open(path, libc::O_RDONLY | libc::O_DIRECTORY, 0);
             if fd >= 0 {
                 let mut buf = [0u8; 4096];

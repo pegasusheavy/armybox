@@ -40,7 +40,7 @@ pub fn gpiodetect(_argc: i32, _argv: *const *const u8) -> i32 {
 
         // Check if device exists
         let mut stat_buf: libc::stat = unsafe { core::mem::zeroed() };
-        if unsafe { libc::stat(path.as_ptr() as *const i8, &mut stat_buf) } == 0 {
+        if unsafe { libc::stat(path.as_ptr() as *const libc::c_char, &mut stat_buf) } == 0 {
             io::write_str(1, b"gpiochip");
             io::write_num(1, i as u64);
             io::write_str(1, b" [");

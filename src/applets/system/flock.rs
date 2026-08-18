@@ -48,7 +48,7 @@ pub fn flock(argc: i32, argv: *const *const u8) -> i32 {
     // Execute command
     let mut cmd_buf = [0u8; 4096];
     cmd_buf[..cmd.len()].copy_from_slice(cmd);
-    let cmd_ptr = cmd_buf.as_ptr() as *const i8;
+    let cmd_ptr = cmd_buf.as_ptr() as *const libc::c_char;
     let argv_ptrs = [cmd_ptr, core::ptr::null()];
     unsafe { libc::execv(cmd_ptr, argv_ptrs.as_ptr()) };
     io::close(fd);

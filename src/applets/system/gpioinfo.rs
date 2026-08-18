@@ -112,7 +112,7 @@ fn show_chip_info(chip_num: u8) -> bool {
     path.push(0);
 
     // Open the device
-    let fd = unsafe { libc::open(path.as_ptr() as *const i8, libc::O_RDONLY) };
+    let fd = unsafe { libc::open(path.as_ptr() as *const libc::c_char, libc::O_RDONLY) };
     if fd < 0 {
         return false;
     }

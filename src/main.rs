@@ -121,8 +121,8 @@ fn install_symlinks(dir: &[u8]) -> i32 {
 
     let n = unsafe {
         libc::readlink(
-            target_buf.as_ptr() as *const i8,
-            target.as_mut_ptr() as *mut i8,
+            target_buf.as_ptr() as *const libc::c_char,
+            target.as_mut_ptr() as *mut libc::c_char,
             target.len() - 1
         )
     };

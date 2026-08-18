@@ -103,7 +103,7 @@ fn lookup_gid(name: &[u8]) -> Option<u32> {
     buf[..len].copy_from_slice(&name[..len]);
     buf[len] = 0;
 
-    let gr = unsafe { libc::getgrnam(buf.as_ptr() as *const i8) };
+    let gr = unsafe { libc::getgrnam(buf.as_ptr() as *const libc::c_char) };
     if gr.is_null() {
         None
     } else {
@@ -117,9 +117,9 @@ fn chgrp_path(path: &[u8], gid: u32, no_deref: bool, recursive: bool) -> i32 {
         let mut buf = [0u8; 4096];
         let len = core::cmp::min(path.len(), buf.len() - 1);
         buf[..len].copy_from_slice(&path[..len]);
-        unsafe { libc::lchown(buf.as_ptr() as *const i8, u32::MAX, gid) }
+        unsafe { libc::lchown(buf.as_ptr() as *const libc::c_char, u32::MAX, gid) }
     } else {
-        unsafe { libc::chown(path.as_ptr() as *const i8, u32::MAX, gid) }
+        unsafe { libc::chown(path.as_ptr() as *const libc::c_char, u32::MAX, gid) }
     };
 
     if ret < 0 {
@@ -129,7 +129,7 @@ fn chgrp_path(path: &[u8], gid: u32, no_deref: bool, recursive: bool) -> i32 {
 
     if recursive {
         let mut st: libc::stat = unsafe { core::mem::zeroed() };
-        if io::stat(path, &mut st) == 0 && (st.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+        if io::stat(path, &mut st) == 0 && (st.st_mode as u32 & libc::S_IFMT as u32) == libc::S_IFDIR as u32 {
             return chgrp_recursive(path, gid, no_deref);
         }
     }

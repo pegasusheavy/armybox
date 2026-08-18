@@ -137,7 +137,7 @@ fn lookup_uid(name: &[u8]) -> Option<u32> {
     buf[..len].copy_from_slice(&name[..len]);
     buf[len] = 0;
 
-    let pw = unsafe { libc::getpwnam(buf.as_ptr() as *const i8) };
+    let pw = unsafe { libc::getpwnam(buf.as_ptr() as *const libc::c_char) };
     if pw.is_null() {
         None
     } else {

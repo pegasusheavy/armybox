@@ -215,7 +215,7 @@ pub fn nbd_server(argc: i32, argv: *const *const u8) -> i32 {
         // Child daemonizes
         unsafe {
             libc::setsid();
-            libc::chdir(b"/\0".as_ptr() as *const i8);
+            libc::chdir(b"/\0".as_ptr() as *const libc::c_char);
         }
     }
 

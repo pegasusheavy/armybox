@@ -506,7 +506,7 @@ pub fn makedevs(argc: i32, argv: *const *const u8) -> i32 {
         path.push(0);
 
         let ret = unsafe {
-            libc::mknod(path.as_ptr() as *const i8, mode, dev)
+            libc::mknod(path.as_ptr() as *const libc::c_char, mode, dev)
         };
 
         if ret < 0 {
@@ -581,21 +581,21 @@ fn process_device_table(table_path: &[u8], rootdir: &[u8]) -> i32 {
                 // Directory
                 path.push(0);
                 let ret = unsafe {
-                    libc::mkdir(path.as_ptr() as *const i8, mode)
+                    libc::mkdir(path.as_ptr() as *const libc::c_char, mode)
                 };
                 if ret < 0 && crate::sys::errno() != libc::EEXIST {
                     status = 1;
                 }
                 unsafe {
-                    libc::chown(path.as_ptr() as *const i8, uid, gid);
+                    libc::chown(path.as_ptr() as *const libc::c_char, uid, gid);
                 }
             }
             b"f" => {
                 // File - just set permissions
                 path.push(0);
                 unsafe {
-                    libc::chmod(path.as_ptr() as *const i8, mode);
-                    libc::chown(path.as_ptr() as *const i8, uid, gid);
+                    libc::chmod(path.as_ptr() as *const libc::c_char, mode);
+                    libc::chown(path.as_ptr() as *const libc::c_char, uid, gid);
                 }
             }
             b"c" | b"b" => {
@@ -608,8 +608,8 @@ fn process_device_table(table_path: &[u8], rootdir: &[u8]) -> i32 {
 
                     path.push(0);
                     unsafe {
-                        libc::mknod(path.as_ptr() as *const i8, dev_mode, dev);
-                        libc::chown(path.as_ptr() as *const i8, uid, gid);
+                        libc::mknod(path.as_ptr() as *const libc::c_char, dev_mode, dev);
+                        libc::chown(path.as_ptr() as *const libc::c_char, uid, gid);
                     }
                 }
             }
@@ -681,8 +681,8 @@ pub fn setfattr(argc: i32, argv: *const *const u8) -> i32 {
 
             let ret = unsafe {
                 libc::removexattr(
-                    path_buf.as_ptr() as *const i8,
-                    name_buf.as_ptr() as *const i8,
+                    path_buf.as_ptr() as *const libc::c_char,
+                    name_buf.as_ptr() as *const libc::c_char,
                 )
             };
             if ret < 0 {
@@ -700,8 +700,8 @@ pub fn setfattr(argc: i32, argv: *const *const u8) -> i32 {
 
             let ret = unsafe {
                 libc::setxattr(
-                    path_buf.as_ptr() as *const i8,
-                    name_buf.as_ptr() as *const i8,
+                    path_buf.as_ptr() as *const libc::c_char,
+                    name_buf.as_ptr() as *const libc::c_char,
                     value.as_ptr() as *const libc::c_void,
                     value.len(),
                     0,

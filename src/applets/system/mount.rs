@@ -47,8 +47,8 @@ pub fn mount(argc: i32, argv: *const *const u8) -> i32 {
 
     let ret = unsafe {
         libc::mount(
-            source_buf.as_ptr() as *const i8,
-            target_buf.as_ptr() as *const i8,
+            source_buf.as_ptr() as *const libc::c_char,
+            target_buf.as_ptr() as *const libc::c_char,
             core::ptr::null(),
             0,
             core::ptr::null(),

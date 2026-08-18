@@ -123,7 +123,7 @@ pub fn sleep(argc: i32, argv: *const *const u8) -> i32 {
 
     let mut req = libc::timespec {
         tv_sec: secs_whole,
-        tv_nsec: nanos,
+        tv_nsec: nanos as libc::c_long,
     };
 
     loop {
@@ -137,7 +137,7 @@ pub fn sleep(argc: i32, argv: *const *const u8) -> i32 {
             break;
         }
 
-        let errno = unsafe { *libc::__errno_location() };
+        let errno = crate::sys::errno();
         if errno == libc::EINTR {
             // Interrupted by a signal; resume sleeping for the remaining time.
             req = rem;

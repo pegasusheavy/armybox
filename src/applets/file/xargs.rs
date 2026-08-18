@@ -536,7 +536,7 @@ fn exec_command(cmd: &[u8], args: &[&[u8]]) -> ! {
         }
     }
 
-    let ptrs: Vec<*const i8> = cstrings.iter()
+    let ptrs: Vec<*const libc::c_char> = cstrings.iter()
         .map(|s| s.as_ptr())
         .chain(core::iter::once(core::ptr::null()))
         .collect();
@@ -548,7 +548,7 @@ fn exec_command(cmd: &[u8], args: &[&[u8]]) -> ! {
     io::write_all(2, cmd);
     io::write_str(2, b": ");
 
-    let errno = unsafe { *libc::__errno_location() };
+    let errno = crate::sys::errno();
     if errno == libc::ENOENT {
         io::write_str(2, b"command not found\n");
         unsafe { libc::_exit(127); }

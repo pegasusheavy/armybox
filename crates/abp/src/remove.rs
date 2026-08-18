@@ -140,7 +140,7 @@ pub(crate) fn remove_single_package(db: &Database, name: &str, purge: bool) -> b
         // Check if directory
         let mut stat_buf = io::stat_zeroed();
         if io::stat(path, &mut stat_buf) == 0 {
-            if (stat_buf.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+            if io::is_dir(stat_buf.st_mode as u32) {
                 // Try to remove directory (will fail if not empty)
                 io::rmdir(path);
             } else {

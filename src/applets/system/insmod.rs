@@ -100,7 +100,7 @@ pub fn insmod(argc: i32, argv: *const *const u8) -> i32 {
     };
 
     if ret != 0 {
-        let errno = unsafe { *libc::__errno_location() };
+        let errno = crate::sys::errno();
         io::write_str(2, b"insmod: cannot insert '");
         io::write_all(2, path);
         io::write_str(2, b"': ");

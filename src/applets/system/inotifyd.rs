@@ -101,7 +101,7 @@ pub fn inotifyd(argc: i32, argv: *const *const u8) -> i32 {
             path[..len].copy_from_slice(&file[..len]);
 
             let wd = unsafe {
-                libc::inotify_add_watch(inotify_fd, path.as_ptr() as *const i8, mask)
+                libc::inotify_add_watch(inotify_fd, path.as_ptr() as *const libc::c_char, mask)
             };
             if wd < 0 {
                 sys::perror(file);
@@ -291,14 +291,14 @@ fn execute_handler(prog: &[u8], event_char: u8, path: &[u8]) {
         path_buf[..path_len].copy_from_slice(&path[..path_len]);
 
         let argv_ptrs = [
-            prog_buf.as_ptr() as *const i8,
-            event_buf.as_ptr() as *const i8,
-            path_buf.as_ptr() as *const i8,
+            prog_buf.as_ptr() as *const libc::c_char,
+            event_buf.as_ptr() as *const libc::c_char,
+            path_buf.as_ptr() as *const libc::c_char,
             core::ptr::null(),
         ];
 
         unsafe {
-            libc::execvp(prog_buf.as_ptr() as *const i8, argv_ptrs.as_ptr());
+            libc::execvp(prog_buf.as_ptr() as *const libc::c_char, argv_ptrs.as_ptr());
             libc::_exit(127);
         }
     } else if pid > 0 {

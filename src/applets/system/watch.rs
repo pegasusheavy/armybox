@@ -57,12 +57,12 @@ pub fn watch(argc: i32, argv: *const *const u8) -> i32 {
             let shell = b"/bin/sh\0";
             let c_flag = b"-c\0";
             let argv_ptrs = [
-                shell.as_ptr() as *const i8,
-                c_flag.as_ptr() as *const i8,
-                cmd_buf.as_ptr() as *const i8,
+                shell.as_ptr() as *const libc::c_char,
+                c_flag.as_ptr() as *const libc::c_char,
+                cmd_buf.as_ptr() as *const libc::c_char,
                 core::ptr::null(),
             ];
-            unsafe { libc::execv(shell.as_ptr() as *const i8, argv_ptrs.as_ptr()) };
+            unsafe { libc::execv(shell.as_ptr() as *const libc::c_char, argv_ptrs.as_ptr()) };
             io::exit(1);
         }
 

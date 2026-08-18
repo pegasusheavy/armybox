@@ -171,7 +171,7 @@ pub fn open(path: &[u8], flags: i32, mode: u32) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::open(path_buf.as_ptr() as *const i8, flags, mode) }
+    unsafe { libc::open(path_buf.as_ptr() as *const libc::c_char, flags, mode) }
 }
 
 /// Close a file descriptor
@@ -200,7 +200,7 @@ pub fn stat(path: &[u8], buf: &mut libc::stat) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::stat(path_buf.as_ptr() as *const i8, buf) }
+    unsafe { libc::stat(path_buf.as_ptr() as *const libc::c_char, buf) }
 }
 
 /// Get file status (no follow symlinks)
@@ -212,7 +212,7 @@ pub fn lstat(path: &[u8], buf: &mut libc::stat) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::lstat(path_buf.as_ptr() as *const i8, buf) }
+    unsafe { libc::lstat(path_buf.as_ptr() as *const libc::c_char, buf) }
 }
 
 /// Get file status from fd
@@ -229,7 +229,7 @@ pub fn mkdir(path: &[u8], mode: u32) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::mkdir(path_buf.as_ptr() as *const i8, mode as libc::mode_t) }
+    unsafe { libc::mkdir(path_buf.as_ptr() as *const libc::c_char, mode as libc::mode_t) }
 }
 
 /// Remove a directory
@@ -241,7 +241,7 @@ pub fn rmdir(path: &[u8]) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::rmdir(path_buf.as_ptr() as *const i8) }
+    unsafe { libc::rmdir(path_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Unlink (remove) a file
@@ -253,7 +253,7 @@ pub fn unlink(path: &[u8]) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::unlink(path_buf.as_ptr() as *const i8) }
+    unsafe { libc::unlink(path_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Rename a file
@@ -270,7 +270,7 @@ pub fn rename(old: &[u8], new: &[u8]) -> i32 {
     new_buf[..new.len()].copy_from_slice(new);
     new_buf[new.len()] = 0;
 
-    unsafe { libc::rename(old_buf.as_ptr() as *const i8, new_buf.as_ptr() as *const i8) }
+    unsafe { libc::rename(old_buf.as_ptr() as *const libc::c_char, new_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Create a symlink
@@ -287,7 +287,7 @@ pub fn symlink(target: &[u8], linkpath: &[u8]) -> i32 {
     link_buf[..linkpath.len()].copy_from_slice(linkpath);
     link_buf[linkpath.len()] = 0;
 
-    unsafe { libc::symlink(target_buf.as_ptr() as *const i8, link_buf.as_ptr() as *const i8) }
+    unsafe { libc::symlink(target_buf.as_ptr() as *const libc::c_char, link_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Create a hard link
@@ -304,7 +304,7 @@ pub fn link(old: &[u8], new: &[u8]) -> i32 {
     new_buf[..new.len()].copy_from_slice(new);
     new_buf[new.len()] = 0;
 
-    unsafe { libc::link(old_buf.as_ptr() as *const i8, new_buf.as_ptr() as *const i8) }
+    unsafe { libc::link(old_buf.as_ptr() as *const libc::c_char, new_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Change file permissions
@@ -316,7 +316,7 @@ pub fn chmod(path: &[u8], mode: u32) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::chmod(path_buf.as_ptr() as *const i8, mode as libc::mode_t) }
+    unsafe { libc::chmod(path_buf.as_ptr() as *const libc::c_char, mode as libc::mode_t) }
 }
 
 /// Change working directory
@@ -328,14 +328,14 @@ pub fn chdir(path: &[u8]) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::chdir(path_buf.as_ptr() as *const i8) }
+    unsafe { libc::chdir(path_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Get current working directory
 #[cfg(feature = "alloc")]
 pub fn getcwd() -> Option<Vec<u8>> {
     let mut buf = [0u8; 4096];
-    let ret = unsafe { libc::getcwd(buf.as_mut_ptr() as *mut i8, buf.len()) };
+    let ret = unsafe { libc::getcwd(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
 
     if ret.is_null() {
         None
@@ -348,7 +348,7 @@ pub fn getcwd() -> Option<Vec<u8>> {
 /// Get current working directory (no alloc version)
 #[cfg(not(feature = "alloc"))]
 pub fn getcwd(buf: &mut [u8]) -> bool {
-    let ret = unsafe { libc::getcwd(buf.as_mut_ptr() as *mut i8, buf.len()) };
+    let ret = unsafe { libc::getcwd(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
     !ret.is_null()
 }
 
@@ -359,7 +359,7 @@ pub fn readlink(path: &[u8], buf: &mut [u8]) -> isize {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::readlink(path_buf.as_ptr() as *const i8, buf.as_mut_ptr() as *mut i8, buf.len()) }
+    unsafe { libc::readlink(path_buf.as_ptr() as *const libc::c_char, buf.as_mut_ptr() as *mut libc::c_char, buf.len()) }
 }
 
 /// Get canonical path
@@ -369,7 +369,7 @@ pub fn realpath(path: &[u8], buf: &mut [u8]) -> isize {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    let ret = unsafe { libc::realpath(path_buf.as_ptr() as *const i8, buf.as_mut_ptr() as *mut i8) };
+    let ret = unsafe { libc::realpath(path_buf.as_ptr() as *const libc::c_char, buf.as_mut_ptr() as *mut libc::c_char) };
     if ret.is_null() {
         -1
     } else {
@@ -386,7 +386,7 @@ pub fn opendir(path: &[u8]) -> *mut libc::DIR {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::opendir(path_buf.as_ptr() as *const i8) }
+    unsafe { libc::opendir(path_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Read directory entry
@@ -430,7 +430,7 @@ pub fn access(path: &[u8], mode: i32) -> i32 {
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::access(path_buf.as_ptr() as *const i8, mode) }
+    unsafe { libc::access(path_buf.as_ptr() as *const libc::c_char, mode) }
 }
 
 /// Get process ID
@@ -447,7 +447,7 @@ pub fn getppid() -> i32 {
 #[cfg(feature = "alloc")]
 pub fn gethostname() -> Option<Vec<u8>> {
     let mut buf = [0u8; 256];
-    let ret = unsafe { libc::gethostname(buf.as_mut_ptr() as *mut i8, buf.len()) };
+    let ret = unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
 
     if ret != 0 {
         None
@@ -544,7 +544,7 @@ pub fn getenv(name: &[u8]) -> Option<&'static [u8]> {
 
     // SAFETY: libc::getenv returns a pointer to environment memory.
     // This memory is managed by libc and can be invalidated by setenv/unsetenv.
-    let ptr = unsafe { libc::getenv(name_buf.as_ptr() as *const i8) };
+    let ptr = unsafe { libc::getenv(name_buf.as_ptr() as *const libc::c_char) };
     if ptr.is_null() {
         None
     } else {
@@ -589,8 +589,8 @@ pub fn setenv(name: &[u8], value: &[u8], overwrite: bool) -> i32 {
     // The libc function copies the data, so our stack buffers can go out of scope.
     unsafe {
         libc::setenv(
-            name_buf.as_ptr() as *const i8,
-            value_buf.as_ptr() as *const i8,
+            name_buf.as_ptr() as *const libc::c_char,
+            value_buf.as_ptr() as *const libc::c_char,
             if overwrite { 1 } else { 0 },
         )
     }
@@ -617,7 +617,7 @@ pub fn unsetenv(name: &[u8]) -> i32 {
     name_buf[name.len()] = 0;
 
     // SAFETY: Buffer is properly null-terminated.
-    unsafe { libc::unsetenv(name_buf.as_ptr() as *const i8) }
+    unsafe { libc::unsetenv(name_buf.as_ptr() as *const libc::c_char) }
 }
 
 /// Send signal to process
@@ -627,7 +627,7 @@ pub fn kill(pid: i32, sig: i32) -> i32 {
 
 /// Execute program
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn execve(path: &[u8], argv: *const *const i8, envp: *const *const i8) -> i32 {
+pub fn execve(path: &[u8], argv: *const *const libc::c_char, envp: *const *const libc::c_char) -> i32 {
     let mut path_buf = [0u8; 4096];
     if path.len() >= path_buf.len() {
         return -1;
@@ -635,7 +635,7 @@ pub fn execve(path: &[u8], argv: *const *const i8, envp: *const *const i8) -> i3
     path_buf[..path.len()].copy_from_slice(path);
     path_buf[path.len()] = 0;
 
-    unsafe { libc::execve(path_buf.as_ptr() as *const i8, argv, envp) }
+    unsafe { libc::execve(path_buf.as_ptr() as *const libc::c_char, argv, envp) }
 }
 
 /// Fork process

@@ -154,7 +154,7 @@ pub fn login(argc: i32, argv: *const *const u8) -> i32 {
 
     // Initialize supplementary groups
     let username_cstr = make_cstr(&username);
-    if unsafe { libc::initgroups(username_cstr.as_ptr() as *const i8, passwd_entry.gid) } < 0 {
+    if unsafe { libc::initgroups(username_cstr.as_ptr() as *const libc::c_char, passwd_entry.gid) } < 0 {
         sys::perror(b"initgroups");
         return 1;
     }
@@ -166,9 +166,9 @@ pub fn login(argc: i32, argv: *const *const u8) -> i32 {
 
     // Change to home directory
     let home_cstr = make_cstr(&passwd_entry.home);
-    if unsafe { libc::chdir(home_cstr.as_ptr() as *const i8) } < 0 {
+    if unsafe { libc::chdir(home_cstr.as_ptr() as *const libc::c_char) } < 0 {
         // Fall back to /
-        unsafe { libc::chdir(b"/\0".as_ptr() as *const i8) };
+        unsafe { libc::chdir(b"/\0".as_ptr() as *const libc::c_char) };
     }
 
     // Set up environment
@@ -211,13 +211,13 @@ pub fn login(argc: i32, argv: *const *const u8) -> i32 {
     }
     shell_name.push(0);
 
-    let argv: [*const i8; 2] = [
-        shell_name.as_ptr() as *const i8,
+    let argv: [*const libc::c_char; 2] = [
+        shell_name.as_ptr() as *const libc::c_char,
         core::ptr::null(),
     ];
 
     unsafe {
-        libc::execv(shell_cstr.as_ptr() as *const i8, argv.as_ptr());
+        libc::execv(shell_cstr.as_ptr() as *const libc::c_char, argv.as_ptr());
     }
 
     sys::perror(b"exec");
@@ -976,8 +976,8 @@ fn set_env(name: &[u8], value: &[u8]) {
     let value_cstr = make_cstr(value);
     unsafe {
         libc::setenv(
-            name_cstr.as_ptr() as *const i8,
-            value_cstr.as_ptr() as *const i8,
+            name_cstr.as_ptr() as *const libc::c_char,
+            value_cstr.as_ptr() as *const libc::c_char,
             1,
         );
     }
@@ -985,7 +985,7 @@ fn set_env(name: &[u8], value: &[u8]) {
 
 fn get_env(name: &[u8]) -> Result<Vec<u8>, ()> {
     let name_cstr = make_cstr(name);
-    let ptr = unsafe { libc::getenv(name_cstr.as_ptr() as *const i8) };
+    let ptr = unsafe { libc::getenv(name_cstr.as_ptr() as *const libc::c_char) };
     if ptr.is_null() {
         return Err(());
     }

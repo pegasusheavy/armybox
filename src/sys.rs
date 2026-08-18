@@ -240,7 +240,11 @@ pub fn makedev(major: u32, minor: u32) -> libc::dev_t {
 
 /// Get errno - works on glibc, musl, and Bionic
 pub fn errno() -> i32 {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    // Bionic exposes errno as `__errno()`; glibc and musl as `__errno_location()`.
+    #[cfg(target_os = "android")]
+    unsafe { *libc::__errno() }
+
+    #[cfg(target_os = "linux")]
     unsafe { *libc::__errno_location() }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -249,7 +253,10 @@ pub fn errno() -> i32 {
 
 /// Clear errno
 pub fn clear_errno() {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "android")]
+    unsafe { *libc::__errno() = 0; }
+
+    #[cfg(target_os = "linux")]
     unsafe { *libc::__errno_location() = 0; }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]

@@ -148,7 +148,7 @@ pub fn gpioget(argc: i32, argv: *const *const u8) -> i32 {
     path.push(0);
 
     // Open GPIO chip
-    let fd = unsafe { libc::open(path.as_ptr() as *const i8, libc::O_RDONLY) };
+    let fd = unsafe { libc::open(path.as_ptr() as *const libc::c_char, libc::O_RDONLY) };
     if fd < 0 {
         io::write_str(2, b"gpioget: cannot open ");
         io::write_all(2, &path[..path.len()-1]);
@@ -252,7 +252,7 @@ fn read_gpio_sysfs(chip: &[u8], lines: &[u32], active_low: bool) -> i32 {
         // Export GPIO if needed
         let mut export_path = b"/sys/class/gpio/export".to_vec();
         export_path.push(0);
-        let export_fd = unsafe { libc::open(export_path.as_ptr() as *const i8, libc::O_WRONLY) };
+        let export_fd = unsafe { libc::open(export_path.as_ptr() as *const libc::c_char, libc::O_WRONLY) };
         if export_fd >= 0 {
             let gpio_str = sys::format_u64(gpio_num as u64, &mut num_buf);
             unsafe {

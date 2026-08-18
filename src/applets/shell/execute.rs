@@ -487,8 +487,8 @@ pub(super) fn execute_simple_pipeline(shell: &mut Shell, tokens: &[Token]) {
                 value_buf[..vlen].copy_from_slice(&v[..vlen]);
                 unsafe {
                     libc::setenv(
-                        name_buf.as_ptr() as *const i8,
-                        value_buf.as_ptr() as *const i8,
+                        name_buf.as_ptr() as *const libc::c_char,
+                        value_buf.as_ptr() as *const libc::c_char,
                         1,
                     );
                 }
@@ -528,7 +528,7 @@ pub(super) fn execute_command(cmd: &Command) {
         return;
     }
 
-    let mut argv_ptrs: Vec<*const i8> = Vec::new();
+    let mut argv_ptrs: Vec<*const libc::c_char> = Vec::new();
     let mut argv_storage: Vec<Vec<u8>> = Vec::new();
 
     for arg in &cmd.args {
@@ -538,7 +538,7 @@ pub(super) fn execute_command(cmd: &Command) {
     }
 
     for s in &argv_storage {
-        argv_ptrs.push(s.as_ptr() as *const i8);
+        argv_ptrs.push(s.as_ptr() as *const libc::c_char);
     }
     argv_ptrs.push(core::ptr::null());
 
