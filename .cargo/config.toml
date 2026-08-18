@@ -6,11 +6,6 @@
 # Remove for cross-compilation
 # rustflags = ["-C", "target-cpu=native"]
 
-[target.'cfg(all())']
-rustflags = [
-    # Link against libc for no_std
-    "-C", "link-arg=-lc",
-]
 
 # ============================================================================
 # x86_64 Linux (glibc)
@@ -21,6 +16,8 @@ rustflags = [
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-O2",
     "-C", "link-arg=-Wl,--hash-style=gnu",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================
@@ -34,6 +31,8 @@ rustflags = [
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-O2",
     "-C", "link-arg=-Wl,-s",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================
@@ -46,6 +45,8 @@ rustflags = [
     "-C", "link-arg=-Wl,--gc-sections",
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-s",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================
@@ -59,6 +60,13 @@ rustflags = [
     "-C", "link-arg=-Wl,--gc-sections",
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-s",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
+    # musl pulls libgcc's f128 strtod intrinsics (aarch64) and __aeabi
+    # unwind routines (ARM32) from -lc; -lgcc must come after it.
+    "-C", "link-arg=-lgcc",
+    # ...and libgcc's unwind code needs abort() from libc in turn.
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================
@@ -72,6 +80,13 @@ rustflags = [
     "-C", "link-arg=-Wl,--gc-sections",
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-s",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
+    # musl pulls libgcc's f128 strtod intrinsics (aarch64) and __aeabi
+    # unwind routines (ARM32) from -lc; -lgcc must come after it.
+    "-C", "link-arg=-lgcc",
+    # ...and libgcc's unwind code needs abort() from libc in turn.
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================
@@ -84,6 +99,8 @@ rustflags = [
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-O2",
     "-C", "link-arg=-Wl,-s",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================
@@ -96,6 +113,8 @@ rustflags = [
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-O2",
     "-C", "link-arg=-Wl,-s",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================
@@ -108,6 +127,8 @@ rustflags = [
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-O2",
     "-C", "link-arg=-Wl,-s",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================
@@ -120,6 +141,8 @@ rustflags = [
     "-C", "link-arg=-Wl,--as-needed",
     "-C", "link-arg=-Wl,-O2",
     "-C", "link-arg=-Wl,-s",
+    # Link against libc for no_std (ordered before target-specific libs)
+    "-C", "link-arg=-lc",
 ]
 
 # ============================================================================

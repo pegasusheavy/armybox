@@ -102,6 +102,14 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe { libc::_exit(1); }
 }
 
+/// The precompiled core/compiler_builtins rlibs carry unwind-table data that
+/// references this symbol even though the binary is panic=abort (seen on the
+/// aarch64 musl and Android release targets). It is never called; defining it
+/// only satisfies the linker.
+#[cfg(all(not(test), not(feature = "std")))]
+#[unsafe(no_mangle)]
+extern "C" fn rust_eh_personality() {}
+
 // ============================================================================
 // Global allocator using libc malloc (not used in test builds)
 // ============================================================================
