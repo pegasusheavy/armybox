@@ -86,7 +86,7 @@ const NBD_FLAG_C_NO_ZEROES: u32 = 1 << 1;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn nbd_client(argc: i32, argv: *const *const u8) -> i32 {
     let mut host: Option<&[u8]> = None;
     let mut port: u16 = 10809;
@@ -279,7 +279,7 @@ pub fn nbd_client(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn connect_to_server(host: &[u8], port: u16) -> i32 {
     // Try parsing as IP first
     if let Some(ip) = parse_ipv4(host) {
@@ -379,7 +379,7 @@ fn parse_ipv4(s: &[u8]) -> Option<u32> {
     Some(u32::from_ne_bytes(octets))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn nbd_handshake(fd: i32, export_name: &[u8]) -> Option<(u64, u16)> {
     let mut buf = [0u8; 256];
 
@@ -423,7 +423,7 @@ fn nbd_handshake(fd: i32, export_name: &[u8]) -> Option<(u64, u16)> {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn newstyle_handshake(fd: i32, export_name: &[u8]) -> Option<(u64, u16)> {
     let mut buf = [0u8; 1024];
 
@@ -485,7 +485,7 @@ fn newstyle_handshake(fd: i32, export_name: &[u8]) -> Option<(u64, u16)> {
     Some((size, flags))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn try_opt_go(fd: i32, export_name: &[u8]) -> Option<(u64, u16)> {
     let mut buf = [0u8; 1024];
 
@@ -587,7 +587,7 @@ fn read_exact(fd: i32, buf: &mut [u8]) -> isize {
     total as isize
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn disconnect_device(device: &[u8]) -> i32 {
     let fd = io::open(device, libc::O_RDWR, 0);
     if fd < 0 {
@@ -618,7 +618,7 @@ fn print_usage() {
     io::write_str(1, b"  -p          Persist (don't daemonize)\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn nbd_client(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"nbd-client: only available on Linux\n");
     1

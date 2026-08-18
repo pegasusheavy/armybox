@@ -26,7 +26,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn microcom(argc: i32, argv: *const *const u8) -> i32 {
     let mut speed: u32 = 115200;
     let mut device: Option<&[u8]> = None;
@@ -244,7 +244,7 @@ pub fn microcom(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn microcom(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"microcom: only available on Linux\n");
     1

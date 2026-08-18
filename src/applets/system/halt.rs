@@ -20,7 +20,7 @@ pub fn halt(argc: i32, argv: *const *const u8) -> i32 {
     let _ = argv;
     unsafe {
         libc::sync();
-        libc::reboot(libc::RB_HALT_SYSTEM);
+        crate::sys::reboot(crate::sys::RB_HALT_SYSTEM);
     }
     0
 }

@@ -8,27 +8,27 @@ use crate::sys;
 use super::get_arg;
 
 // Loop device ioctl commands
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LOOP_SET_FD: crate::io::IoctlReq = 0x4C00u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LOOP_CLR_FD: crate::io::IoctlReq = 0x4C01u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LOOP_SET_STATUS64: crate::io::IoctlReq = 0x4C04u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LOOP_GET_STATUS64: crate::io::IoctlReq = 0x4C05u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LOOP_CTL_GET_FREE: crate::io::IoctlReq = 0x4C82u32 as crate::io::IoctlReq;
 
 // Loop flags
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LO_FLAGS_READ_ONLY: u32 = 1;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LO_FLAGS_AUTOCLEAR: u32 = 4;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LO_FLAGS_PARTSCAN: u32 = 8;
 
 /// Loop device info structure
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct LoopInfo64 {
     lo_device: u64,
@@ -67,7 +67,7 @@ struct LoopInfo64 {
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn losetup(argc: i32, argv: *const *const u8) -> i32 {
     let mut show_all = false;
     let mut detach: Option<&[u8]> = None;
@@ -151,13 +151,13 @@ pub fn losetup(argc: i32, argv: *const *const u8) -> i32 {
     1
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn losetup(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"losetup: only available on Linux\n");
     1
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn show_loops() -> i32 {
     // Iterate through /dev/loop* and show configured ones
     for n in 0..256 {
@@ -209,7 +209,7 @@ fn show_loops() -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn show_loop_info(device: &[u8]) -> i32 {
     let mut path = Vec::new();
     path.extend_from_slice(device);
@@ -248,7 +248,7 @@ fn show_loop_info(device: &[u8]) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn find_free_loop() -> i32 {
     let fd = io::open(b"/dev/loop-control", libc::O_RDWR, 0);
     if fd < 0 {
@@ -272,7 +272,7 @@ fn find_free_loop() -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn setup_loop(device: Option<&[u8]>, file: &[u8], offset: u64, read_only: bool, partscan: bool) -> i32 {
     // Get device path
     let dev_path = if let Some(d) = device {
@@ -375,7 +375,7 @@ fn setup_loop(device: Option<&[u8]>, file: &[u8], offset: u64, read_only: bool, 
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn detach_loop(device: &[u8]) -> i32 {
     let mut path = Vec::new();
     path.extend_from_slice(device);

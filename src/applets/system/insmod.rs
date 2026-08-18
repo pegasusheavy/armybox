@@ -23,7 +23,7 @@ use crate::applets::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn insmod(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 2 {
         io::write_str(2, b"Usage: insmod MODULE [params...]\n");
@@ -126,7 +126,7 @@ pub fn insmod(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn insmod(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"insmod: only available on Linux\n");
     1

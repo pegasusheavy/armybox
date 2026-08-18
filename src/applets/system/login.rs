@@ -28,7 +28,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success (never returns on successful login)
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn login(argc: i32, argv: *const *const u8) -> i32 {
     let mut username: Option<&[u8]> = None;
     let mut skip_auth = false;
@@ -1003,7 +1003,7 @@ fn print_usage() {
     io::write_str(1, b"  -p        Preserve environment\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn login(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"login: only available on Linux\n");
     1

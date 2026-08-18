@@ -28,7 +28,7 @@ const NTP_EPOCH_OFFSET: u64 = 2208988800; // Seconds from 1900 to 1970
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn sntp(argc: i32, argv: *const *const u8) -> i32 {
     let mut set_time = false;
     let mut server: Option<&[u8]> = None;
@@ -237,13 +237,13 @@ pub fn sntp(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn sntp(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"sntp: only available on Linux\n");
     1
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn print_padded(val: u64, width: usize, buf: &mut [u8; 16]) {
     let s = sys::format_u64(val, buf);
     for _ in 0..(width.saturating_sub(s.len())) {
@@ -252,7 +252,7 @@ fn print_padded(val: u64, width: usize, buf: &mut [u8; 16]) {
     io::write_all(1, s);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn resolve_host(host: &[u8]) -> Option<libc::sockaddr_in> {
     if let Some(ip) = parse_ipv4(host) {
         let mut addr: libc::sockaddr_in = unsafe { core::mem::zeroed() };
@@ -298,7 +298,7 @@ fn resolve_host(host: &[u8]) -> Option<libc::sockaddr_in> {
     addr
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn parse_ipv4(s: &[u8]) -> Option<u32> {
     let mut parts = [0u8; 4];
     let mut part_idx = 0;

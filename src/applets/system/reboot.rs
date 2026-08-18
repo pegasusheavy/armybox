@@ -20,7 +20,7 @@ pub fn reboot(argc: i32, argv: *const *const u8) -> i32 {
     let _ = argv;
     unsafe {
         libc::sync();
-        libc::reboot(libc::RB_AUTOBOOT);
+        crate::sys::reboot(crate::sys::RB_AUTOBOOT);
     }
     0
 }

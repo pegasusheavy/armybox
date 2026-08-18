@@ -20,7 +20,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Cannot open mixer or set volume
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn mix(argc: i32, argv: *const *const u8) -> i32 {
     const SOUND_MIXER_READ_VOLUME: crate::io::IoctlReq = 0x80044D00u32 as crate::io::IoctlReq;
     const SOUND_MIXER_WRITE_VOLUME: crate::io::IoctlReq = 0xC0044D00u32 as crate::io::IoctlReq;
@@ -99,7 +99,7 @@ pub fn mix(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn mix(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"mix: only available on Linux\n");
     1

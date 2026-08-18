@@ -37,6 +37,11 @@ jobs:
             os: ubuntu-latest
             cross: true
 
+          # Android ARM64 (Bionic)
+          - target: aarch64-linux-android
+            os: ubuntu-latest
+            cross: true
+
     steps:
       - uses: actions/checkout@v4
 

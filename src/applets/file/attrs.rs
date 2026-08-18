@@ -28,7 +28,7 @@ const FS_IOC_SETFLAGS: crate::io::IoctlReq = 0x40086602u32 as crate::io::IoctlRe
 ///
 /// Usage: chattr [-R] [-v version] [-p project] mode files...
 /// Mode: [+-=][aAcCdDeijsStTu]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn chattr(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 2 {
         io::write_str(2, b"Usage: chattr [-R] [-v version] [mode] files...\n");
@@ -150,7 +150,7 @@ pub fn chattr(argc: i32, argv: *const *const u8) -> i32 {
     status
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn chattr(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"chattr: only available on Linux\n");
     1
@@ -159,7 +159,7 @@ pub fn chattr(_argc: i32, _argv: *const *const u8) -> i32 {
 /// lsattr - list file attributes on a Linux file system
 ///
 /// Usage: lsattr [-R] [-a] [-d] [-l] [-v] files...
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn lsattr(argc: i32, argv: *const *const u8) -> i32 {
     let mut show_all = false;
     let mut dir_only = false;
@@ -211,7 +211,7 @@ pub fn lsattr(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn list_attrs(path: &[u8], long_format: bool) {
     let fd = io::open(path, libc::O_RDONLY, 0);
     if fd < 0 {
@@ -289,7 +289,7 @@ fn list_attrs(path: &[u8], long_format: bool) {
     io::write_str(1, b"\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn lsattr(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"lsattr: only available on Linux\n");
     1
@@ -623,7 +623,7 @@ fn process_device_table(table_path: &[u8], rootdir: &[u8]) -> i32 {
 /// setfattr - set extended attributes of filesystem objects
 ///
 /// Usage: setfattr [-n name] [-v value] [-x name] file...
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn setfattr(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 2 {
         io::write_str(2, b"Usage: setfattr [-n name] [-v value] [-x name] file...\n");
@@ -719,7 +719,7 @@ pub fn setfattr(argc: i32, argv: *const *const u8) -> i32 {
     status
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn setfattr(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"setfattr: only available on Linux\n");
     1

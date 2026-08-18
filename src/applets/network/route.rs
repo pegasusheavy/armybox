@@ -9,6 +9,8 @@ use crate::io;
 use crate::sys;
 use crate::applets::get_arg;
 
+use crate::sys::{rtentry, RTF_GATEWAY, RTF_HOST, RTF_UP};
+
 /// route - show/manipulate IP routing table
 ///
 /// # Synopsis
@@ -361,7 +363,7 @@ fn add_route(args: &[&[u8]]) -> i32 {
     };
 
     // Build rtentry structure for ioctl
-    let mut rt: libc::rtentry = unsafe { core::mem::zeroed() };
+    let mut rt: rtentry = unsafe { core::mem::zeroed() };
 
     // Set destination
     let dest_sin = unsafe { &mut *(&mut rt.rt_dst as *mut _ as *mut libc::sockaddr_in) };
@@ -377,7 +379,7 @@ fn add_route(args: &[&[u8]]) -> i32 {
         let gw_sin = unsafe { &mut *(&mut rt.rt_gateway as *mut _ as *mut libc::sockaddr_in) };
         gw_sin.sin_family = libc::AF_INET as u16;
         gw_sin.sin_addr.s_addr = parse_ipv4(gw).unwrap_or(0);
-        rt.rt_flags |= libc::RTF_GATEWAY as u16;
+        rt.rt_flags |= RTF_GATEWAY as u16;
     }
 
     // Set netmask
@@ -394,9 +396,9 @@ fn add_route(args: &[&[u8]]) -> i32 {
     };
 
     // Set flags
-    rt.rt_flags |= libc::RTF_UP as u16;
+    rt.rt_flags |= RTF_UP as u16;
     if is_host {
-        rt.rt_flags |= libc::RTF_HOST as u16;
+        rt.rt_flags |= RTF_HOST as u16;
     }
 
     // Set device if provided
@@ -465,7 +467,7 @@ fn del_route(args: &[&[u8]]) -> i32 {
     };
 
     // Build rtentry structure
-    let mut rt: libc::rtentry = unsafe { core::mem::zeroed() };
+    let mut rt: rtentry = unsafe { core::mem::zeroed() };
 
     // Set destination
     let dest_sin = unsafe { &mut *(&mut rt.rt_dst as *mut _ as *mut libc::sockaddr_in) };
@@ -489,9 +491,9 @@ fn del_route(args: &[&[u8]]) -> i32 {
         0xFFFFFF00
     };
 
-    rt.rt_flags = libc::RTF_UP as u16;
+    rt.rt_flags = RTF_UP as u16;
     if is_host {
-        rt.rt_flags |= libc::RTF_HOST as u16;
+        rt.rt_flags |= RTF_HOST as u16;
     }
 
     // Open socket for ioctl

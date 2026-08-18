@@ -24,7 +24,7 @@ const PER_LINUX32: u64 = 0x0008;
 /// - Exit status of PROGRAM, or 1 on error
 pub fn linux32(argc: i32, argv: *const *const u8) -> i32 {
     // Set personality to 32-bit
-    let result = unsafe { libc::personality(PER_LINUX32 as libc::c_ulong) };
+    let result = unsafe { libc::personality(PER_LINUX32 as _) };
     if result < 0 {
         sys::perror(b"personality");
         return 1;

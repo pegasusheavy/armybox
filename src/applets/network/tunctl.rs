@@ -7,21 +7,21 @@ use crate::sys;
 use super::get_arg;
 
 // TUN/TAP ioctl constants
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const TUNSETIFF: crate::io::IoctlReq = 0x400454cau32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const TUNSETPERSIST: crate::io::IoctlReq = 0x400454cbu32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const TUNSETOWNER: crate::io::IoctlReq = 0x400454ccu32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const TUNSETGROUP: crate::io::IoctlReq = 0x400454ceu32 as crate::io::IoctlReq;
 
 // TUN/TAP flags
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const IFF_TUN: libc::c_short = 0x0001;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const IFF_TAP: libc::c_short = 0x0002;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const IFF_NO_PI: libc::c_short = 0x1000;
 
 /// tunctl - create and manage persistent TUN/TAP interfaces
@@ -44,7 +44,7 @@ const IFF_NO_PI: libc::c_short = 0x1000;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn tunctl(argc: i32, argv: *const *const u8) -> i32 {
     let mut name: Option<&[u8]> = None;
     let mut uid: Option<libc::uid_t> = None;
@@ -193,13 +193,13 @@ pub fn tunctl(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn tunctl(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"tunctl: only available on Linux\n");
     1
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn write_ifname(name: &[libc::c_char; libc::IFNAMSIZ]) {
     for &c in name.iter() {
         if c == 0 {
@@ -209,7 +209,7 @@ fn write_ifname(name: &[libc::c_char; libc::IFNAMSIZ]) {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn print_usage() {
     io::write_str(1, b"Usage: tunctl [OPTIONS]\n");
     io::write_str(1, b"Create and manage TUN/TAP network interfaces.\n\n");

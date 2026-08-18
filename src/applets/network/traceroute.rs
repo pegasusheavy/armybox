@@ -28,7 +28,7 @@ use super::get_arg;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn traceroute(argc: i32, argv: *const *const u8) -> i32 {
     let mut max_ttl: u8 = 30;
     let mut port: u16 = 33434;
@@ -304,14 +304,14 @@ pub fn traceroute(argc: i32, argv: *const *const u8) -> i32 {
     0
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn traceroute(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"traceroute: only available on Linux\n");
     1
 }
 
 /// Resolve hostname to IPv4 address
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn resolve_host(host: &[u8]) -> Option<u32> {
     // First try parsing as IP address
     if let Some(addr) = parse_ipv4(host) {
@@ -421,7 +421,7 @@ fn print_ip(addr: u32) {
 }
 
 /// Calculate ICMP checksum
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn icmp_checksum(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
     let mut i = 0;

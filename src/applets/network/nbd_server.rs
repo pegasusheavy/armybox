@@ -81,7 +81,7 @@ const NBD_ENOSPC: u32 = 28;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn nbd_server(argc: i32, argv: *const *const u8) -> i32 {
     let mut port: u16 = 10809;
     let mut file: Option<&[u8]> = None;
@@ -268,7 +268,7 @@ pub fn nbd_server(argc: i32, argv: *const *const u8) -> i32 {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn handle_client(fd: i32, file: &[u8], size: u64, read_only: bool, _copy_on_write: bool, _export_name: &[u8], _debug: bool) -> i32 {
     // Send newstyle handshake
     // Magic (8 bytes) + opts magic (8 bytes) + handshake flags (2 bytes)
@@ -537,7 +537,7 @@ fn print_usage() {
     io::write_str(1, b"  -n NAME   Export name\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn nbd_server(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"nbd-server: only available on Linux\n");
     1

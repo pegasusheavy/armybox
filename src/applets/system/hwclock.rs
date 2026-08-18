@@ -46,7 +46,7 @@ struct RtcTime {
 /// # Exit Status
 /// - 0: Success
 /// - >0: An error occurred
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn hwclock(argc: i32, argv: *const *const u8) -> i32 {
     let mut mode = Mode::Show;
     let mut utc = true;
@@ -103,14 +103,14 @@ pub fn hwclock(argc: i32, argv: *const *const u8) -> i32 {
     result
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 enum Mode {
     Show,
     SysToHc,
     HcToSys,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn show_rtc_time(fd: i32, utc: bool) -> i32 {
     let mut rtc_tm = RtcTime::default();
 
@@ -153,7 +153,7 @@ fn show_rtc_time(fd: i32, utc: bool) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn sys_to_hc(fd: i32, utc: bool) -> i32 {
     // Get current system time
     let mut tv: libc::timeval = unsafe { core::mem::zeroed() };
@@ -207,7 +207,7 @@ fn sys_to_hc(fd: i32, utc: bool) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn hc_to_sys(fd: i32, utc: bool) -> i32 {
     let mut rtc_tm = RtcTime::default();
 
@@ -264,7 +264,7 @@ fn print_usage() {
     io::write_str(1, b"  -f, --rtc DEV   Use specified RTC device\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn hwclock(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"hwclock: only available on Linux\n");
     1

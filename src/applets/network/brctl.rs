@@ -8,17 +8,17 @@ use crate::sys;
 use super::get_arg;
 
 // Bridge ioctl commands
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SIOCBRADDBR: crate::io::IoctlReq = 0x89a0u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SIOCBRDELBR: crate::io::IoctlReq = 0x89a1u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SIOCBRADDIF: crate::io::IoctlReq = 0x89a2u32 as crate::io::IoctlReq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SIOCBRDELIF: crate::io::IoctlReq = 0x89a3u32 as crate::io::IoctlReq;
 
 // Network interface ioctl
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SIOCGIFINDEX: crate::io::IoctlReq = 0x8933u32 as crate::io::IoctlReq;
 
 /// brctl - ethernet bridge administration
@@ -46,7 +46,7 @@ const SIOCGIFINDEX: crate::io::IoctlReq = 0x8933u32 as crate::io::IoctlReq;
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn brctl(argc: i32, argv: *const *const u8) -> i32 {
     if argc < 2 {
         print_usage();
@@ -158,13 +158,13 @@ pub fn brctl(argc: i32, argv: *const *const u8) -> i32 {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn brctl(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"brctl: only available on Linux\n");
     1
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn addbr(bridge: &[u8]) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -191,7 +191,7 @@ fn addbr(bridge: &[u8]) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn delbr(bridge: &[u8]) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -217,7 +217,7 @@ fn delbr(bridge: &[u8]) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn addif(bridge: &[u8], iface: &[u8]) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -261,7 +261,7 @@ fn addif(bridge: &[u8], iface: &[u8]) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn delif(bridge: &[u8], iface: &[u8]) -> i32 {
     let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     if sock < 0 {
@@ -303,7 +303,7 @@ fn delif(bridge: &[u8], iface: &[u8]) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn show(bridge: Option<&[u8]>) -> i32 {
     io::write_str(1, b"bridge name\tbridge id\t\tSTP enabled\tinterfaces\n");
 
@@ -357,7 +357,7 @@ fn show(bridge: Option<&[u8]>) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 struct LinuxDirent64 {
     d_ino: u64,
@@ -367,7 +367,7 @@ struct LinuxDirent64 {
     // d_name follows
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn is_bridge(name: &[u8]) -> bool {
     let mut path = Vec::new();
     path.extend_from_slice(b"/sys/class/net/");
@@ -379,7 +379,7 @@ fn is_bridge(name: &[u8]) -> bool {
     unsafe { libc::stat(path.as_ptr() as *const libc::c_char, &mut stat) == 0 }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn show_bridge_info(name: &[u8]) {
     io::write_all(1, name);
     io::write_str(1, b"\t\t");
@@ -473,7 +473,7 @@ fn show_bridge_info(name: &[u8]) {
     io::write_str(1, b"\n");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn stp(bridge: &[u8], state: &[u8]) -> i32 {
     let value = if state == b"on" || state == b"yes" || state == b"1" {
         b"1"
@@ -503,7 +503,7 @@ fn stp(bridge: &[u8], state: &[u8]) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_bridge_param(bridge: &[u8], param: &[u8], value: u64) -> i32 {
     let sysfs_name = if param == b"setfd" {
         b"forward_delay" as &[u8]
@@ -544,7 +544,7 @@ fn set_bridge_param(bridge: &[u8], param: &[u8], value: u64) -> i32 {
     0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn get_if_index(sock: i32, iface: &[u8]) -> Option<libc::c_int> {
     let mut ifr: libc::ifreq = unsafe { core::mem::zeroed() };
     let len = core::cmp::min(iface.len(), libc::IFNAMSIZ - 1);
@@ -560,7 +560,7 @@ fn get_if_index(sock: i32, iface: &[u8]) -> Option<libc::c_int> {
     Some(unsafe { ifr.ifr_ifru.ifru_ifindex })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn print_errno() {
     let errno = crate::sys::errno();
     let msg = match errno {

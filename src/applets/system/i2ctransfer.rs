@@ -61,7 +61,7 @@ struct I2cRdwrIoctlData {
 /// # Exit Status
 /// - 0: Success
 /// - 1: Error
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn i2ctransfer(argc: i32, argv: *const *const u8) -> i32 {
     let mut bus: Option<i32> = None;
     let mut verbose = false;
@@ -336,7 +336,7 @@ fn print_usage() {
     io::write_str(1, b"  i2ctransfer -y 0 w1@0x68 0x0f r1\n");
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn i2ctransfer(_argc: i32, _argv: *const *const u8) -> i32 {
     io::write_str(2, b"i2ctransfer: only available on Linux\n");
     1
